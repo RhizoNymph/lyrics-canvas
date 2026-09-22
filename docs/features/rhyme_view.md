@@ -108,13 +108,18 @@ class Unit:
     snippet_id: str | None
     line_index: int | None
     word_offset: int | None    # for note suffix units: first word included
+    effective_pronunciation: Pronunciation   # derived: dialect applied to override-or-pronunciation
+    dialect_digest: str                      # derived: the map the derived fields were computed under
 ```
 
 Rules:
 
-- `stress`, `syllable_count`, `rhyme_key`, `rhyme_keys` are derived from `pronunciation_override or
-  pronunciation` plus the dialect map. `units.build_unit(...)` is the only constructor; nothing else sets
-  derived fields.
+- `effective_pronunciation`, `dialect_digest`, `stress`, `syllable_count`, `rhyme_key`, `rhyme_keys` are
+  derived from `pronunciation_override or pronunciation` plus the dialect map. `units.build_unit(...)` is
+  the only constructor; nothing else sets derived fields. `rhyme_keys[k]` starts at the nucleus of the
+  k-th syllable from the end (that syllable's onset is not part of the key), so equal keys mean a
+  perfect rhyme at that depth; `rhyme_key` starts at the nucleus of the last primary-stressed syllable
+  (else the last secondary, else the last syllable).
 - `pronunciation_override` wins over lookup. Backfill creates overrides where existing grid stress differs
   from the engine.
 - Unit ids are deterministic so the frontend can keep candidate positions stable across re-queries.
@@ -145,7 +150,7 @@ Defaults shipped (`DEFAULT_DIALECT_MAP`), all user-editable in the request:
 | Rule | Effect |
 |---|---|
 | `final_merge IH NG -> IH N` | -ing rhymes with -in |
-| `optional_final T`, `optional_final D` | final T/D after a consonant may be dropped (test/mess, hand/man) |
+| `optional_final T`, `optional_final D` | word-final T/D after a consonant may be dropped (test/mess, hand/man); marks `deletable_coda` on every word's last syllable |
 | `merge ER -> AH R` | ER treated as AH + R |
 | `merge AO -> AA` | cot-caught merger |
 
@@ -186,9 +191,12 @@ def score(a: Pronunciation, b: Pronunciation, k: int, weights: ScoreWeights = ..
 
 Algorithm: take the last `d = min(k, len(a), len(b))` syllables of each side, align right-to-left. Per
 syllable: nucleus similarity `1 - phone_distance`; coda similarity by right-aligned phone pairing where an
-unpaired phone costs 1 unless it is deletable (cost 0.25); onset similarity by left-aligned pairing.
-Syllable total = weighted mean. Score = depth-weighted mean of totals. Equal rhyme keys at depth `d` score
-exactly 1.0. Score for `d = 0` is 0.
+unpaired phone costs 1 unless it is deletable (cost 0.25); onset similarity by left-aligned pairing, not
+counted for the deepest aligned syllable (the rhyme starts at its nucleus, so cat / bat is perfect).
+Syllable total = weighted mean. Score = depth-weighted sum of totals divided by the weight mass of
+`min(k, max(len(a), len(b)))` syllables, so a side shorter than the requested depth leaves its missing
+syllables at zero (hinge / door hinge at k=2 is 1.0 / 1.7 and ranks below orange). Equal rhyme keys at that
+full depth score exactly 1.0. Score for `d = 0` is 0. `score(a, b)` equals `score(b, a)`.
 
 ### Index (`index.py`)
 
@@ -206,11 +214,17 @@ class RhymeIndex:
     def __len__(self) -> int
 ```
 
-Implementation is hash buckets, not a trie (see Decisions): for each unit and each `k` in 1..4, an exact
-bucket keyed by `rhyme_keys[k]` and a skeleton bucket keyed by the last `k` nuclei. A query unions the exact
-bucket, the skeleton bucket, and skeleton buckets for each nucleus's nearest vowel neighbours (distance ≤
-0.35), then rescores every candidate with `score()` and drops those below `min_score`. Results sort by
-score desc, match_depth desc, unit id asc.
+Implementation is hash buckets, not a trie (see Decisions): for each unit and each `d` in 1..4, an exact
+bucket keyed by `rhyme_keys[d]` (holding the member ids and one representative tail) and, per exact key,
+skeleton buckets keyed by its last `j` nuclei for `j` in 1..d. A query, for each depth `d` up to
+`min(k, len(tail))`, picks the smallest `j` whose depth-weight mass can still reach `min_score`
+(`j = 1` for k=2 at 0.5, `j = 2` for k=3..4), unions the skeleton buckets for every combination of the
+tail's last `j` nuclei and their vowel neighbours (distance ≤ 0.35), scores each distinct exact key once
+with `score()` (all members of a key share the same tail, hence the same score), and drops keys below
+`min_score`. Units shorter than `k` are scored at their own depth. Results sort by score desc,
+match_depth desc, unit id asc; candidate-side alignment indexes are rebased onto the real unit.
+`insert` raises `RhymeIndexError` for a unit built under another dialect; `query` accepts a per-call
+`weights` override so one shared index serves requests with custom weights.
 
 ### Sources (`sources/`)
 
@@ -220,12 +234,15 @@ class CandidateSource(Protocol):
     def suggest(self, anchors: Sequence[Unit], k: int, min_score: float, limit: int, exclude: frozenset[str]) -> list[Candidate]
 ```
 
-- `DictionarySource`: one process-wide `RhymeIndex` over CMU dict built lazily on first use. Excludes
-  entries with digits or non-letter characters, pronunciation variants (`word(2)`), and, unless
-  `include_rare`, words below Zipf frequency 3.0 via `wordfreq`.
+- `DictionarySource`: one process-wide `RhymeIndex` per `(dialect digest, include_rare)` over CMU dict,
+  built lazily on first use (about 2 s, 27k units for the common set) and kept in a 4-entry LRU. Excludes
+  entries with digits or non-letter characters other than internal apostrophes (don't, talkin'),
+  pronunciation variants (`word(2)`), and, unless `include_rare`, words below Zipf frequency 3.0 via
+  `wordfreq`.
 - `NotesSource`: per-request index over the requesting user's snippet lines and their word-boundary
-  suffixes (`note:<snippet_id>:<line>:<word_offset>` units), from `snippet.phonetics`. Ranked above
-  dictionary hits at equal score.
+  suffixes (`note:<snippet_id>:<line>:<word_offset>` units), from `snippet.phonetics` (computed on the fly
+  when a snippet has none yet), skipping the anchor lines. Ranked above dictionary hits at equal score;
+  the service keeps one suffix per line (best score, depth, fits the slot, then the longest).
 
 Every candidate returned by a source has already been scored by the engine; sources never decide what
 counts as a rhyme.
@@ -249,16 +266,26 @@ Migration `002_snippet_phonetics` adds two nullable JSONB columns to `snippets`:
     "overrides": { "<line_index>:<word_index>": {"syllables": [..]} }
   }
   ```
+  `words[].syllables` is the stored base pronunciation (the override where one exists, else the lookup,
+  dialect not applied); `stress`, `rhyme_key`, `rhyme_keys` are derived under `dialect_digest`. Overrides
+  carry the grid's stress on the engine's phones; when the syllable counts differ the engine's syllables are
+  right-aligned to the grid cells and missing ones are filled with a stressless AH. Unpronounceable tokens
+  keep their word index with an empty syllable list. Rest cells are ignored.
 - `derived_from`: `DerivedFrom` as JSON, set only by promotion.
 
 `syllabify_text` keeps producing `grid_data`, but its per-word phones now come from `phonetics.pronounce`
 (CMU, then g2p, then heuristic) so grid cells and phonetics never disagree for new text. The create and
 update snippet routes compute both together.
 
-Backfill (`backend/scripts/backfill_phonetics.py`): for every snippet with `phonetics IS NULL`, pronounce
-each line; where `grid_data` stress for a word differs from the engine's, keep the grid stress, write an
-override, and add a row to the report (`snippet_id, line, word, grid_stress, engine_stress`). Idempotent;
-`--report path.csv`; `--dialect` optional.
+Backfill (`backend/scripts/backfill_phonetics.py`, `uv run python -m scripts.backfill_phonetics`): for
+every snippet with `phonetics IS NULL`, pronounce each line; where `grid_data` stress for a word differs
+from the engine's, keep the grid stress, write an override, and add a row to the report (`snippet_id,
+line, word, grid_stress, engine_stress`). Idempotent; `--report path.csv` (stdout if omitted);
+`--dialect rules.json` optional; `--force` recomputes rows that already have phonetics. Commits in
+batches of 200 through the app's async session. `app/services/phonetics_service.py` holds the pure logic
+(`compute_snippet_phonetics`, `compute_snippet_phonetics_with_report`, `reconcile`,
+`note_units_from_phonetics`). On snippet update, a grid-only edit recomputes phonetics from the stored
+raw text with the existing overrides as the base; a text change recomputes from scratch.
 
 ## API contract
 
@@ -313,16 +340,38 @@ interface RhymeCandidate extends RhymeUnit {
 Semantics:
 
 - A candidate must score ≥ `min_score` against at least one anchor. Ranked by best anchor score, then
-  match depth, then notes before dictionary, then shared tag count with context, then id.
+  match depth, then notes before dictionary, then shared tag count with context, then id. Candidates whose
+  text equals an anchor's text, the anchor units themselves, and `exclude_ids` are never returned.
+  `total` is the number of ranked candidates (each source contributes at most 5000).
 - `fits_slot` is true when the candidate's stress string has the slot's length and no candidate stressed
   syllable (1 or 2) lands on a slot `0`. Non-fitting candidates are returned, not hidden.
 - Anchor units are echoed back with their computed phonetics so the UI can show the tail.
-- Errors: 404 canvas not owned; 422 on invalid k, stress string, or empty anchors. Typed as
-  `RhymeQueryError` in the engine, mapped in the route.
+- Errors: 404 canvas not owned or anchor snippet not owned (`CanvasNotFoundError`,
+  `SnippetNotFoundError` in `rhyme_suggest_service`); 422 on invalid k, stress string, limit, or empty
+  anchors (pydantic), on a bad line index, an empty snippet or an unpronounceable text anchor
+  (`RhymeQueryError`), and on a malformed dialect rule (`DialectRuleError`). Mapped in the route.
 - Budget: dictionary query ≤ 200 ms warm, measured by a test.
 
 Promotion is the existing `POST /api/canvases/{id}/snippets` with `raw_text`, `position_x/y`, and the new
 optional `derived_from` field on `SnippetCreate`.
+
+## Backend files
+
+| File | Role |
+|---|---|
+| `backend/app/services/phonetics/` | Engine package: `types`, `errors`, `distance`, `syllables`, `dialect`, `score`, `index`, `pronounce`, `resources`, `units`, `sources/{base,dictionary,notes}` (see [docs/backend/nlp-phonetics.md](../backend/nlp-phonetics.md)) |
+| `backend/app/schemas/phonetics.py` | `SnippetPhonetics`, `LinePhonetics`, `WordPhonetics`, `SyllableModel`, `PronunciationOverride`, `DerivedFromModel` |
+| `backend/app/schemas/rhyme.py` | `RhymeSuggestRequest` / `RhymeSuggestResponse` and the unit, candidate, slot, weights and dialect models |
+| `backend/app/services/phonetics_service.py` | `compute_snippet_phonetics(_with_report)`, `reconcile`, `note_unit(s_from_phonetics)`, model conversions |
+| `backend/app/services/rhyme_suggest_service.py` | `suggest`, `SnippetRepository` protocol + `DbSnippetRepository`, anchor resolution, `rank`, `fits_slot`, `dedupe_note_suffixes`, response models |
+| `backend/app/services/nlp/syllabifier.py` | Beat grid from engine phones |
+| `backend/app/services/nlp/rhyme_service.py` | Legacy `find_rhymes` / `find_rhymes_in_texts` on the engine |
+| `backend/app/api/nlp.py` | `POST /api/nlp/rhyme-suggest`, `GET /api/nlp/rhymes` |
+| `backend/app/api/snippets.py` | Create/update compute `phonetics`; create accepts `derived_from` |
+| `backend/app/models/snippet.py`, `backend/alembic/versions/002_snippet_phonetics.py` | `phonetics`, `derived_from` columns |
+| `backend/app/config.py` | `Settings.nltk_data_dir` (default `backend/.nltk_data`) |
+| `backend/scripts/backfill_phonetics.py` | Backfill + disagreement report |
+| `backend/tests/phonetics/`, `backend/tests/test_*.py`, `backend/tests/fakes.py` | Engine, service, route and backfill tests |
 
 ## Frontend design
 
@@ -436,5 +485,32 @@ select snippet(s) or type phrase
   by `phonetics.ensure_resources()`; if unavailable at runtime the heuristic path is used and the
   pronunciation source records it.
 - **Default k = 2**, `min_score = 0.5`, default weights vowel 1.0 / coda 0.6 / onset 0.25, per the brief.
+- **Rhyme keys and scoring start at the nucleus of the deepest syllable.** With the onset counted, cat / bat
+  could not score 1.0 and "equal keys score 1.0" would contradict "perfect rhyme == 1.0". Inner syllables
+  keep their onsets in both keys and scores.
+- **Missing syllables discount the score.** The brief's depth-weighted mean over `d = min(k, len(a),
+  len(b))` let every "-inge" monosyllable outrank orange for "door hinge" at k=2. The mean now runs over the
+  weight mass of `min(k, max(len(a), len(b)))` syllables; equal keys still score exactly 1.0 when both sides
+  reach that depth, and the score stays symmetric.
+- **Skeleton lookups use the last `j` nuclei, with `j` chosen from `min_score`.** A full-depth skeleton
+  missed candidates whose final syllables match but whose deeper nucleus is far (syringe for door hinge);
+  matching only the last `j` syllables can still reach `min_score` when the weight mass of `j` syllables
+  does, so those buckets are searched too. Keys are scored once per bucket, not once per member, which is
+  what keeps common tails inside the 200 ms budget (measured 1-115 ms warm across k=1..4).
+- **`Unit` carries `effective_pronunciation` and `dialect_digest`.** Both are derived; storing them lets the
+  index and sources score without re-applying the dialect and lets `RhymeIndex.insert` reject units built
+  under another map (`RhymeIndexError`, a fourth engine error alongside `ResourceError` for NLTK data).
+- **`optional_final` marks every word's final syllable**, not only the phrase's last word: t/d deletion is a
+  word-final process and the deletable flag only matters where a coda is compared.
+- **Dictionary entries may contain internal apostrophes** (don't, talkin'), which lyric vocabulary needs;
+  digits, symbols and `word(2)` variants are still excluded.
+- **NLTK data is fetched directly** (httpx, zips from the nltk_data pages tree) rather than via
+  `nltk.download`, which refuses proxied fetches and group-writable directories; the layout is the one
+  `nltk.data.find` expects, and `Settings.nltk_data_dir` (default `backend/.nltk_data`, ignored by git) is
+  registered at startup and populated in the Docker build.
+- **One note suffix per line in the response.** All suffixes of a line share a tail and a score; the
+  service keeps the one that fits the slot, else the longest, so the layer is not flooded with near-copies.
+- **Legacy `GET /api/nlp/rhymes`**: "perfect" is a 1.0 engine score over the query's rhyme-key depth,
+  "near" anything else at or above 0.5 (dictionary) or 0.7 (snippets); the response shape is unchanged.
 - **Cell-level selection deferred** (see Non-scope).
 - **Datamuse and LLM deferred**; v0 is fully offline after install.

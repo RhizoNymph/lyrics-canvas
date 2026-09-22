@@ -1,6 +1,8 @@
 # NLP: Syllabifier
 
-CMU Pronouncing Dictionary-based syllabification with heuristic fallback.
+Beat-grid syllabification. Per-word phones and stress come from the
+[phonetic engine](./nlp-phonetics.md) (`phonetics.pronounce_word`: CMU dict, then g2p_en, then a
+letter heuristic); this module only maps syllables back onto the word's letters.
 
 **File:** `app/services/nlp/syllabifier.py`
 
@@ -13,31 +15,21 @@ def syllabify_word(word: str) -> list[dict] # Single word -> syllable list
 
 ## Algorithm
 
-### Primary Path: CMU Dictionary
-
 ```
-Input word -> clean (lowercase, letters/apostrophe only)
-  -> pronouncing.phones_for_word(word)
-    -> phoneme string (e.g., "R AE1 D IY0 OW0")
-      -> _cmu_syllabify():
-          Split on spaces, identify vowel phonemes (contain digits 0-2)
-          Group consonants around vowels into syllables
-          Extract stress from vowel digit (0=unstressed, 1=primary, 2=secondary)
-      -> _split_word_text():
-          Map phoneme syllable count back to original text
-          Track vowel groups (a,e,i,o,u,y) to find split points
-          Split after consonants following vowels
+Input word -> pronounce_word(word)        (engine: clean, CMU dict -> g2p_en -> heuristic)
+  -> WordPronunciation.syllables          (maximal-onset syllables with stress 0/1/2)
+  -> _split_word_text(clean, n):
+       Map the syllable count back onto the cleaned word's letters
+       Track vowel groups (a,e,i,o,u,y) to find split points
+       Split after consonants following vowels
+  -> [{"syllable": text, "stress": stress}, ...]
 ```
 
-### Fallback Path: Heuristic
-
-When a word is not in the CMU dictionary:
-
-```
-Input word -> count vowel groups (aeiouy)
-  -> 0 vowels: return word as single stressed syllable
-  -> N vowels: split proportionally, stress first syllable
-```
+Words that clean to nothing (numbers, symbols) yield no cells but still occupy a `word_index`.
+Because the same `pronounce_word` feeds `snippets.phonetics`, grid stress and phonetics stress
+agree for every newly syllabified text (`tests/test_phonetics_service.py` checks this); user
+edits to grid stress are preserved as phonetics overrides (see
+[nlp-phonetics](./nlp-phonetics.md) and `app/services/phonetics_service.py`).
 
 ### Output Structure
 

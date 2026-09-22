@@ -2,7 +2,7 @@
 
 FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 
-**Tech Stack**: FastAPI, SQLAlchemy 2.0 (async), PostgreSQL + pgvector, Alembic, JWT auth, sentence-transformers, scikit-learn, pronouncing (CMU dict), reportlab
+**Tech Stack**: FastAPI, SQLAlchemy 2.0 (async), PostgreSQL + pgvector, Alembic, JWT auth, sentence-transformers, scikit-learn, pronouncing (CMU dict), g2p-en, wordfreq, reportlab
 
 ## Module Documentation
 
@@ -12,8 +12,9 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [Database & Models](./backend/database.md) | Async PostgreSQL, ORM models, Alembic migrations | `database.py`, `models/`, `alembic/` |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippet operations, sharing, forking | `canvas_service.py`, `canvases.py` |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, tag labels, snippet-tag associations | `group_service.py`, `tag_service.py` |
-| [NLP: Syllabifier](./backend/nlp-syllabifier.md) | CMU dict syllabification, stress markers, heuristic fallback | `nlp/syllabifier.py` |
-| [NLP: Rhyme Finder](./backend/nlp-rhymes.md) | Perfect/near rhymes, in-corpus matching | `nlp/rhyme_service.py` |
+| [NLP: Phonetic Engine](./backend/nlp-phonetics.md) | Pronunciation, dialect map, near-rhyme scoring, rhyme index, snippet phonetics, backfill | `phonetics/`, `phonetics_service.py`, `scripts/backfill_phonetics.py` |
+| [NLP: Syllabifier](./backend/nlp-syllabifier.md) | Engine-backed syllabification into the beat grid | `nlp/syllabifier.py` |
+| [NLP: Rhymes](./backend/nlp-rhymes.md) | Rhyme suggest endpoint (ranking, slot fit, paging) and the legacy lookup | `rhyme_suggest_service.py`, `nlp/rhyme_service.py` |
 | [NLP: Similarity](./backend/nlp-similarity.md) | TF-IDF cosine similarity, sentence embeddings | `nlp/similarity_service.py`, `nlp/embedding_service.py` |
 | [NLP: t-SNE Layout](./backend/nlp-tsne.md) | Dimensionality reduction for spatial clustering | `nlp/tsne_service.py` |
 | [NLP: Search](./backend/nlp-search.md) | ILIKE full-text search | `nlp/search_service.py` |
@@ -32,15 +33,23 @@ app/
     user.py / canvas.py / snippet.py / group.py / tag.py / embedding.py
   schemas/
     auth.py / canvas.py / snippet.py / group.py / tag.py / nlp.py
+    phonetics.py                    SnippetPhonetics (snippets.phonetics column)
+    rhyme.py                        Rhyme suggest request/response
   services/
     auth_service.py                 JWT + bcrypt + user CRUD
     canvas_service.py               Canvas CRUD + sharing + forking
     group_service.py                Group CRUD
     tag_service.py                  Tag CRUD + associations
     export_service.py               Text/Markdown/PDF generation
+    phonetics_service.py            Snippet phonetics + grid reconciliation + note units
+    rhyme_suggest_service.py        Rhyme suggest: anchors, sources, rank, slot fit, page
+    phonetics/                      Phonetic engine (pure)
+      types.py / errors.py / distance.py / syllables.py / dialect.py
+      score.py / index.py / pronounce.py / resources.py / units.py
+      sources/                      base.py / dictionary.py / notes.py
     nlp/
-      syllabifier.py                CMU dict syllabification
-      rhyme_service.py              Rhyme detection
+      syllabifier.py                Engine-backed syllabification
+      rhyme_service.py              Legacy rhyme lookup (engine-backed)
       similarity_service.py         TF-IDF cosine similarity
       embedding_service.py          Sentence-transformer embeddings
       tsne_service.py               t-SNE dimensionality reduction
@@ -48,9 +57,11 @@ app/
   api/
     deps.py                         Auth dependency injection
     auth.py / canvases.py / groups.py / tags.py / nlp.py / export.py
+scripts/
+  backfill_phonetics.py             Fill snippets.phonetics for existing rows
 ```
 
-## API Surface (29 endpoints)
+## API Surface (30 endpoints)
 
 | Area | Count | Auth |
 |------|-------|------|
@@ -59,14 +70,14 @@ app/
 | Snippets | 4 | Bearer |
 | Groups | 3 | Bearer |
 | Tags | 4 | Bearer |
-| NLP | 5 | Mixed |
+| NLP | 6 | Mixed |
 | Export | 1 | Bearer |
 | Health | 1 | Public |
 
 ## Key Patterns
 
 - **Async-first**: All DB operations via asyncpg
-- **Lazy model loading**: sentence-transformers loaded on first NLP request
+- **Lazy model loading**: sentence-transformers loaded on first NLP request; the dictionary rhyme index and g2p_en on first rhyme request
 - **Cascade deletes**: Canvas deletion removes all children
 - **Batch positioning**: Single PATCH for multi-snippet moves
 - **Ownership verification**: All CRUD checks Canvas.owner_id

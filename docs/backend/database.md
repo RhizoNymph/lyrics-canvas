@@ -83,10 +83,15 @@ Relationships: `owner`, `snippets`, `groups`, `tags` (all cascade: all, delete-o
 | `height` | Float | 200.0 | |
 | `z_index` | Integer | 0 | |
 | `group_id` | UUID | null | FK -> groups.id |
+| `phonetics` | JSONB | null | `SnippetPhonetics` (`app/schemas/phonetics.py`): per-line words/syllables, stress, rhyme keys, overrides, dialect digest |
+| `derived_from` | JSONB | null | `DerivedFromModel`: provenance of a snippet promoted from a rhyme candidate |
 | `created_at` | DateTime(tz) | now() | |
 | `updated_at` | DateTime(tz) | now() | Auto-updates |
 
 Relationships: `canvas`, `group`, `tags` (N:M via snippet_tags), `embedding` (1:1, cascade)
+
+`phonetics` is computed with `grid_data` on create/update (`app/api/snippets.py`) and backfilled
+for older rows by `scripts/backfill_phonetics.py`; see [nlp-phonetics](./nlp-phonetics.md).
 
 ### Group
 
@@ -132,7 +137,7 @@ Relationships: `canvas`, `snippets` (N:M via snippet_tags)
 
 Relationship: `snippet` (back_populates)
 
-## Alembic Migration
+## Alembic Migrations
 
 **File:** `alembic/versions/001_initial.py`
 
@@ -147,6 +152,19 @@ Creates:
 8. `snippet_embeddings` table
 
 Downgrade drops all tables and enum types in reverse order.
+
+**File:** `alembic/versions/002_snippet_phonetics.py`
+
+Adds nullable JSONB `snippets.phonetics` and `snippets.derived_from`. Downgrade drops both.
+After upgrading, run the backfill from `backend/`:
+
+```bash
+uv run python -m scripts.backfill_phonetics --report phonetics_report.csv [--dialect rules.json] [--force]
+```
+
+It fills `phonetics` for every snippet where it is NULL (idempotent), keeps existing grid
+stress as overrides, and writes one CSV row per disagreement
+(`snippet_id, line, word, grid_stress, engine_stress`).
 
 ### Running Migrations
 
