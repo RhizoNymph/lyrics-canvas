@@ -1,4 +1,6 @@
 import axios from 'axios';
+import type { Snippet, SnippetType } from '@/types';
+import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -48,9 +50,18 @@ export const canvasApi = {
 };
 
 // ---- Snippets ----
+export interface SnippetCreateBody {
+  position_x: number;
+  position_y: number;
+  snippet_type?: SnippetType;
+  raw_text?: string;
+  /** Set only by rhyme-view promotion. */
+  derived_from?: DerivedFrom;
+}
+
 export const snippetApi = {
-  create: (canvasId: string, data: Record<string, unknown>) =>
-    api.post(`/api/canvases/${canvasId}/snippets`, data),
+  create: (canvasId: string, data: SnippetCreateBody) =>
+    api.post<Snippet>(`/api/canvases/${canvasId}/snippets`, data),
   update: (id: string, data: Record<string, unknown>) =>
     api.put(`/api/snippets/${id}`, data),
   delete: (id: string) => api.delete(`/api/snippets/${id}`),
@@ -90,6 +101,8 @@ export const nlpApi = {
   tsne: (canvasId: string, nComponents = 2) =>
     api.post(`/api/canvases/${canvasId}/tsne`, { n_components: nComponents }),
   rhymes: (word: string) => api.get('/api/nlp/rhymes', { params: { word } }),
+  rhymeSuggest: (req: RhymeSuggestRequest) =>
+    api.post<RhymeSuggestResponse>('/api/nlp/rhyme-suggest', req),
 };
 
 // ---- Export ----
