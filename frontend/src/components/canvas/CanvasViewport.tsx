@@ -7,11 +7,19 @@ import InlineGridEditor from './InlineGridEditor';
 import SnippetContextMenu from './SnippetContextMenu';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useRhymeStore } from '@/stores/rhymeStore';
+import RhymeLayer from '@/components/rhyme/RhymeLayer';
+import RhymePanel from '@/components/rhyme/RhymePanel';
+import CandidateTooltip from '@/components/rhyme/CandidateTooltip';
 
 // Module-level flag: SnippetCard sets this in pointerdown so onStageClick
 // knows a snippet was interacted with (Pixi stopPropagation doesn't reach DOM).
 let _snippetInteracted = false;
-export function markSnippetInteraction() { _snippetInteracted = true; }
+let _lastCardInteractionAt = 0;
+export function markSnippetInteraction() {
+  _snippetInteracted = true;
+  _lastCardInteractionAt = Date.now();
+}
 
 export default function CanvasViewport() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,6 +27,8 @@ export default function CanvasViewport() {
   const { viewport, setViewport, snippets, groups, activeTagFilters, addSnippet, clearSelection, commitPositions } =
     useCanvasStore();
   const { editingSnippetId, setEditingSnippet } = useUIStore();
+  const rhymeActive = useRhymeStore((s) => s.active);
+  const setRhymeViewSize = useRhymeStore((s) => s.setViewSize);
 
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
@@ -28,16 +38,16 @@ export default function CanvasViewport() {
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
-        setSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        setSize({ width, height });
+        setRhymeViewSize(width, height);
       }
     };
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, []);
+  }, [setRhymeViewSize]);
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -76,6 +86,7 @@ export default function CanvasViewport() {
           setTimeout(() => {
             const editing = useUIStore.getState().editingSnippetId;
             if (editing) return; // User double-clicked a snippet, not empty canvas
+            if (Date.now() - _lastCardInteractionAt < 500) return; // Double-clicked a card (e.g. rhyme candidate)
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect) {
               const cx = (e.clientX - rect.left) / viewport.zoom - viewport.x;
@@ -139,7 +150,7 @@ export default function CanvasViewport() {
   return (
     <div
       ref={containerRef}
-      style={{ flex: 1, overflow: 'hidden', cursor: isPanning.current ? 'grabbing' : 'default' }}
+      style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: isPanning.current ? 'grabbing' : 'default' }}
       onContextMenu={(e) => e.preventDefault()}
       onWheel={onWheel}
       onMouseDown={onMouseDown}
@@ -181,8 +192,15 @@ export default function CanvasViewport() {
               zoom={viewport.zoom}
             />
           ))}
+
+          {/* Ephemeral rhyme candidates (above snippets) */}
+          <RhymeLayer viewport={viewport} />
         </Container>
       </Stage>
+
+      {/* HTML overlays for the rhyme view */}
+      {rhymeActive && <RhymePanel />}
+      {rhymeActive && <CandidateTooltip viewport={viewport} />}
 
       {/* HTML overlay for inline grid editing */}
       {editingSnippetId && <InlineGridEditor snippetId={editingSnippetId} viewport={viewport} containerRef={containerRef} />}

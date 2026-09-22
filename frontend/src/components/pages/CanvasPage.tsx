@@ -9,12 +9,14 @@ import RhymeSidebar from '@/components/sidebar/RhymeSidebar';
 import SimilarityPanel from '@/components/sidebar/SimilarityPanel';
 import SearchModal from '@/components/modals/SearchModal';
 import ExportDialog from '@/components/modals/ExportDialog';
+import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 
 export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { loadCanvas, undo, redo, selectedSnippetIds, deleteSnippet } = useCanvasStore();
   const { setSearchModalOpen } = useUIStore();
+  useRhymeQuery();
 
   useEffect(() => {
     if (id) {

@@ -1,10 +1,14 @@
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useRhymeStore } from '@/stores/rhymeStore';
 import { nlpApi, exportApi } from '@/api/client';
 
 export default function Toolbar() {
   const { canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE } = useCanvasStore();
   const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, rhymeSidebarOpen } = useUIStore();
+  const rhymeViewActive = useRhymeStore((s) => s.active);
+  const enterRhymeView = useRhymeStore((s) => s.enter);
+  const exitRhymeView = useRhymeStore((s) => s.exit);
 
   const handleTSNE = async () => {
     if (tsneMode) {
@@ -82,6 +86,13 @@ export default function Toolbar() {
       </button>
       <button onClick={handleTSNE} style={tsneMode ? activeBtnStyle : btnStyle}>
         {tsneMode ? 'Exit t-SNE' : 't-SNE'}
+      </button>
+      <button
+        onClick={() => (rhymeViewActive ? exitRhymeView() : enterRhymeView())}
+        style={rhymeViewActive ? activeBtnStyle : btnStyle}
+        title="Show rhyme candidates for the selected snippet or a typed phrase"
+      >
+        {rhymeViewActive ? 'Exit Rhyme View' : 'Rhyme View'}
       </button>
 
       <div style={{ flex: 1 }} />
