@@ -113,8 +113,10 @@ def score(a: Pronunciation, b: Pronunciation, k: int, weights: ScoreWeights = DE
     """Score how well the tails of two pronunciations rhyme over the last ``k`` syllables.
 
     Depth ``d = min(k, len(a), len(b))``; syllables align right-to-left. The onset of the
-    deepest aligned syllable is not part of the rhyme (cat / bat is perfect). Equal rhyme
-    keys at depth ``d`` score exactly 1.0; ``d == 0`` scores 0.
+    deepest aligned syllable is not part of the rhyme (cat / bat is perfect). The depth-weighted
+    mean runs over ``min(k, max(len(a), len(b)))`` syllables, so a side that is shorter than the
+    requested depth leaves its missing syllables scoring zero (hinge / door hinge at k=2 is
+    1.0 / 1.7). Equal rhyme keys at that full depth score exactly 1.0; ``d == 0`` scores 0.
     """
     if not 1 <= k <= MAX_K:
         raise RhymeQueryError(f"k must be in 1..{MAX_K}, got {k}")
@@ -123,21 +125,21 @@ def score(a: Pronunciation, b: Pronunciation, k: int, weights: ScoreWeights = DE
     d = min(k, len(sa), len(sb))
     if d == 0:
         return ZERO_SCORE
+    padded_depth = min(k, max(len(sa), len(sb)))
     alignment: list[SyllableAlignment] = []
     weighted = 0.0
-    weight_sum = 0.0
+    weight_sum = sum(DEPTH_WEIGHTS[:padded_depth])
     for i in range(d):
         ia = len(sa) - 1 - i
         ib = len(sb) - 1 - i
         nuc, cod, ons, total = align_syllable(sa[ia], sb[ib], weights, include_onset=i < d - 1)
         alignment.append(SyllableAlignment(a_index=ia, b_index=ib, nucleus=nuc, coda=cod, onset=ons, total=total))
         weighted += DEPTH_WEIGHTS[i] * total
-        weight_sum += DEPTH_WEIGHTS[i]
     match_depth = 0
     for entry in alignment:
         if entry.total >= MATCH_DEPTH_THRESHOLD:
             match_depth += 1
         else:
             break
-    value = 1.0 if all(e.total == 1.0 for e in alignment) else weighted / weight_sum
+    value = 1.0 if d == padded_depth and all(e.total == 1.0 for e in alignment) else weighted / weight_sum
     return RhymeScore(score=max(0.0, min(1.0, value)), match_depth=match_depth, alignment=tuple(alignment))

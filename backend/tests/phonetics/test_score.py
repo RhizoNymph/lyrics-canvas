@@ -58,6 +58,17 @@ def test_depth_is_bounded_by_shorter_side():
     assert r.alignment[0].a_index == 1 and r.alignment[0].b_index == 0
 
 
+def test_missing_syllables_discount_short_sides_symmetrically():
+    short = _s("door hinge", "hinge", 2)
+    assert short.score == pytest.approx(DEPTH_WEIGHTS[0] / (DEPTH_WEIGHTS[0] + DEPTH_WEIGHTS[1]))
+    assert short.score == pytest.approx(_s("hinge", "door hinge", 2).score)
+    assert short.match_depth == 1
+    assert _s("orange", "door hinge", 2).score > short.score
+    # nothing to pad when both sides are shorter than k
+    assert _s("cat", "bat", 2).score == 1.0
+    assert _s("cat", "combat", 2).score == pytest.approx(short.score)
+
+
 def test_zero_depth_scores_zero():
     empty = Pronunciation(words=())
     r = score(empty, DEFAULT_DIALECT_MAP.apply(pronounce("cat")), 2)

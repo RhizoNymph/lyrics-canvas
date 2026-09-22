@@ -1,10 +1,11 @@
 """Rhyme index: hash buckets over rhyme keys with vowel-skeleton fuzzy lookup.
 
 For every unit and each depth ``d`` in 1..4 the unit joins an exact bucket keyed by
-``rhyme_keys[d]``; each exact key joins a skeleton bucket keyed by its last ``d`` nuclei.
-A query walks the skeleton buckets of the tail's nuclei and their vowel neighbours,
-scores each distinct exact key once (all members of a key bucket share the same tail and
-therefore the same score), filters by ``min_score`` and ranks by score, match depth, id.
+``rhyme_keys[d]``; each exact key joins skeleton buckets keyed by its last ``j`` nuclei for
+``j`` in 1..d. A query walks the skeleton buckets of the tail's nuclei and their vowel
+neighbours, for every ``j`` whose depth-weight mass can still reach ``min_score``, scores
+each distinct exact key once (all members of a key bucket share the same tail and therefore
+the same score), filters by ``min_score`` and ranks by score, match depth, id.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from itertools import product
 from app.services.phonetics.dialect import DialectMap
 from app.services.phonetics.distance import vowel_neighbours
 from app.services.phonetics.errors import RhymeIndexError, RhymeQueryError
-from app.services.phonetics.score import DEFAULT_WEIGHTS, MAX_K, RhymeScore, ScoreWeights, score
+from app.services.phonetics.score import DEFAULT_WEIGHTS, DEPTH_WEIGHTS, MAX_K, RhymeScore, ScoreWeights, score
 from app.services.phonetics.types import Pronunciation, PronunciationSource, RhymeKey, Syllable, Unit, WordPronunciation
 
 
@@ -37,6 +38,15 @@ def _representative_tail(syllables: tuple[Syllable, ...], depth: int) -> Pronunc
     return Pronunciation(words=(WordPronunciation("", tuple(tail), PronunciationSource.override),))
 
 
+def min_skeleton_depth(depth: int, min_score: float) -> int:
+    """Smallest ``j`` such that perfectly matching the last ``j`` of ``depth`` syllables can reach ``min_score``."""
+    total = sum(DEPTH_WEIGHTS[:depth])
+    for j in range(1, depth + 1):
+        if sum(DEPTH_WEIGHTS[:j]) / total >= min_score:
+            return j
+    return depth
+
+
 def _rebase(result: RhymeScore, offset: int) -> RhymeScore:
     if offset == 0:
         return result
@@ -54,7 +64,10 @@ class RhymeIndex:
         self._weights = weights
         self._units: dict[str, Unit] = {}
         self._buckets: list[dict[RhymeKey, _Bucket]] = [{} for _ in range(MAX_K)]
-        self._skeleton: list[dict[tuple[str, ...], set[RhymeKey]]] = [{} for _ in range(MAX_K)]
+        # skeleton[d-1][j-1]: last j nuclei -> depth-d keys
+        self._skeleton: list[list[dict[tuple[str, ...], set[RhymeKey]]]] = [
+            [{} for _ in range(MAX_K)] for _ in range(MAX_K)
+        ]
 
     @property
     def dialect(self) -> DialectMap:
@@ -89,7 +102,8 @@ class RhymeIndex:
                 bucket = _Bucket(tail=_representative_tail(syllables, d), unit_ids=set())
                 self._buckets[d - 1][key] = bucket
                 nuclei = tuple(s.nucleus for s in syllables[-d:])
-                self._skeleton[d - 1].setdefault(nuclei, set()).add(key)
+                for j in range(1, d + 1):
+                    self._skeleton[d - 1][j - 1].setdefault(nuclei[-j:], set()).add(key)
             bucket.unit_ids.add(unit.id)
 
     def remove(self, unit_id: str) -> None:
@@ -106,16 +120,19 @@ class RhymeIndex:
             if not bucket.unit_ids:
                 del self._buckets[d - 1][key]
                 nuclei = tuple(s.nucleus for s in syllables[-d:])
-                keys = self._skeleton[d - 1].get(nuclei)
-                if keys is not None:
-                    keys.discard(key)
-                    if not keys:
-                        del self._skeleton[d - 1][nuclei]
+                for j in range(1, d + 1):
+                    skeleton = self._skeleton[d - 1][j - 1]
+                    keys = skeleton.get(nuclei[-j:])
+                    if keys is not None:
+                        keys.discard(key)
+                        if not keys:
+                            del skeleton[nuclei[-j:]]
 
-    def _candidate_keys(self, nuclei: tuple[str, ...], depth: int) -> set[RhymeKey]:
+    def _candidate_keys(self, nuclei: tuple[str, ...], depth: int, min_score: float) -> set[RhymeKey]:
         keys: set[RhymeKey] = set()
-        skeleton = self._skeleton[depth - 1]
-        for variant in product(*(vowel_neighbours(n) for n in nuclei)):
+        j = min_skeleton_depth(depth, min_score)
+        skeleton = self._skeleton[depth - 1][j - 1]
+        for variant in product(*(vowel_neighbours(n) for n in nuclei[-j:])):
             found = skeleton.get(variant)
             if found:
                 keys.update(found)
@@ -146,7 +163,7 @@ class RhymeIndex:
         for d in range(1, k_eff + 1):
             nuclei = tuple(s.nucleus for s in tail_syllables[-d:])
             buckets = self._buckets[d - 1]
-            for key in self._candidate_keys(nuclei, d):
+            for key in self._candidate_keys(nuclei, d, min_score):
                 bucket = buckets[key]
                 members = [
                     uid
