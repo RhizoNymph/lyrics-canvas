@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 from app.models.snippet import SnippetType, GridMode
+from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 
 
 class SnippetCreate(BaseModel):
@@ -12,6 +13,7 @@ class SnippetCreate(BaseModel):
     position_y: float = 0.0
     width: float = 300.0
     height: float = 200.0
+    derived_from: DerivedFromModel | None = None
 
 
 class SnippetUpdate(BaseModel):
@@ -47,6 +49,8 @@ class SnippetResponse(BaseModel):
     z_index: int
     group_id: str | None = None
     tags: list = []
+    phonetics: SnippetPhonetics | None = None
+    derived_from: DerivedFromModel | None = None
     created_at: str
     updated_at: str
 

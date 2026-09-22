@@ -38,7 +38,18 @@ PACKAGES: tuple[Package, ...] = (
 )
 
 
+_configured_dir: Path | None = None
+
+
+def configure(data_dir: Path | None) -> None:
+    """Set the directory ``ensure_resources()`` uses when none is passed (app settings)."""
+    global _configured_dir
+    _configured_dir = data_dir
+
+
 def default_data_dir() -> Path:
+    if _configured_dir is not None:
+        return _configured_dir
     env = os.environ.get("NLTK_DATA_DIR") or os.environ.get("NLTK_DATA")
     if env:
         return Path(env.split(os.pathsep)[0])
