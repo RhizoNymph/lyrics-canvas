@@ -14,7 +14,7 @@ Top bar with canvas title, zoom controls, undo/redo, and tool toggles.
 |-------|----------|
 | Zoom | `-` (zoom / 1.2), `%` display, `+` (zoom * 1.2), Reset |
 | History | Undo (Ctrl+Z), Redo (Ctrl+Shift+Z) |
-| Tools | Search (Ctrl+F), Rhymes (toggle), t-SNE (toggle) |
+| Tools | Search (Ctrl+F), Rhymes (toggle), t-SNE (toggle), Rhyme View (toggle) |
 | Export | Export button (right-aligned) |
 
 ### Zoom Behavior
@@ -31,12 +31,22 @@ If tsneMode inactive -> POST /api/canvases/{id}/tsne
                      -> enterTSNE(positions)
 ```
 
+### Rhyme View Toggle
+
+```
+If rhymeStore.active -> exit()   (candidates cleared; snippets untouched)
+Else                 -> enter()  (useRhymeQuery runs the first query immediately)
+```
+
+Label reads "Rhyme View" / "Exit Rhyme View" and uses the active style while on. See [rhyme-view.md](./rhyme-view.md).
+
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
 | canvasStore | `canvasTitle`, `canvasId`, `viewport`, `setViewport`, `undo`, `redo`, `tsneMode`, `enterTSNE`, `exitTSNE` |
 | uiStore | `setSearchModalOpen`, `setExportDialogOpen`, `toggleRhymeSidebar`, `rhymeSidebarOpen` |
+| rhymeStore | `active`, `enter`, `exit` |
 
 ### Styling
 

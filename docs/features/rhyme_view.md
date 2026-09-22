@@ -341,6 +341,13 @@ Files under `frontend/src/`:
 | `components/rhyme/RhymeLayer.tsx` | Renders capped candidate cards inside the Pixi container above snippets |
 | `components/rhyme/RhymePanel.tsx` | HTML overlay: typed anchor, k, min score, slot, sources, count, More, Exit |
 | `components/rhyme/CandidateTooltip.tsx` | HTML overlay on hover: score, depth, aligned tail vs anchor, source, Promote/Dismiss |
+| `components/rhyme/rhymeColors.ts` | Provenance colours and labels, non-fit alpha, alignment colour scale |
+| `components/rhyme/dashedRect.ts` | Dashed rounded-rect stroke (Pixi v7 has no dashed line style) |
+| `components/canvas/gridConstants.ts` | Cell/padding/header constants without Pixi imports (used by pure modules) |
+| `lib/rhyme/candidateGeometry.ts` | Candidate card size and centre-to-top-left conversion, shared by the store and the card |
+| `lib/rhyme/debounce.ts` | Debounced runner behind the 150 ms re-query hook |
+| `lib/rhyme/errors.ts` | `toRhymeError`: axios failures to the typed `RhymeError` |
+| `hooks/useRhymeQuery.ts` | Immediate query on enter; 150 ms debounced re-query on selection / anchor / param changes |
 
 Store shape:
 
@@ -358,7 +365,8 @@ interface RhymeState {
   enter(): void; exit(): void; setTypedAnchor(t): void; setK(k): void; setMinScore(v): void;
   setSlot(s | null): void; toggleSource(name): void;
   runQuery(): Promise<void>;   // debounced 150 ms by the caller hook
-  loadMore(): Promise<void>; dismiss(id): void; promote(id): Promise<void>; setHovered(id | null): void;
+  loadMore(): Promise<void>; dismiss(id): void; promote(id, at?): Promise<void>; setHovered(id | null): void;
+  // additions (see Decisions): pinnedId, setPinned(id | null), setSlotMode(mode), viewSize, setViewSize(w, h)
 }
 ```
 
@@ -438,3 +446,20 @@ select snippet(s) or type phrase
 - **Default k = 2**, `min_score = 0.5`, default weights vowel 1.0 / coda 0.6 / onset 0.25, per the brief.
 - **Cell-level selection deferred** (see Non-scope).
 - **Datamuse and LLM deferred**; v0 is fully offline after install.
+- **Frontend store additions (milestone 4).** `pinnedId`/`setPinned` back the "click pins tooltip"
+  interaction; `setSlotMode` is needed to switch between from-selection and manual slots; `viewSize`/
+  `setViewSize` let the store centre typed-anchor layouts on the viewport without knowing the DOM; `promote`
+  takes an optional world top-left so a drag-drop can place the snippet where it landed. Nothing in the
+  contract's fields or semantics changed.
+- **Page window rendering.** `loadMore` appends pages to `candidates` (offset paging as specified) but the
+  layer renders only `candidates.slice(offset, offset + 40)`, so at most 40 cards are on the canvas at once;
+  the panel shows "Showing a–b of total".
+- **Dismissed ids are cleared on exit** (session = one rhyme-view session), and a promoted id joins
+  `dismissed` so a re-query does not bring the same unit back as a candidate next to its new snippet.
+- **No anchors or no enabled source clears the layer client-side** instead of sending a request the server
+  would reject with 422.
+- **Manual slot validation** lives in the panel (`parseManualSlot`); invalid input sends `slot: null` and
+  shows the reason rather than blocking the query.
+- **`derived_from.anchor_text`** is taken from the echoed anchor unit whose id equals `best_anchor_id`
+  (empty string if the server did not echo it).
+- **Vitest 3.2.7** (exact pin) is the test runner; Vite 5 in this project is incompatible with vitest 4.

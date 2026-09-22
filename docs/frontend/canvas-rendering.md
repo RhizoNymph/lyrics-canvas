@@ -11,9 +11,15 @@ CanvasViewport (root)
       InfiniteGrid        (background grid)
       GroupContainer[]     (group bounding boxes, behind snippets)
       SnippetCard[]        (snippet cards, in front)
+      RhymeLayer           (ephemeral rhyme CandidateCards, above snippets; empty unless rhyme view is active)
   InlineGridEditor         (HTML overlay — inline beat grid editing)
   SnippetContextMenu       (HTML overlay — right-click tag assignment menu)
+  RhymePanel               (HTML overlay — rhyme view controls, only while active)
+  CandidateTooltip         (HTML overlay — hovered/pinned candidate, only while active)
 ```
+
+The container div is `position: relative` so the rhyme overlays can be positioned in canvas-local pixels. See
+[rhyme-view.md](./rhyme-view.md) for the rhyme components.
 
 ## CanvasViewport
 
@@ -39,10 +45,14 @@ Pixi's `stopPropagation()` only prevents event bubbling within the Pixi scene gr
 
 To distinguish snippet clicks from background clicks, a module-level `_snippetInteracted` flag is used:
 
-1. `SnippetCard.onPointerDown` calls `markSnippetInteraction()` (exported from `CanvasViewport.tsx`)
+1. `SnippetCard.onPointerDown` (and `CandidateCard.onPointerDown`) calls `markSnippetInteraction()` (exported from `CanvasViewport.tsx`)
 2. `onStageClick` sets a 50ms timer; when it fires, it checks and resets the flag
-3. If the flag was set, the click was on a snippet — skip `clearSelection()`
+3. If the flag was set, the click was on a card — skip `clearSelection()`
 4. If the flag was not set, the click was on the background — clear selection
+
+`markSnippetInteraction()` also records a timestamp; the double-click-to-create path skips creation when a card
+was interacted with in the last 500ms, so double-clicking a rhyme candidate does not drop an empty snippet
+under it.
 
 ### Coordinate Transform
 
@@ -66,6 +76,29 @@ When `activeTagFilters` is non-empty, only snippets whose tags intersect the fil
 |-------|-------------------|
 | canvasStore | `viewport`, `setViewport`, `snippets`, `groups`, `activeTagFilters`, `addSnippet`, `clearSelection`, `commitPositions` |
 | uiStore | `editingSnippetId`, `setEditingSnippet` |
+| rhymeStore | `active` (mount overlays), `setViewSize` (on resize, for the typed-anchor layout centre) |
+
+---
+
+## gridDraw
+
+**Files:** `src/components/canvas/gridConstants.ts`, `src/components/canvas/gridDraw.ts`
+
+The beat-grid drawing shared by `SnippetCard` and the rhyme `CandidateCard`, extracted from `SnippetCard`
+without changing its output.
+
+- `gridConstants.ts` holds `CELL_WIDTH` (60), `CELL_HEIGHT` (24), `PADDING` (14), `HEADER_HEIGHT` (30) and
+  `COUNT_COLUMN_WIDTH` (28) with no Pixi imports, so pure modules (`lib/rhyme/candidateGeometry.ts`) and tests can
+  use them.
+- `drawBeatGrid(g, lines, { s, left, top, maxRight })`: alternating row backgrounds (`0x242448` at 50%) and grid
+  lines (`0x4a4a6a` at 50%), clipped at `maxRight`. No-op for empty input. Leaves the 1px grid line style set,
+  exactly as the inline code did.
+- `placeCellText(cell, row, col, { s, left, top })` -> `{ text, x, y, kind }` where `kind` is `'rest'` (the `·`
+  glyph offset 35% into the cell), `'stressed'` or `'normal'`.
+- `createGridTextStyles(s)` -> `{ cell, stressed, rest, count }` `TextStyle`s; `styleForKind(styles, kind)`.
+
+`SnippetCard` keeps its own shadow, header, tag pills, selection border, resize handle, and all drag/resize/select
+logic.
 
 ---
 
@@ -119,8 +152,8 @@ Scale range: 0.3x - 4.0x per snippet.
 3. **Header bar**: Type-specific color at 85% opacity
 4. **Selection border**: 2.5px white at 90% opacity (if selected)
 5. **Tag pills**: Colored rounded-rect pills in the header (right-aligned), one per assigned tag
-6. **Grid rows**: Alternating backgrounds (0x242448 at 50%)
-7. **Grid lines**: Horizontal + vertical (0x4a4a6a at 50%)
+6. **Grid rows**: Alternating backgrounds (0x242448 at 50%) — via `gridDraw.drawBeatGrid`
+7. **Grid lines**: Horizontal + vertical (0x4a4a6a at 50%) — via `gridDraw.drawBeatGrid`
 8. **Resize handle**: Triangle with diagonal lines
 
 ### Text Layers
@@ -129,10 +162,12 @@ Scale range: 0.3x - 4.0x per snippet.
 |-------|------|-------|---------|
 | Header | 11px bold | White | `VERSE`, `CHORUS`, etc. |
 | Tag labels | 9px bold | White | Tag names (positioned over header pill backgrounds) |
-| Cell (normal) | 13px mono | #d0d0e8 | Syllable text |
+| Cell (normal) | 13px mono | #d0d0e8 | Syllable text (`gridDraw.placeCellText`) |
 | Cell (stressed) | 13px bold mono | White | Stressed syllables |
 | Cell (rest) | 13px mono | #555577 | "·" character |
 | Count | 10px mono | #7a7a9a | Per-line syllable count |
+
+Cell and count styles come from `gridDraw.createGridTextStyles(s)`.
 | Fallback | 13px mono | #a0a0c0 | First 200 chars of raw_text |
 
 ---
@@ -282,6 +317,9 @@ Dragging the group container moves the group and all contained snippets by the s
 | Grid lines | Dark gray | 0x2a2a4a |
 | Selection border | White | 0xffffff |
 | Group border/fill | Indigo | 0x6366f1 |
+| Rhyme candidate (note) | Sky | #0ea5e9 |
+| Rhyme candidate (dictionary) | Teal | #14b8a6 |
+| Rhyme candidate (generated) | Zinc grey | #71717a |
 | Verse header | Blue | #3b82f6 |
 | Chorus header | Amber | #f59e0b |
 | Bridge header | Purple | #8b5cf6 |

@@ -175,6 +175,8 @@ Features Index:
       - backend/scripts/backfill_phonetics.py
       - frontend/src/stores/rhymeStore.ts
       - frontend/src/components/rhyme/
+      - frontend/src/lib/rhyme/
+      - frontend/src/hooks/useRhymeQuery.ts
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
 ```

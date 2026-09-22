@@ -1,6 +1,6 @@
 # State Management
 
-Three Zustand stores managing authentication, canvas data, and UI state.
+Four Zustand stores managing authentication, canvas data, UI state, and the rhyme view.
 
 ## authStore
 
@@ -76,6 +76,7 @@ The primary store managing all canvas data and interactions.
 | Action | API Call | Notes |
 |--------|---------|-------|
 | `addSnippet(x, y, type)` | `POST /api/canvases/{id}/snippets` | Pushes undo state |
+| `addSnippetFromText(text, x, y, derived_from?)` | `POST /api/canvases/{id}/snippets` | Body `{ raw_text, position_x, position_y, snippet_type: 'freestyle', derived_from }`; inserts the returned snippet, pushes undo state, returns it (`null` when no canvas is loaded). Used by rhyme-view promotion |
 | `updateSnippet(id, data)` | `PUT /api/snippets/{id}` | Pushes undo state |
 | `deleteSnippet(id)` | `DELETE /api/snippets/{id}` | Pushes undo state |
 | `moveSnippet(id, x, y)` | None | Local only (optimistic) |
@@ -156,6 +157,29 @@ Lightweight store for UI panel visibility and editing state.
 
 ---
 
+## rhymeStore
+
+**File:** `src/stores/rhymeStore.ts`
+**Hook:** `useRhymeStore`
+
+Session state for the rhyme view: `active`, query parameters (`typedAnchor`, `k`, `minScore`, `slot`,
+`slotMode`, `sources`), results (`anchors`, `candidates`, `total`, `offset`), `positions` (stable world
+centres per unit id), `dismissed`, `hoveredId`/`pinnedId`, `viewSize`, `loading`, `error: RhymeError | null`.
+
+| Action | API Call | Notes |
+|--------|---------|-------|
+| `enter()` / `exit()` | None | Exit clears all results and positions; snippets untouched |
+| `runQuery()` | `POST /api/nlp/rhyme-suggest` | Builds the request from `canvasStore.selectedSnippetIds` + typed anchor; stale responses dropped |
+| `loadMore()` | `POST /api/nlp/rhyme-suggest` | Next page (`offset + 40`), appended |
+| `dismiss(id)` | None | Removes the candidate; id sent as `exclude_ids` afterwards |
+| `promote(id, at?)` | via `canvasStore.addSnippetFromText` | Creates a snippet with `derived_from`, then dismisses the id |
+| setters | None | `setTypedAnchor`, `setK`, `setMinScore`, `setSlot`, `setSlotMode`, `toggleSource`, `setViewSize`, `setHovered`, `setPinned` |
+
+Errors are stored as `RhymeError` (`kind`, `operation`, `status`) and never thrown. Full description in
+[rhyme-view.md](./rhyme-view.md).
+
+---
+
 ## Design Patterns
 
 - **Maps for collections**: O(1) lookups instead of array scans
@@ -164,3 +188,4 @@ Lightweight store for UI panel visibility and editing state.
 - **Cascade reloads**: Tag operations reload entire canvas for consistency
 - **Auto-open panels**: Setting a rhyme word or similarity target automatically opens the relevant panel
 - **Undo snapshots**: Deep copies of snippet + group Maps, 50-state limit
+- **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so overlays can render the failure

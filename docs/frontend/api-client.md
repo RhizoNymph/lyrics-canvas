@@ -46,7 +46,7 @@ Axios instance with JWT injection and 401 handling.
 
 | Method | Path | Body/Params |
 |--------|------|-------------|
-| `create(canvasId, data)` | POST `/api/canvases/{canvasId}/snippets` | JSON body |
+| `create(canvasId, data: SnippetCreateBody)` | POST `/api/canvases/{canvasId}/snippets` | `{ position_x, position_y, snippet_type?, raw_text?, derived_from? }`; typed `AxiosResponse<Snippet>` |
 | `update(id, data)` | PUT `/api/snippets/{id}` | JSON body |
 | `delete(id)` | DELETE `/api/snippets/{id}` | - |
 | `batchPosition(updates)` | PATCH `/api/snippets/batch-position` | `[{id, position_x, position_y}]` |
@@ -78,6 +78,7 @@ Axios instance with JWT injection and 401 handling.
 | `similar(snippetId, topK=10)` | GET `/api/snippets/{snippetId}/similar` | `?top_k=` |
 | `tsne(canvasId, nComponents=2)` | POST `/api/canvases/{canvasId}/tsne` | `{ n_components }` |
 | `rhymes(word)` | GET `/api/nlp/rhymes` | `?word=` |
+| `rhymeSuggest(req: RhymeSuggestRequest)` | POST `/api/nlp/rhyme-suggest` | JSON body; typed `AxiosResponse<RhymeSuggestResponse>` |
 
 #### exportApi
 
@@ -89,7 +90,7 @@ Axios instance with JWT injection and 401 handling.
 
 ## Type System
 
-**File:** `src/types/index.ts`
+**Files:** `src/types/index.ts` (core), `src/types/rhyme.ts` (rhyme-suggest contract)
 
 ### Enums
 
@@ -209,6 +210,26 @@ interface TSNEPosition {
   z?: number;
 }
 ```
+
+### Rhyme Types (`src/types/rhyme.ts`)
+
+Mirrors of `backend/app/schemas/rhyme.py` as specified in
+[`docs/features/rhyme_view.md`](../features/rhyme_view.md#api-contract): `RhymeSyllable`, `RhymeUnit`
+(with `grid_line: GridLine`), `SyllableAlignment`, `RhymeCandidate`, `AnchorRef` (discriminated on `kind`),
+`Slot`, `ScoreWeights`, `DialectRule`/`DialectMap`, `DerivedFrom`, `RhymeSuggestRequest`,
+`RhymeSuggestResponse`. Also `RhymeK = 1 | 2 | 3 | 4`, `STRESS_PATTERN = /^[012]+$/`, `RHYME_PAGE_SIZE = 40`,
+`RHYME_MAX_LIMIT = 100`.
+
+```typescript
+class RhymeError extends Error {
+  kind: 'network' | 'not_found' | 'invalid_request' | 'server' | 'unknown';
+  operation: 'query' | 'promote';
+  status: number | null;
+}
+```
+
+`lib/rhyme/errors.ts` `toRhymeError(err, operation)` converts axios errors: no response -> `network`,
+404 -> `not_found`, 400/422 -> `invalid_request` (pydantic `detail` messages joined), otherwise `server`.
 
 ### Constants
 
