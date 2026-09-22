@@ -1,0 +1,22 @@
+# dependencies / build
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# editors / tooling
+.idea/
+.vscode/
+.DS_Store
+*.log
+.claude/settings.local.json*
+.claude/.cc-writes/
