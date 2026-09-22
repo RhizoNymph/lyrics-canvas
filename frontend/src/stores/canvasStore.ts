@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { canvasApi, snippetApi, groupApi, tagApi } from '@/api/client';
 import type { Snippet, Group, Tag, CanvasDetail, SnippetType, GridMode } from '@/types';
+import type { DerivedFrom } from '@/types/rhyme';
 
 interface Viewport {
   x: number;
@@ -42,6 +43,8 @@ interface CanvasState {
 
   // Snippet actions
   addSnippet: (position_x: number, position_y: number, snippet_type?: SnippetType) => Promise<void>;
+  /** Create a snippet from text (rhyme-view promotion). Resolves null when no canvas is loaded. */
+  addSnippetFromText: (text: string, x: number, y: number, derived_from?: DerivedFrom) => Promise<Snippet | null>;
   updateSnippet: (id: string, data: Partial<Snippet>) => Promise<void>;
   deleteSnippet: (id: string) => Promise<void>;
   moveSnippet: (id: string, x: number, y: number) => void;
@@ -127,6 +130,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     next.set(snippet.id, snippet);
     get().pushUndoState();
     set({ snippets: next });
+  },
+
+  addSnippetFromText: async (text, x, y, derived_from) => {
+    const { canvasId, snippets } = get();
+    if (!canvasId) return null;
+    const res = await snippetApi.create(canvasId, {
+      raw_text: text,
+      position_x: x,
+      position_y: y,
+      snippet_type: 'freestyle',
+      derived_from,
+    });
+    const snippet: Snippet = res.data;
+    const next = new Map(snippets);
+    next.set(snippet.id, snippet);
+    get().pushUndoState();
+    set({ snippets: next });
+    return snippet;
   },
 
   updateSnippet: async (id, data) => {
