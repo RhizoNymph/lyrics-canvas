@@ -20,3 +20,6 @@ __pycache__/
 *.log
 .claude/settings.local.json*
 .claude/.cc-writes/
+
+# downloaded NLTK data for g2p_en
+.nltk_data/
