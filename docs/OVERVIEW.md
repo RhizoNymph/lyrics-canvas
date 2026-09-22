@@ -162,3 +162,19 @@ docker-compose up
 ```
 
 All services hot-reload via bind-mounted source volumes.
+
+## Features Index
+
+```yaml
+Features Index:
+  rhyme_view:
+    description: Select a snippet or type a phrase; the canvas fills with engine-scored rhyme and near-rhyme candidates that fit the slot, promotable to snippets.
+    entry_points:
+      - backend/app/services/phonetics/
+      - backend/app/api/nlp.py (POST /api/nlp/rhyme-suggest)
+      - backend/scripts/backfill_phonetics.py
+      - frontend/src/stores/rhymeStore.ts
+      - frontend/src/components/rhyme/
+    depends_on: [beat_grid, canvas_rendering, snippet_crud]
+    doc: docs/features/rhyme_view.md
+```
