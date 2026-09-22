@@ -3,10 +3,19 @@ import { Container, Graphics, Text } from '@pixi/react';
 import { TextStyle } from 'pixi.js';
 import type { Graphics as PixiGraphics, FederatedPointerEvent } from 'pixi.js';
 import { SNIPPET_TYPE_COLORS } from '@/types';
-import type { Snippet, GridCell } from '@/types';
+import type { Snippet } from '@/types';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { markSnippetInteraction } from './CanvasViewport';
+import {
+  CELL_HEIGHT,
+  PADDING,
+  HEADER_HEIGHT,
+  drawBeatGrid,
+  placeCellText,
+  createGridTextStyles,
+  styleForKind,
+} from './gridDraw';
 
 interface Props {
   snippet: Snippet;
@@ -15,10 +24,6 @@ interface Props {
   zoom: number;
 }
 
-const CELL_WIDTH = 60;
-const CELL_HEIGHT = 24;
-const PADDING = 14;
-const HEADER_HEIGHT = 30;
 const RESIZE_HANDLE_SIZE = 14;
 
 export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) {
@@ -85,42 +90,14 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         tagX -= tagPillGap;
       }
 
-      // Beat grid
+      // Beat grid (shared with CandidateCard)
       const gridLines = snippet.grid_data?.lines || [];
-      const gridTop = (HEADER_HEIGHT + PADDING) * s;
-      const cellW = CELL_WIDTH * s;
-      const cellH = CELL_HEIGHT * s;
-
-      if (gridLines.length > 0) {
-        const maxCells = Math.max(...gridLines.map((l) => l.cells.length), 1);
-        const gridRight = Math.min(PADDING * s + maxCells * cellW, w - PADDING * s);
-        const gridBottom = gridTop + gridLines.length * cellH;
-
-        // Row backgrounds (alternating)
-        for (let row = 0; row < gridLines.length; row++) {
-          if (row % 2 === 0) {
-            g.beginFill(0x242448, 0.5);
-            g.drawRect(PADDING * s, gridTop + row * cellH, gridRight - PADDING * s, cellH);
-            g.endFill();
-          }
-        }
-
-        // Grid lines
-        g.lineStyle(1, 0x4a4a6a, 0.5);
-        // Horizontals
-        for (let row = 0; row <= gridLines.length; row++) {
-          const y = gridTop + row * cellH;
-          g.moveTo(PADDING * s, y);
-          g.lineTo(gridRight, y);
-        }
-        // Verticals
-        for (let col = 0; col <= maxCells; col++) {
-          const x = PADDING * s + col * cellW;
-          if (x > gridRight + 1) break;
-          g.moveTo(x, gridTop);
-          g.lineTo(x, gridBottom);
-        }
-      }
+      drawBeatGrid(g, gridLines, {
+        s,
+        left: PADDING * s,
+        top: (HEADER_HEIGHT + PADDING) * s,
+        maxRight: w - PADDING * s,
+      });
 
       // Resize handle (bottom-right diagonal)
       const handleSize = RESIZE_HANDLE_SIZE * zoom; // handle scales with canvas zoom only
@@ -267,30 +244,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
     return positions;
   }, [s, w, snippet.tags]);
 
-  const cellStyle = useMemo(() => new TextStyle({
-    fontSize: 13 * s,
-    fill: '#d0d0e8',
-    fontFamily: 'monospace',
-  }), [s]);
-
-  const stressedStyle = useMemo(() => new TextStyle({
-    fontSize: 13 * s,
-    fill: '#ffffff',
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  }), [s]);
-
-  const restStyle = useMemo(() => new TextStyle({
-    fontSize: 13 * s,
-    fill: '#555577',
-    fontFamily: 'monospace',
-  }), [s]);
-
-  const countStyle = useMemo(() => new TextStyle({
-    fontSize: 10 * s,
-    fill: '#7a7a9a',
-    fontFamily: 'monospace',
-  }), [s]);
+  const gridStyles = useMemo(() => createGridTextStyles(s), [s]);
 
   const rawTextStyle = useMemo(() => new TextStyle({
     fontSize: 13 * s,
@@ -302,8 +256,8 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
 
   const gridLines = snippet.grid_data?.lines || [];
   const gridTop = (HEADER_HEIGHT + PADDING) * s;
-  const cellW = CELL_WIDTH * s;
   const cellH = CELL_HEIGHT * s;
+  const cellFrame = { s, left: PADDING * s, top: gridTop };
 
   return (
     <Container
@@ -333,28 +287,15 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
       ))}
       {/* Grid cells */}
       {gridLines.map((line, row) =>
-        line.cells.map((cell: GridCell, col: number) => {
-          const x = PADDING * s + col * cellW + 4 * s;
-          const y = gridTop + row * cellH + 3 * s;
-          if (cell.rest) {
-            return (
-              <Text
-                key={`${row}-${col}`}
-                text="·"
-                style={restStyle}
-                x={x + cellW * 0.35}
-                y={y}
-              />
-            );
-          }
-          const text = cell.syllable || '';
+        line.cells.map((cell, col) => {
+          const placed = placeCellText(cell, row, col, cellFrame);
           return (
             <Text
               key={`${row}-${col}`}
-              text={text}
-              style={cell.stress && cell.stress > 0 ? stressedStyle : cellStyle}
-              x={x}
-              y={y}
+              text={placed.text}
+              style={styleForKind(gridStyles, placed.kind)}
+              x={placed.x}
+              y={placed.y}
             />
           );
         })
@@ -364,7 +305,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         <Text
           key={`count-${row}`}
           text={`${line.syllable_count}`}
-          style={countStyle}
+          style={gridStyles.count}
           x={(snippet.width - PADDING - 14) * s}
           y={gridTop + row * cellH + 5 * s}
         />
