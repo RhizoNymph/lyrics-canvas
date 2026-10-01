@@ -10,6 +10,7 @@ interface GridCell {
   stress?: number;         // 0=unstressed, 1=primary, 2=secondary
   word_index?: number;     // Which word in the line
   rest?: boolean;          // True = silence beat
+  word?: string;           // Surface word (as typed) this syllable belongs to; set when raw_text and word_index agree
 }
 
 interface GridLine {
@@ -68,18 +69,23 @@ See [Canvas Rendering — InlineGridEditor](./canvas-rendering.md#inlinegridedit
 
 ```
 User types text in active row
-  -> Local syllable estimate updates grid cells instantly
-     (vowel-group heuristic: split words into estimated syllable chunks)
-  -> After 300ms debounce:
+  -> typeLine: the row's grid line becomes a local estimate instantly
+     (vowel-group heuristic: split words into estimated syllable chunks; lib/grid/localSyllabify.ts)
+     and the row is no longer "arranged"
+  -> After 300ms debounce (skipped when every non-blank row is arranged):
      -> POST /api/nlp/syllabify { text (all lines joined) }
        -> Backend returns GridData with accurate syllables + stress
-       -> Active row switches to API data when raw_text matches
-       -> Inactive rows update immediately
+       -> mergeSyllabified: each unarranged row takes the result line with the same text;
+          arranged rows (hand-moved chunks, rests, saved layouts) keep their cells
 ```
+
+The editor's row state (`editorState.ts`) keeps one grid line per non-blank row, with `raw_text` in sync,
+so cells for every row always come from `gridData`. Manual rearrangement of the grid (chunk drags, rests,
+line reorder) is described in [Grid Rearrange](../features/grid_rearrange.md).
 
 ### Fallback Syllabification
 
-If the API call fails, `localSyllabifyLine()` is used for all rows:
+If the API call fails the rows keep their local estimates from `localSyllabifyLine()`:
 
 ```typescript
 // For each word: count vowel groups, split into that many character chunks
@@ -99,10 +105,12 @@ Response: GridData
 ### UI Elements
 
 1. Color-coded header bar with snippet type `<select>` dropdown
-2. Per-row beat grid cells (active rows show live syllable estimate, inactive rows show API data)
+2. Per-row beat grid cells (`GridRow`): local estimate while typing, API data once it arrives, or the
+   hand-arranged layout; cells are selectable and draggable along the row
 3. Compact text input below active row for free-form typing
-4. Per-row syllable count badge (highlighted on active row)
+4. Per-row syllable count badge (highlighted on active row) and row buttons `+·` `−` `▲` `▼`
 5. Extra empty cell on active row (+1 for next syllable)
+6. A one-line hint footer listing the shortcuts for the current mode
 
 ## BeatGridEditor (standalone)
 
