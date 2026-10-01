@@ -15,6 +15,7 @@ Top bar with canvas title, zoom controls, undo/redo, and tool toggles.
 | Zoom | `-` (zoom / 1.2), `%` display, `+` (zoom * 1.2), Reset |
 | History | Undo (Ctrl+Z), Redo (Ctrl+Shift+Z) |
 | Tools | Search (Ctrl+F), Rhymes (toggle), t-SNE (toggle) |
+| Merge | `Merge ⇣` (vertical, Ctrl+Shift+V), `Merge ⇢` (horizontal, Ctrl+Shift+H); disabled unless 2+ snippets are selected; followed by the merge notice when `mergeError` is set |
 | Export | Export button (right-aligned) |
 
 ### Zoom Behavior
@@ -41,11 +42,23 @@ uiStore.toggleRhymeSidebar()
 
 Uses the active style while the sidebar is open. See [rhyme-view.md](./rhyme-view.md).
 
+### Merge Buttons
+
+```
+canvasStore.mergeSelected('vertical' | 'horizontal')
+  -> replaces the selected snippets with one merged snippet (see features/merge_blocks.md)
+```
+
+`canMerge = selectedSnippetIds.size >= 2`; otherwise the buttons are `disabled` with a dimmed style. When
+`canvasStore.mergeError` is non-null a status span follows the buttons: red "Merge failed: ..." for an
+error-level failure (nothing changed), amber "Merged with a problem: ..." for a warning (the merged
+snippet exists but a tag or delete request failed). Clicking it calls `clearMergeError()`.
+
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `canvasTitle`, `canvasId`, `viewport`, `setViewport`, `undo`, `redo`, `tsneMode`, `enterTSNE`, `exitTSNE` |
+| canvasStore | `canvasTitle`, `canvasId`, `viewport`, `setViewport`, `undo`, `redo`, `tsneMode`, `enterTSNE`, `exitTSNE`, `selectedSnippetIds`, `mergeSelected`, `mergeError`, `clearMergeError` |
 | uiStore | `setSearchModalOpen`, `setExportDialogOpen`, `toggleRhymeSidebar`, `rhymeSidebarOpen` |
 
 ### Styling

@@ -82,14 +82,24 @@ Snippet creation, updates, and batch positioning are handled in the canvases rou
 
 | Schema | Fields |
 |--------|--------|
-| `SnippetCreate` | snippet_type, grid_mode, beats_per_line?, raw_text, position_x/y, width/height |
+| `SnippetCreate` | snippet_type, grid_mode, beats_per_line?, raw_text, grid_data?, position_x/y, width/height, group_id?, derived_from? |
+| `GridDataModel` | `{ lines: [{ cells: [{ syllable?, stress?, word_index?, rest? }], syllable_count, raw_text }] }`; extra keys are kept |
 | `SnippetUpdate` | All fields optional |
 | `BatchPositionUpdate` | `updates: [{id, position_x, position_y}]` |
 | `SnippetResponse` | All model fields + tags[], timestamps |
 
+### Grid on Create
+
+Without `grid_data`, `raw_text` is syllabified (`syllabify_text`). With `grid_data` (block merging sends the
+merged grid), the grid is stored as-is, so rests and stress markers survive; `model_dump(exclude_unset=True)`
+keeps the cells exactly as sent. Either way `phonetics` is computed from `raw_text` and the stored grid
+(`compute_snippet_phonetics`; grid stress wins via overrides). A malformed grid is a 422. `group_id`, when
+given, is converted to a UUID so the new snippet joins that group.
+
 ### Auto-Sizing on Create
 
-When a snippet is created, dimensions are auto-calculated from grid data:
+When a snippet is created, dimensions are auto-calculated from grid data (the stored one, supplied or
+syllabified):
 
 ```
 width  = (max_cells + 1) * 60 + 44   (min: 200)
@@ -102,7 +112,7 @@ height = lines * 22 + 52              (min: 80)
 
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
-| POST | `/api/canvases/{id}/snippets` | Bearer | Create (auto-syllabifies, auto-sizes) | 201 |
+| POST | `/api/canvases/{id}/snippets` | Bearer | Create (syllabifies unless `grid_data` is given; auto-sizes) | 201/422 |
 | PUT | `/api/snippets/{id}` | Bearer | Update (re-syllabifies if text changes) | 200/404 |
 | DELETE | `/api/snippets/{id}` | Bearer | Delete | 204/404 |
 | PATCH | `/api/snippets/batch-position` | Bearer | Batch update positions | 200 |

@@ -36,6 +36,7 @@ Main orchestrator for the Pixi.js Stage. Handles pan/zoom, double-click snippet 
 | Click empty area (50ms delay) | Clear selection |
 | Mouse up | Commits snippet positions to backend |
 | Delete / Backspace (when not editing) | Delete all selected snippets |
+| Ctrl/Cmd+Shift+V / Ctrl/Cmd+Shift+H (when not editing, 2+ selected) | Merge the selection vertically / horizontally (`CanvasPage` shortcut) |
 
 ### Snippet Interaction Flag
 
@@ -133,7 +134,7 @@ Scale range: 0.3x - 4.0x per snippet.
 |-------|----------|
 | Click | Select (Shift for multi-select); calls `markSnippetInteraction()` to prevent background clear |
 | Double-click (<350ms) | Enter edit mode |
-| Right-click | Open context menu (tag assignment + delete) at cursor position via `uiStore.setContextMenu()` |
+| Right-click | Open context menu (tag assignment, merge, delete) at cursor position via `uiStore.setContextMenu()`; selects the card unless it is already part of the selection, so a multi-selection survives the right-click |
 | Drag | Move snippet on canvas |
 | Drag resize handle | Scale snippet (0.3x-4x) |
 
@@ -221,6 +222,7 @@ Fixed-position HTML overlay (z-index 2000) rendered by CanvasViewport when `uiSt
 - **Tag list**: All canvas tags shown as checkable items (checkbox + color dot + name). Clicking toggles `addTagToSnippet` / `removeTagFromSnippet`.
 - **Tag editing**: Pencil icon (✎) or double-click a tag name to enter inline edit mode with color picker and name input. Saves on Enter or blur.
 - **Tag creation**: "New tag..." row expands to color picker + name input. Saves on Enter or blur, and **auto-assigns** the new tag to the current snippet. Color dots use `onMouseDown={e => e.preventDefault()}` to prevent stealing focus from the input.
+- **Merge**: When 2+ snippets are selected and the right-clicked snippet is one of them, "Merge vertically" and "Merge horizontally" items appear above the delete option; each closes the menu and calls `canvasStore.mergeSelected(mode)` (see [merge_blocks.md](../features/merge_blocks.md)).
 - **Delete snippet**: Red "Delete snippet" option at the bottom.
 - **Click-outside**: Closes the menu. A cleanup effect flushes any pending tag create/edit when the menu closes.
 
@@ -232,7 +234,7 @@ Uses `createGuard` and `editGuard` refs to prevent duplicate saves when Enter tr
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `snippets`, `tags`, `addTagToSnippet`, `removeTagFromSnippet`, `createTag`, `updateTag`, `deleteSnippet` |
+| canvasStore | `snippets`, `tags`, `selectedSnippetIds`, `addTagToSnippet`, `removeTagFromSnippet`, `createTag`, `updateTag`, `deleteSnippet`, `mergeSelected` |
 | uiStore | `contextMenu`, `closeContextMenu` |
 
 ---

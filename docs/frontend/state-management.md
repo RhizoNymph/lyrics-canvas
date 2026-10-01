@@ -63,6 +63,7 @@ The primary store managing all canvas data and interactions.
 | `future` | `Array<{snippets, groups}>` | [] | Redo stack |
 | `tsneMode` | boolean | false | |
 | `savedPositions` | `Map \| null` | null | Pre-t-SNE positions |
+| `mergeError` | `MergeError \| null` | null | Last merge's error or first warning; shown by the toolbar |
 
 ### Canvas Operations
 
@@ -81,6 +82,8 @@ The primary store managing all canvas data and interactions.
 | `deleteSnippet(id)` | `DELETE /api/snippets/{id}` | Pushes undo state |
 | `moveSnippet(id, x, y)` | None | Local only (optimistic) |
 | `commitPositions()` | `PATCH /api/snippets/batch-position` | Sends all positions |
+| `mergeSelected(mode)` | `POST /api/canvases/{id}/snippets` (with `grid_data`), then `POST /api/snippets/{id}/tags` per union tag and `DELETE /api/snippets/{id}` per original | Needs 2+ selected; orders by canvas position, merges via `lib/merge`, inserts the merged snippet, removes the deleted originals, selects the result, pushes one undo state. Returns `MergeResult` (never throws); sets `mergeError` to the error or first warning. See [merge_blocks.md](../features/merge_blocks.md) |
+| `clearMergeError()` | None | Resets `mergeError` |
 
 ### Selection
 
@@ -189,4 +192,5 @@ Full description in [rhyme-view.md](./rhyme-view.md).
 - **Cascade reloads**: Tag operations reload entire canvas for consistency
 - **Auto-open panels**: Setting a similarity target automatically opens the similarity panel
 - **Undo snapshots**: Deep copies of snippet + group Maps, 50-state limit
-- **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so the sidebar can render the failure
+- **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so the sidebar can render the failure; `canvasStore.mergeSelected` returns a `MergeResult` and mirrors a `MergeError` into `mergeError`
+- **Create before delete**: `mergeSelected` only deletes the originals after the merged snippet exists; later failures are warnings, never rollbacks

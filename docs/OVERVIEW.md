@@ -63,6 +63,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Select**: Click (Shift for multi-select)
 - **Edit**: Double-click a snippet to open the text/type editor
 - **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
+- **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; see [merge_blocks.md](./features/merge_blocks.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -181,4 +182,15 @@ Features Index:
       - frontend/src/hooks/useRhymeQuery.ts
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
+  merge_blocks:
+    description: Select two or more snippets and merge them vertically (stacked) or horizontally (joined line by line) into one snippet at the first block's position, in canvas-position order, keeping rests and stress; originals are deleted after the merged snippet exists.
+    entry_points:
+      - frontend/src/lib/merge/
+      - frontend/src/stores/canvasStore.ts (mergeSelected)
+      - frontend/src/components/canvas/SnippetContextMenu.tsx
+      - frontend/src/components/toolbar/Toolbar.tsx
+      - frontend/src/components/pages/CanvasPage.tsx (Ctrl/Cmd+Shift+V / H)
+      - backend/app/api/snippets.py (POST create with grid_data)
+    depends_on: [beat_grid, canvas_rendering, snippet_crud]
+    doc: docs/features/merge_blocks.md
 ```
