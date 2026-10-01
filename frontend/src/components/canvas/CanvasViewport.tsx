@@ -8,17 +8,12 @@ import SnippetContextMenu from './SnippetContextMenu';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useRhymeStore } from '@/stores/rhymeStore';
-import RhymeLayer from '@/components/rhyme/RhymeLayer';
-import RhymePanel from '@/components/rhyme/RhymePanel';
-import CandidateTooltip from '@/components/rhyme/CandidateTooltip';
 
 // Module-level flag: SnippetCard sets this in pointerdown so onStageClick
 // knows a snippet was interacted with (Pixi stopPropagation doesn't reach DOM).
 let _snippetInteracted = false;
-let _lastCardInteractionAt = 0;
 export function markSnippetInteraction() {
   _snippetInteracted = true;
-  _lastCardInteractionAt = Date.now();
 }
 
 export default function CanvasViewport() {
@@ -27,7 +22,7 @@ export default function CanvasViewport() {
   const { viewport, setViewport, snippets, groups, activeTagFilters, addSnippet, clearSelection, commitPositions } =
     useCanvasStore();
   const { editingSnippetId, setEditingSnippet } = useUIStore();
-  const rhymeActive = useRhymeStore((s) => s.active);
+  // The rhyme store needs the canvas size to place materialized snippets at the viewport centre.
   const setRhymeViewSize = useRhymeStore((s) => s.setViewSize);
 
   const isPanning = useRef(false);
@@ -86,7 +81,6 @@ export default function CanvasViewport() {
           setTimeout(() => {
             const editing = useUIStore.getState().editingSnippetId;
             if (editing) return; // User double-clicked a snippet, not empty canvas
-            if (Date.now() - _lastCardInteractionAt < 500) return; // Double-clicked a card (e.g. rhyme candidate)
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect) {
               const cx = (e.clientX - rect.left) / viewport.zoom - viewport.x;
@@ -192,15 +186,8 @@ export default function CanvasViewport() {
               zoom={viewport.zoom}
             />
           ))}
-
-          {/* Ephemeral rhyme candidates (above snippets) */}
-          <RhymeLayer viewport={viewport} />
         </Container>
       </Stage>
-
-      {/* HTML overlays for the rhyme view */}
-      {rhymeActive && <RhymePanel />}
-      {rhymeActive && <CandidateTooltip viewport={viewport} />}
 
       {/* HTML overlay for inline grid editing */}
       {editingSnippetId && <InlineGridEditor snippetId={editingSnippetId} viewport={viewport} containerRef={containerRef} />}

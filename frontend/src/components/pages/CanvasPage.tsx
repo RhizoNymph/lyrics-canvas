@@ -15,7 +15,7 @@ export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { loadCanvas, undo, redo, selectedSnippetIds, deleteSnippet } = useCanvasStore();
-  const { setSearchModalOpen } = useUIStore();
+  const { setSearchModalOpen, rhymeSidebarOpen } = useUIStore();
   useRhymeQuery();
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function CanvasPage() {
           <CanvasViewport />
           <SimilarityPanel />
         </div>
-        <RhymeSidebar />
+        {rhymeSidebarOpen && <RhymeSidebar />}
       </div>
       <SearchModal />
       <ExportDialog />

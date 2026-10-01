@@ -15,7 +15,6 @@ interface UIState {
 
   // Editing state
   editingSnippetId: string | null;
-  rhymeWord: string;
   similarityTargetId: string | null;
 
   // Context menu
@@ -27,7 +26,6 @@ interface UIState {
   setSearchModalOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
   setEditingSnippet: (id: string | null) => void;
-  setRhymeWord: (word: string) => void;
   setSimilarityTarget: (id: string | null) => void;
   setContextMenu: (menu: ContextMenu | null) => void;
   closeContextMenu: () => void;
@@ -39,7 +37,6 @@ export const useUIStore = create<UIState>((set) => ({
   searchModalOpen: false,
   exportDialogOpen: false,
   editingSnippetId: null,
-  rhymeWord: '',
   similarityTargetId: null,
   contextMenu: null,
 
@@ -48,7 +45,6 @@ export const useUIStore = create<UIState>((set) => ({
   setSearchModalOpen: (open) => set({ searchModalOpen: open }),
   setExportDialogOpen: (open) => set({ exportDialogOpen: open }),
   setEditingSnippet: (id) => set({ editingSnippetId: id }),
-  setRhymeWord: (word) => set({ rhymeWord: word, rhymeSidebarOpen: true }),
   setSimilarityTarget: (id) => set({ similarityTargetId: id, similarityPanelOpen: true }),
   setContextMenu: (menu) => set({ contextMenu: menu }),
   closeContextMenu: () => set({ contextMenu: null }),

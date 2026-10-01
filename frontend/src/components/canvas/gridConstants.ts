@@ -1,4 +1,4 @@
-/** Beat-grid geometry shared by SnippetCard, CandidateCard and InlineGridEditor. Pure constants, no Pixi imports. */
+/** Beat-grid geometry shared by SnippetCard and InlineGridEditor. Pure constants, no Pixi imports. */
 export const CELL_WIDTH = 60;
 export const CELL_HEIGHT = 24;
 export const PADDING = 14;

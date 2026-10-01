@@ -90,7 +90,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         tagX -= tagPillGap;
       }
 
-      // Beat grid (shared with CandidateCard)
+      // Beat grid (via gridDraw)
       const gridLines = snippet.grid_data?.lines || [];
       drawBeatGrid(g, gridLines, {
         s,

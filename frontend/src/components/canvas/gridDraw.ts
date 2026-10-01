@@ -1,7 +1,6 @@
 /**
- * Shared beat-grid drawing for Pixi cards (SnippetCard, CandidateCard).
- * Row backgrounds, grid lines, per-cell text placement and the text styles live here so
- * both cards render cells identically. Geometry constants come from gridConstants.ts.
+ * Beat-grid drawing for Pixi cards (SnippetCard): row backgrounds, grid lines, per-cell text
+ * placement and the text styles. Geometry constants come from gridConstants.ts.
  */
 import { TextStyle } from 'pixi.js';
 import type { Graphics as PixiGraphics } from 'pixi.js';
