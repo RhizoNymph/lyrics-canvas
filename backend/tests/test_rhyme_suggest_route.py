@@ -153,3 +153,44 @@ def test_legacy_rhymes_route_shape(client: TestClient, monkeypatch):
     assert body["snippets"] == [
         {"word": "hat", "rhyme_type": "perfect", "source": "snippet", "snippet_id": "s1", "snippet_preview": "wearing my hat"}
     ]
+
+
+def test_create_snippet_passes_enum_types_to_service(client: TestClient, monkeypatch):
+    """Sessions use expire_on_commit=False, so the ORM object keeps whatever the
+    route passed in; a json-mode dump would leak plain strings into the response."""
+    from app.models.snippet import GridMode, SnippetType
+
+    captured = {}
+
+    async def fake_create(db, canvas_id, owner_id, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            canvas_id=uuid.UUID(canvas_id),
+            snippet_type=kwargs["snippet_type"],
+            grid_mode=kwargs["grid_mode"],
+            beats_per_line=None,
+            grid_data=kwargs["grid_data"],
+            raw_text=kwargs["raw_text"],
+            position_x=0.0,
+            position_y=0.0,
+            width=kwargs["width"],
+            height=kwargs["height"],
+            z_index=0,
+            group_id=None,
+            tags=[],
+            phonetics=kwargs["phonetics"],
+            derived_from=None,
+            created_at="now",
+            updated_at="now",
+        )
+
+    monkeypatch.setattr(snippet_service, "create_snippet", fake_create)
+    res = client.post(
+        f"/api/canvases/{uuid.uuid4()}/snippets",
+        json={"raw_text": "bat", "snippet_type": "verse"},
+    )
+    assert res.status_code == 201, res.text
+    assert captured["snippet_type"] is SnippetType.verse
+    assert captured["grid_mode"] is GridMode.auto
+    assert res.json()["snippet_type"] == "verse"

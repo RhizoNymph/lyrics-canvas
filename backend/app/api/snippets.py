@@ -44,7 +44,10 @@ async def create_snippet(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    data = req.model_dump(mode="json")
+    # Python-mode dump keeps snippet_type/grid_mode as enums; the ORM object is
+    # returned un-expired after commit, so a json-mode dump would leak plain
+    # strings into the response serializer.
+    data = req.model_dump()
     raw_text = data.pop("raw_text", "")
     grid_data = syllabify_text(raw_text) if raw_text else {"lines": []}
     phonetics = compute_snippet_phonetics(raw_text, grid_data, None).model_dump(mode="json")
