@@ -7,12 +7,13 @@ export const RHYME_QUERY_DEBOUNCE_MS = 150;
 
 /**
  * Re-runs the rhyme query while the sidebar is open, after a 150 ms quiet period on selection,
- * typed anchor, chip, or parameter changes. The first query is run by `rhymeStore.enter()` itself.
+ * typed anchor, chip, anchor word range, or parameter changes. The first query is run by `rhymeStore.enter()` itself.
  */
 export function useRhymeQuery(): void {
   const active = useRhymeStore((s) => s.active);
   const typedAnchor = useRhymeStore((s) => s.typedAnchor);
   const excludedAnchorIds = useRhymeStore((s) => s.excludedAnchorIds);
+  const anchorRanges = useRhymeStore((s) => s.anchorRanges);
   const k = useRhymeStore((s) => s.k);
   const minScore = useRhymeStore((s) => s.minScore);
   const slotMode = useRhymeStore((s) => s.slotMode);
@@ -41,7 +42,7 @@ export function useRhymeQuery(): void {
       return;
     }
     runner.schedule();
-  }, [active, typedAnchor, excludedAnchorIds, k, minScore, slotMode, manualSlot, sources, includeRare, selectedSnippetIds, runner]);
+  }, [active, typedAnchor, excludedAnchorIds, anchorRanges, k, minScore, slotMode, manualSlot, sources, includeRare, selectedSnippetIds, runner]);
 
   useEffect(() => () => runner.cancel(), [runner]);
 }

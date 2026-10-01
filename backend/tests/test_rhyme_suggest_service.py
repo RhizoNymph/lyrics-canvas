@@ -195,3 +195,95 @@ async def test_errors_are_typed():
 async def test_missing_context_entries_are_ignored():
     res = await _run(_req(context=[{"kind": "snippet", "snippet_id": "nope"}, {"kind": "text", "text": "x"}]))
     assert res.candidates
+
+
+# --- word-range anchors ---
+
+
+def test_snippet_anchor_range_schema_validation():
+    from pydantic import ValidationError
+
+    from app.schemas.rhyme import SnippetAnchor
+
+    ok = SnippetAnchor(kind="snippet", snippet_id="s", line_index=0, word_start=1, word_end=3)
+    assert (ok.word_start, ok.word_end) == (1, 3)
+    assert SnippetAnchor(kind="snippet", snippet_id="s").word_start is None
+    assert SnippetAnchor(kind="snippet", snippet_id="s", word_start=2).word_end is None
+    for bad in ({"word_start": -1}, {"word_end": 0}, {"word_start": 2, "word_end": 2}, {"word_start": 3, "word_end": 1}):
+        with pytest.raises(ValidationError):
+            SnippetAnchor(kind="snippet", snippet_id="s", **bad)
+
+
+async def test_range_anchor_resolves_to_the_word_slice():
+    anchor = {"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": 3, "word_end": 5}
+    res = await _run(_req(anchors=[anchor], limit=100))
+    unit = res.anchors[0]
+    assert unit.id == "note:s-cat:0:3-5"
+    assert unit.text == "black cat"
+    assert unit.syllable_count == 2 and unit.stress == "11"
+    assert unit.rhyme_key == ["AE", "T"]
+    assert unit.snippet_id == "s-cat" and unit.line_index == 0
+    assert unit.word_offset == 3 and unit.word_end == 5
+    assert unit.tags == ["t-animals"]
+    # echoed grid line is the matching slice of the snippet grid, re-based to the range
+    assert unit.grid_line.raw_text == "black cat"
+    assert [c.syllable for c in unit.grid_line.cells] == ["black", "cat"]
+    assert [c.word_index for c in unit.grid_line.cells] == [0, 1]
+    assert unit.grid_line.syllable_count == 2
+    ids = [c.id for c in res.candidates]
+    assert "dict:bat" in ids and "dict:hat" in ids
+    # the anchor's own line is still excluded from note candidates
+    assert all(not (c.snippet_id == "s-cat" and c.line_index == 0) for c in res.candidates)
+    assert "note:s-cat:0:3-5" not in ids
+
+
+async def test_range_anchor_open_ended_and_prefix():
+    tail = {"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": 4}
+    res = await _run(_req(anchors=[tail]))
+    assert res.anchors[0].id == "note:s-cat:0:4-5"
+    assert res.anchors[0].text == "cat"
+    assert res.anchors[0].word_offset == 4 and res.anchors[0].word_end == 5
+    assert "dict:bat" in [c.id for c in res.candidates]
+
+    head = {"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_end": 2}
+    res = await _run(_req(anchors=[head]))
+    assert res.anchors[0].id == "note:s-cat:0:0-2"
+    assert res.anchors[0].text == "i saw"  # unit text is the cleaned form; raw_text keeps the case
+    assert res.anchors[0].word_offset == 0 and res.anchors[0].word_end == 2
+    assert res.anchors[0].rhyme_key == ["AA"]
+    assert res.anchors[0].grid_line.raw_text == "I saw"
+    assert "dict:bat" not in [c.id for c in res.candidates]
+
+
+async def test_range_anchor_defaults_to_last_line():
+    anchor = {"kind": "snippet", "snippet_id": "s-cat", "word_start": 3}
+    res = await _run(_req(anchors=[anchor]))
+    assert res.anchors[0].id == "note:s-cat:1:3-4"
+    assert res.anchors[0].text == "mat" and res.anchors[0].line_index == 1
+
+
+async def test_whole_line_anchor_has_no_word_end():
+    res = await _run(_req(anchors=[{"kind": "snippet", "snippet_id": "s-cat", "line_index": 0}]))
+    assert res.anchors[0].id == "note:s-cat:0:0"
+    assert res.anchors[0].word_offset == 0 and res.anchors[0].word_end is None
+    text = await _run(_req())
+    assert text.anchors[0].word_end is None
+
+
+async def test_range_anchor_out_of_range_is_a_query_error():
+    for patch in ({"word_start": 5}, {"word_end": 6}, {"word_start": 2, "word_end": 9}):
+        anchor = {"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, **patch}
+        with pytest.raises(RhymeQueryError):
+            await _run(_req(anchors=[anchor]))
+
+
+async def test_range_anchor_without_pronounceable_words_is_a_query_error():
+    from .fakes import make_record
+
+    repo = default_repo()
+    repo.snippets["s-num"] = make_record("s-num", "walking 42 ---")
+    anchor = {"kind": "snippet", "snippet_id": "s-num", "line_index": 0, "word_start": 1}
+    with pytest.raises(RhymeQueryError):
+        await suggest(_req(anchors=[anchor]), "u1", repo, dictionary=FakeDictionary)
+    ok = await suggest(_req(anchors=[{**anchor, "word_start": 0, "word_end": 1}]), "u1", repo, dictionary=FakeDictionary)
+    assert ok.anchors[0].text == "walking"

@@ -104,7 +104,10 @@ dialect it derives (cached by `(pronunciation, dialect)`, 262k entries):
 - `rhyme_keys[d]` for `d` in 1..min(4, n): phones from the nucleus of the `d`-th syllable from
   the end (its onset excluded) to the end
 
-Ids: `dict:<word>`, `note:<snippet_id>:<line>:<word_offset>`, `text:<sha1(normalised text)>`.
+Ids: `dict:<word>`, `note:<snippet_id>:<line>:<word_offset>` (line suffix),
+`note:<snippet_id>:<line>:<start>-<end>` (word range, `end` exclusive; `Unit.word_end` set),
+`text:<sha1(normalised text)>`. `phonetics_service.note_unit(..., word_end=None)` builds both note
+kinds from a stored line (`pronunciation_from_line(line, word_offset, word_end)`).
 
 ## Index
 

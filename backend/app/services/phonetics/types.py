@@ -84,7 +84,8 @@ class Unit:
     derived_from: DerivedFrom | None
     snippet_id: str | None
     line_index: int | None
-    word_offset: int | None
+    word_offset: int | None    # note units: first word of the line included
+    word_end: int | None       # note range units: one past the last word included; None = to the end
     # derived
     effective_pronunciation: Pronunciation
     dialect_digest: str

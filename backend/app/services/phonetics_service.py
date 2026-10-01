@@ -63,9 +63,9 @@ def word_from_model(m: WordPhonetics) -> WordPronunciation:
     )
 
 
-def pronunciation_from_line(line: LinePhonetics, word_offset: int = 0) -> Pronunciation:
-    """The stored (override-applied) pronunciation of a line from ``word_offset`` on."""
-    return Pronunciation(words=tuple(word_from_model(w) for w in line.words[word_offset:]))
+def pronunciation_from_line(line: LinePhonetics, word_offset: int = 0, word_end: int | None = None) -> Pronunciation:
+    """The stored (override-applied) pronunciation of ``line.words[word_offset:word_end]``."""
+    return Pronunciation(words=tuple(word_from_model(w) for w in line.words[word_offset:word_end]))
 
 
 # --- reconciliation ---
@@ -240,28 +240,40 @@ def compute_snippet_phonetics(
 # --- units for the notes source and anchors ---
 
 
-def _has_override(line: LinePhonetics, word_offset: int) -> bool:
-    return any(w.source == "override" for w in line.words[word_offset:])
+def _has_override(line: LinePhonetics, word_offset: int, word_end: int | None) -> bool:
+    return any(w.source == "override" for w in line.words[word_offset:word_end])
 
 
-def note_unit(snippet_id: str, line: LinePhonetics, word_offset: int, dialect: DialectMap, tags: Sequence[str] = ()) -> Unit | None:
-    """One suffix unit of a stored line, or None when nothing pronounceable remains."""
-    pron = pronunciation_from_line(line, word_offset)
+def note_unit(
+    snippet_id: str,
+    line: LinePhonetics,
+    word_offset: int,
+    dialect: DialectMap,
+    tags: Sequence[str] = (),
+    word_end: int | None = None,
+) -> Unit | None:
+    """One suffix unit of a stored line (or, with ``word_end``, one word range of it).
+
+    None when nothing in the range is pronounceable. Range units get a ``<start>-<end>`` id
+    and carry ``word_end``; suffix units keep the plain ``<offset>`` id and ``word_end=None``.
+    """
+    pron = pronunciation_from_line(line, word_offset, word_end)
     if not pron.syllables:
         return None
-    text = " ".join(w.word for w in line.words[word_offset:] if w.word)
+    text = " ".join(w.word for w in line.words[word_offset:word_end] if w.word)
     return build_unit(
-        id=note_unit_id(snippet_id, line.line_index, word_offset),
+        id=note_unit_id(snippet_id, line.line_index, word_offset, word_end),
         text=text,
         pronunciation=pron,
         provenance=Provenance.note,
         dialect=dialect,
         ephemeral=False,
-        pronunciation_override=pron if _has_override(line, word_offset) else None,
+        pronunciation_override=pron if _has_override(line, word_offset, word_end) else None,
         tags=tags,
         snippet_id=snippet_id,
         line_index=line.line_index,
         word_offset=word_offset,
+        word_end=word_end,
     )
 
 

@@ -12,9 +12,23 @@ STRESS_PATTERN = r"^[012]+$"
 
 
 class SnippetAnchor(BaseModel):
+    """A snippet line, or a word range of it (``word_end`` exclusive; None = to the end of the line)."""
+
     kind: Literal["snippet"]
     snippet_id: str = Field(min_length=1)
     line_index: int | None = None  # None = last non-empty line
+    word_start: int | None = Field(None, ge=0)
+    word_end: int | None = Field(None, ge=1)
+
+    @model_validator(mode="after")
+    def _range_is_ordered(self) -> "SnippetAnchor":
+        if self.word_start is not None and self.word_end is not None and self.word_start >= self.word_end:
+            raise ValueError("word_start must be less than word_end")
+        return self
+
+    @property
+    def has_range(self) -> bool:
+        return self.word_start is not None or self.word_end is not None
 
 
 class TextAnchor(BaseModel):
@@ -110,6 +124,7 @@ class RhymeUnitModel(BaseModel):
     snippet_id: str | None = None
     line_index: int | None = None
     word_offset: int | None = None
+    word_end: int | None = None  # set only for word-range anchors (exclusive)
     tags: list[str] = Field(default_factory=list)
 
 

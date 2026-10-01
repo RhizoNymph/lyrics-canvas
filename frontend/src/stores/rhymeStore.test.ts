@@ -498,3 +498,119 @@ describe('canvasStore.addSnippetFromText', () => {
     expect(createSnippet).not.toHaveBeenCalled();
   });
 });
+
+describe('anchor word ranges', () => {
+  const RANGE = { lineIndex: 0, wordStart: 1, wordEnd: 3 };
+
+  function rangedSnippet(): Snippet {
+    const s = snippet('a', 'orange door hinge', '1011', 100, 100);
+    s.grid_data = {
+      lines: [
+        {
+          cells: [
+            { syllable: 'or', stress: 1, word_index: 0 },
+            { syllable: 'ange', stress: 0, word_index: 0 },
+            { syllable: 'door', stress: 1, word_index: 1 },
+            { syllable: 'hinge', stress: 1, word_index: 2 },
+          ],
+          syllable_count: 4,
+          raw_text: 'orange door hinge',
+        },
+      ],
+    };
+    return s;
+  }
+
+  beforeEach(() => {
+    useCanvasStore.setState({ snippets: new Map([['a', rangedSnippet()], ['b', snippet('b', 'four inch', '11', 300, 300)]]) });
+  });
+
+  it('sends the range as line_index / word_start / word_end and derives the slot from it', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: 0, word_start: 1, word_end: 3 }]);
+    expect(lastRequest().slot).toEqual({ syllable_count: 2, stress: '11' });
+    expect(useRhymeStore.getState().slot).toEqual({ syllable_count: 2, stress: '11' });
+  });
+
+  it('setAnchorRange(null) restores the whole line and the whole-line slot', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    useRhymeStore.getState().setAnchorRange('a', null);
+    expect(useRhymeStore.getState().anchorRanges.size).toBe(0);
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: null }]);
+    expect(lastRequest().slot).toEqual({ syllable_count: 4, stress: '1011' });
+  });
+
+  it('replaces the map on every change so the debounced hook sees a new dependency', () => {
+    const before = useRhymeStore.getState().anchorRanges;
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    const after = useRhymeStore.getState().anchorRanges;
+    expect(after).not.toBe(before);
+    expect(after.get('a')).toEqual(RANGE);
+    useRhymeStore.getState().setAnchorRange('a', { ...RANGE, wordEnd: 2 });
+    expect(useRhymeStore.getState().anchorRanges).not.toBe(after);
+  });
+
+  it('a changed range reaches the next query', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    await useRhymeStore.getState().runQuery();
+    useRhymeStore.getState().setAnchorRange('a', { lineIndex: 0, wordStart: 2, wordEnd: 3 });
+    await useRhymeStore.getState().runQuery();
+    expect(rhymeSuggest).toHaveBeenCalledTimes(2);
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: 0, word_start: 2, word_end: 3 }]);
+    expect(lastRequest().slot).toEqual({ syllable_count: 1, stress: '1' });
+  });
+
+  it('forgets a range once the snippet leaves the selection', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    useCanvasStore.setState({ selectedSnippetIds: new Set(['b']) });
+    await useRhymeStore.getState().runQuery();
+    expect(useRhymeStore.getState().anchorRanges.size).toBe(0);
+    useCanvasStore.setState({ selectedSnippetIds: new Set(['a', 'b']) });
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([
+      { kind: 'snippet', snippet_id: 'a', line_index: null },
+      { kind: 'snippet', snippet_id: 'b', line_index: null },
+    ]);
+  });
+
+  it('drops a range that no longer fits the snippet text', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', { lineIndex: 0, wordStart: 1, wordEnd: 3 });
+    useCanvasStore.setState({ snippets: new Map([['a', snippet('a', 'hinge', '1', 100, 100)]]) });
+    await useRhymeStore.getState().runQuery();
+    expect(useRhymeStore.getState().anchorRanges.size).toBe(0);
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: null }]);
+  });
+
+  it('an excluded chip keeps its range for when it is restored', async () => {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    useRhymeStore.getState().setTypedAnchor('tin');
+    useRhymeStore.getState().excludeAnchor('a');
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([{ kind: 'text', text: 'tin' }]);
+    expect(useRhymeStore.getState().anchorRanges.get('a')).toEqual(RANGE);
+    useRhymeStore.getState().restoreAnchor('a');
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors[0]).toEqual({ kind: 'snippet', snippet_id: 'a', line_index: 0, word_start: 1, word_end: 3 });
+  });
+
+  it('exit clears ranges', () => {
+    enterQuietly();
+    useRhymeStore.getState().setAnchorRange('a', RANGE);
+    useRhymeStore.getState().exit();
+    expect(useRhymeStore.getState().anchorRanges.size).toBe(0);
+  });
+});

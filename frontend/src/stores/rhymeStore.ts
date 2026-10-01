@@ -2,12 +2,15 @@ import { create } from 'zustand';
 import { nlpApi } from '@/api/client';
 import { useCanvasStore } from './canvasStore';
 import { anchorsFromSelection, anchorSnippets } from '@/lib/rhyme/queryFromSelection';
-import { slotFromSnippet } from '@/lib/rhyme/slotFit';
+import { slotFromRange, slotFromSnippet } from '@/lib/rhyme/slotFit';
+import { rangeFits } from '@/lib/rhyme/anchorRange';
 import { materializePosition } from '@/lib/rhyme/materializePosition';
 import type { ViewSize } from '@/lib/rhyme/geometry';
+import type { Snippet } from '@/types';
 import { toRhymeError } from '@/lib/rhyme/errors';
 import { RHYME_PAGE_SIZE } from '@/types/rhyme';
 import type {
+  AnchorRange,
   RhymeK,
   RhymeUnit,
   RhymeCandidate,
@@ -30,6 +33,8 @@ export interface RhymeState {
   typedAnchor: string;
   /** Selected snippet ids removed from the anchors via their chip; pruned to the selection on each query. */
   excludedAnchorIds: Set<string>;
+  /** Word ranges picked on a chip, by snippet id; a snippet without one anchors on its whole last line. Pruned like exclusions. */
+  anchorRanges: Map<string, AnchorRange>;
   k: RhymeK;
   minScore: number;
   slot: Slot | null;
@@ -54,6 +59,8 @@ export interface RhymeState {
   setTypedAnchor: (t: string) => void;
   excludeAnchor: (snippetId: string) => void;
   restoreAnchor: (snippetId: string) => void;
+  /** Anchor the snippet on a word range of one of its lines; null restores the whole line. */
+  setAnchorRange: (snippetId: string, range: AnchorRange | null) => void;
   setK: (k: RhymeK) => void;
   setMinScore: (v: number) => void;
   setSlot: (s: Slot | null) => void;
@@ -74,6 +81,7 @@ function cleared() {
   return {
     typedAnchor: '',
     excludedAnchorIds: new Set<string>(),
+    anchorRanges: new Map<string, AnchorRange>(),
     anchors: [] as RhymeUnit[],
     candidates: [] as RhymeCandidate[],
     total: 0,
@@ -83,6 +91,14 @@ function cleared() {
     loading: false,
     error: null,
   };
+}
+
+/** Slot "from selection": the first anchor snippet's picked word range, else its whole last line. */
+function slotFromFirstAnchor(anchorSnips: Snippet[], ranges: ReadonlyMap<string, AnchorRange>): Slot | null {
+  if (anchorSnips.length === 0) return null;
+  const first = anchorSnips[0];
+  const range = ranges.get(first.id);
+  return range === undefined ? slotFromSnippet(first, null) : slotFromRange(first, range);
 }
 
 /** Monotonic query counter so a slow, older response never overwrites a newer one. */
@@ -114,6 +130,12 @@ function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return true;
 }
 
+function sameRanges(a: ReadonlyMap<string, AnchorRange>, b: ReadonlyMap<string, AnchorRange>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, r] of a) if (b.get(id) !== r) return false;
+  return true;
+}
+
 export const useRhymeStore = create<RhymeState>((set, get) => {
   /** Drop exclusions for snippets no longer selected ("for this query" semantics). */
   const pruneExclusions = (): Set<string> => {
@@ -124,23 +146,32 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     return pruned;
   };
 
+  /** Drop ranges for snippets no longer selected, and ranges the snippet's current text can no longer satisfy. */
+  const pruneRanges = (): Map<string, AnchorRange> => {
+    const { anchorRanges } = get();
+    const { selectedSnippetIds, snippets } = useCanvasStore.getState();
+    const pruned = new Map<string, AnchorRange>();
+    for (const [id, range] of anchorRanges) {
+      const snippet = snippets.get(id);
+      if (selectedSnippetIds.has(id) && snippet !== undefined && rangeFits(snippet, range)) pruned.set(id, range);
+    }
+    if (!sameRanges(pruned, anchorRanges)) set({ anchorRanges: pruned });
+    return pruned;
+  };
+
   /** Build the request for the current state, or null when nothing should be queried. */
   const buildRequest = (offset: number): { request: RhymeSuggestRequest; slot: Slot | null } | null => {
     const state = get();
     const canvas = useCanvasStore.getState();
     if (!state.active || !canvas.canvasId) return null;
     const excluded = pruneExclusions();
-    const anchors = anchorsFromSelection(canvas.selectedSnippetIds, canvas.snippets, state.typedAnchor, excluded);
+    const ranges = pruneRanges();
+    const anchors = anchorsFromSelection(canvas.selectedSnippetIds, canvas.snippets, state.typedAnchor, excluded, ranges);
     const sources = enabledSources(state.sources);
     if (anchors.length === 0 || sources.length === 0) return null;
 
     const anchorSnips = anchorSnippets(canvas.selectedSnippetIds, canvas.snippets, excluded);
-    const slot =
-      state.slotMode === 'from-selection'
-        ? anchorSnips.length > 0
-          ? slotFromSnippet(anchorSnips[0], null)
-          : null
-        : state.slot;
+    const slot = state.slotMode === 'from-selection' ? slotFromFirstAnchor(anchorSnips, ranges) : state.slot;
     return {
       request: {
         canvas_id: canvas.canvasId,
@@ -194,6 +225,13 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
         const next = new Set(s.excludedAnchorIds);
         next.delete(snippetId);
         return { excludedAnchorIds: next };
+      }),
+    setAnchorRange: (snippetId, range) =>
+      set((s) => {
+        const next = new Map(s.anchorRanges);
+        if (range === null) next.delete(snippetId);
+        else next.set(snippetId, range);
+        return { anchorRanges: next };
       }),
     setK: (k) => set({ k }),
     setMinScore: (v) => set({ minScore: Math.max(0, Math.min(1, v)) }),

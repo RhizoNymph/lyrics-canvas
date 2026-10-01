@@ -19,8 +19,11 @@ def dict_unit_id(word: str) -> str:
     return f"dict:{word}"
 
 
-def note_unit_id(snippet_id: str, line_index: int, word_offset: int) -> str:
-    return f"note:{snippet_id}:{line_index}:{word_offset}"
+def note_unit_id(snippet_id: str, line_index: int, word_offset: int, word_end: int | None = None) -> str:
+    """``note:<snippet>:<line>:<offset>`` for a suffix, ``...:<start>-<end>`` for a word range."""
+    if word_end is None:
+        return f"note:{snippet_id}:{line_index}:{word_offset}"
+    return f"note:{snippet_id}:{line_index}:{word_offset}-{word_end}"
 
 
 def text_unit_id(text: str) -> str:
@@ -89,6 +92,7 @@ def build_unit(
     snippet_id: str | None = None,
     line_index: int | None = None,
     word_offset: int | None = None,
+    word_end: int | None = None,
 ) -> Unit:
     base = pronunciation_override if pronunciation_override is not None else pronunciation
     derived = _derive(base, dialect)
@@ -106,6 +110,7 @@ def build_unit(
         snippet_id=snippet_id,
         line_index=line_index,
         word_offset=word_offset,
+        word_end=word_end,
         effective_pronunciation=derived.effective,
         dialect_digest=dialect.digest(),
         stress=derived.stress,
