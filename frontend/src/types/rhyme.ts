@@ -128,7 +128,7 @@ export type RhymeErrorKind =
   | 'server'         // 5xx or any other HTTP failure
   | 'unknown';       // non-HTTP failure
 
-export type RhymeOperation = 'query' | 'promote';
+export type RhymeOperation = 'query' | 'materialize';
 
 /** Typed failure for rhyme-view API calls. Stored in rhymeStore.error; never thrown to callers. */
 export class RhymeError extends Error {

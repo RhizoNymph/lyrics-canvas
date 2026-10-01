@@ -6,7 +6,7 @@ import { useCanvasStore } from './canvasStore';
 import { RhymeError, RHYME_PAGE_SIZE } from '@/types/rhyme';
 import type { RhymeCandidate, RhymeUnit, RhymeSuggestResponse, RhymeSuggestRequest } from '@/types/rhyme';
 import type { Snippet } from '@/types';
-import { candidateCardSize, candidateTopLeft } from '@/lib/rhyme/candidateGeometry';
+import { MATERIALIZE_GAP_X, MATERIALIZE_STEP_Y } from '@/lib/rhyme/materializePosition';
 
 vi.mock('@/api/client', () => ({
   nlpApi: { rhymeSuggest: vi.fn() },
@@ -103,20 +103,41 @@ beforeEach(() => {
     future: [],
   });
   useRhymeStore.getState().exit();
-  useRhymeStore.setState({ k: 2, minScore: 0.5, sources: { notes: true, dictionary: true }, slotMode: 'from-selection', slot: null });
+  useRhymeStore.setState({ k: 2, minScore: 0.5, sources: { notes: true, dictionary: true }, slotMode: 'from-selection', slot: null, includeRare: false });
 });
 
+/** Activate without the immediate query counting against the test's own expectations. */
+function enterQuietly() {
+  useRhymeStore.setState({ active: true, error: null });
+}
+
 describe('enter / exit', () => {
-  it('enter activates; exit clears candidate state and deactivates but keeps params', async () => {
-    const s = useRhymeStore.getState();
-    s.enter();
-    expect(useRhymeStore.getState().active).toBe(true);
+  it('enter activates and queries immediately when there is a selection', async () => {
     rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9)]) as never);
+    useRhymeStore.getState().enter();
+    expect(useRhymeStore.getState().active).toBe(true);
+    expect(rhymeSuggest).toHaveBeenCalledTimes(1);
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: null }]);
+    await vi.waitFor(() => expect(useRhymeStore.getState().candidates.length).toBe(1));
+  });
+
+  it('enter with nothing selected and no typed anchor sends no request', () => {
+    useCanvasStore.setState({ selectedSnippetIds: new Set() });
+    useRhymeStore.getState().enter();
+    expect(rhymeSuggest).not.toHaveBeenCalled();
+    expect(useRhymeStore.getState().candidates).toEqual([]);
+  });
+
+  it('exit clears session state and deactivates but keeps params', async () => {
+    rhymeSuggest.mockResolvedValue(response([cand('dict:tin', 'tin', 0.9)]) as never);
+    useRhymeStore.getState().enter();
     useRhymeStore.getState().setTypedAnchor('door');
     useRhymeStore.getState().setK(3);
+    useRhymeStore.getState().setIncludeRare(true);
     await useRhymeStore.getState().runQuery();
     useRhymeStore.getState().dismiss('dict:tin');
-    useRhymeStore.getState().setHovered('dict:tin');
+    useRhymeStore.getState().excludeAnchor('a');
+    useRhymeStore.setState({ materializeCounts: new Map([['a', 2]]) });
     expect(useRhymeStore.getState().dismissed.size).toBe(1);
 
     useRhymeStore.getState().exit();
@@ -124,16 +145,16 @@ describe('enter / exit', () => {
     expect(after.active).toBe(false);
     expect(after.candidates).toEqual([]);
     expect(after.anchors).toEqual([]);
-    expect(after.positions.size).toBe(0);
     expect(after.dismissed.size).toBe(0);
+    expect(after.excludedAnchorIds.size).toBe(0);
+    expect(after.materializeCounts.size).toBe(0);
     expect(after.typedAnchor).toBe('');
-    expect(after.hoveredId).toBeNull();
-    expect(after.pinnedId).toBeNull();
     expect(after.total).toBe(0);
     expect(after.offset).toBe(0);
     expect(after.error).toBeNull();
     expect(after.loading).toBe(false);
     expect(after.k).toBe(3);
+    expect(after.includeRare).toBe(true);
   });
 
   it('exit leaves canvas snippets untouched', () => {
@@ -151,7 +172,7 @@ describe('runQuery', () => {
   });
 
   it('builds the request from selection, typed text, params, and dismissed ids', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     useRhymeStore.setState({ dismissed: new Set(['dict:orange']) });
     useRhymeStore.getState().setTypedAnchor(' door hinge ');
     useRhymeStore.getState().setMinScore(0.6);
@@ -184,15 +205,13 @@ describe('runQuery', () => {
     expect(s.total).toBe(77);
     expect(s.offset).toBe(0);
     expect(s.anchors[0].id).toBe('note:a:0:0');
-    expect(s.positions.has('dict:tin')).toBe(true);
-    expect(s.positions.has('note:b:0:1')).toBe(true);
     expect(s.slot).toEqual({ syllable_count: 4, stress: '1010' });
     expect(s.loading).toBe(false);
     expect(s.error).toBeNull();
   });
 
   it('uses the manual slot when slotMode is manual, and null when unset', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     useRhymeStore.getState().setSlotMode('manual');
     useRhymeStore.getState().setSlot({ syllable_count: 2, stress: '10' });
     rhymeSuggest.mockResolvedValue(response([]) as never);
@@ -205,7 +224,7 @@ describe('runQuery', () => {
   });
 
   it('sends only enabled sources and skips the call when none are enabled', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     useRhymeStore.getState().toggleSource('notes');
     rhymeSuggest.mockResolvedValue(response([]) as never);
     await useRhymeStore.getState().runQuery();
@@ -219,7 +238,7 @@ describe('runQuery', () => {
   });
 
   it('clears candidates without calling the API when there are no anchors', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9)]) as never);
     await useRhymeStore.getState().runQuery();
     expect(useRhymeStore.getState().candidates.length).toBe(1);
@@ -232,23 +251,16 @@ describe('runQuery', () => {
     expect(useRhymeStore.getState().total).toBe(0);
   });
 
-  it('keeps positions stable for ids seen before and places new ids', async () => {
-    useRhymeStore.getState().enter();
-    rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9), cand('dict:bin', 'bin', 0.8)]) as never);
+  it('sends include_rare when enabled', async () => {
+    enterQuietly();
+    useRhymeStore.getState().setIncludeRare(true);
+    rhymeSuggest.mockResolvedValueOnce(response([]) as never);
     await useRhymeStore.getState().runQuery();
-    const tin = useRhymeStore.getState().positions.get('dict:tin');
-    const bin = useRhymeStore.getState().positions.get('dict:bin');
-
-    rhymeSuggest.mockResolvedValueOnce(response([cand('dict:bin', 'bin', 0.3), cand('dict:fin', 'fin', 0.95), cand('dict:tin', 'tin', 0.1)]) as never);
-    await useRhymeStore.getState().runQuery();
-    const p = useRhymeStore.getState().positions;
-    expect(p.get('dict:tin')).toEqual(tin);
-    expect(p.get('dict:bin')).toEqual(bin);
-    expect(p.has('dict:fin')).toBe(true);
+    expect(lastRequest().include_rare).toBe(true);
   });
 
   it('stores a typed error and does not throw', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     rhymeSuggest.mockRejectedValueOnce(axiosErr(422));
     await expect(useRhymeStore.getState().runQuery()).resolves.toBeUndefined();
     const s = useRhymeStore.getState();
@@ -259,7 +271,7 @@ describe('runQuery', () => {
   });
 
   it('ignores a stale response that resolves after a newer query', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     let resolveFirst: (v: unknown) => void = () => {};
     rhymeSuggest.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }) as never);
     const first = useRhymeStore.getState().runQuery();
@@ -274,7 +286,7 @@ describe('runQuery', () => {
 
 describe('loadMore', () => {
   it('requests the next offset and appends without duplicates', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     const firstPage = Array.from({ length: RHYME_PAGE_SIZE }, (_, i) => cand(`dict:w${i}`, `w${i}`, 0.9));
     rhymeSuggest.mockResolvedValueOnce(response(firstPage, 90) as never);
     await useRhymeStore.getState().runQuery();
@@ -288,11 +300,10 @@ describe('loadMore', () => {
     expect(s.offset).toBe(RHYME_PAGE_SIZE);
     expect(s.candidates.length).toBe(RHYME_PAGE_SIZE + 1);
     expect(s.candidates[s.candidates.length - 1].id).toBe('dict:extra');
-    expect(s.positions.has('dict:extra')).toBe(true);
   });
 
   it('does nothing when everything is already loaded', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9)], 1) as never);
     await useRhymeStore.getState().runQuery();
     rhymeSuggest.mockClear();
@@ -303,18 +314,14 @@ describe('loadMore', () => {
 
 describe('dismiss', () => {
   it('removes the candidate, records the id, and excludes it from the next query', async () => {
-    useRhymeStore.getState().enter();
+    enterQuietly();
     rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9), cand('dict:bin', 'bin', 0.8)]) as never);
     await useRhymeStore.getState().runQuery();
-    useRhymeStore.getState().setHovered('dict:tin');
-    useRhymeStore.getState().setPinned('dict:tin');
 
     useRhymeStore.getState().dismiss('dict:tin');
     const s = useRhymeStore.getState();
     expect(s.candidates.map((c) => c.id)).toEqual(['dict:bin']);
     expect(s.dismissed.has('dict:tin')).toBe(true);
-    expect(s.hoveredId).toBeNull();
-    expect(s.pinnedId).toBeNull();
 
     rhymeSuggest.mockResolvedValueOnce(response([]) as never);
     await useRhymeStore.getState().runQuery();
@@ -322,71 +329,154 @@ describe('dismiss', () => {
   });
 });
 
-describe('promote', () => {
-  async function loadOne() {
-    useRhymeStore.getState().enter();
+describe('excludeAnchor (chip removal)', () => {
+  it('drops the excluded snippet from the anchors and the slot source', async () => {
+    useCanvasStore.setState({ selectedSnippetIds: new Set(['a', 'b']) });
+    enterQuietly();
+    useRhymeStore.getState().setTypedAnchor('tin');
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([
+      { kind: 'snippet', snippet_id: 'a', line_index: null },
+      { kind: 'snippet', snippet_id: 'b', line_index: null },
+      { kind: 'text', text: 'tin' },
+    ]);
+    expect(lastRequest().slot).toEqual({ syllable_count: 4, stress: '1010' });
+
+    useRhymeStore.getState().excludeAnchor('a');
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([
+      { kind: 'snippet', snippet_id: 'b', line_index: null },
+      { kind: 'text', text: 'tin' },
+    ]);
+    expect(lastRequest().slot).toEqual({ syllable_count: 2, stress: '11' });
+  });
+
+  it('clears results without a request when every anchor is excluded', async () => {
+    enterQuietly();
     rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9)]) as never);
+    await useRhymeStore.getState().runQuery();
+    useRhymeStore.getState().excludeAnchor('a');
+    rhymeSuggest.mockClear();
+    await useRhymeStore.getState().runQuery();
+    expect(rhymeSuggest).not.toHaveBeenCalled();
+    expect(useRhymeStore.getState().candidates).toEqual([]);
+  });
+
+  it('forgets an exclusion once the snippet leaves the selection', async () => {
+    enterQuietly();
+    useRhymeStore.getState().excludeAnchor('a');
+    useCanvasStore.setState({ selectedSnippetIds: new Set(['b']) });
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    await useRhymeStore.getState().runQuery();
+    expect(useRhymeStore.getState().excludedAnchorIds.size).toBe(0);
+    useCanvasStore.setState({ selectedSnippetIds: new Set(['a', 'b']) });
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors.map((a) => (a.kind === 'snippet' ? a.snippet_id : a.text))).toEqual(['a', 'b']);
+  });
+
+  it('restoreAnchor brings a chip back', async () => {
+    enterQuietly();
+    useRhymeStore.getState().excludeAnchor('a');
+    useRhymeStore.getState().restoreAnchor('a');
+    rhymeSuggest.mockResolvedValue(response([]) as never);
+    await useRhymeStore.getState().runQuery();
+    expect(lastRequest().anchors).toEqual([{ kind: 'snippet', snippet_id: 'a', line_index: null }]);
+  });
+});
+
+describe('materialize', () => {
+  async function loadOne() {
+    enterQuietly();
+    rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9), cand('dict:bin', 'bin', 0.8)]) as never);
     await useRhymeStore.getState().runQuery();
   }
 
-  it('creates a snippet with raw_text, the card position, and derived_from, then removes the candidate', async () => {
+  function derivedFrom(id: string, score: number) {
+    return {
+      provenance: 'dictionary',
+      source_unit_id: id,
+      score,
+      match_depth: 1,
+      k: 2,
+      anchor_unit_id: 'note:a:0:0',
+      anchor_text: 'hinge',
+    };
+  }
+
+  it('creates a snippet to the right of the single anchor with derived_from, then removes the row', async () => {
     await loadOne();
     const created = { ...snippet('new1', 'tin', '1'), snippet_type: 'freestyle' as const };
     createSnippet.mockResolvedValueOnce({ data: created } as never);
-    const c = useRhymeStore.getState().candidates[0];
-    const centre = useRhymeStore.getState().positions.get('dict:tin')!;
-    const expectedTopLeft = candidateTopLeft(centre, candidateCardSize(c));
     const pastBefore = useCanvasStore.getState().past.length;
 
-    await useRhymeStore.getState().promote('dict:tin');
+    await useRhymeStore.getState().materialize('dict:tin');
 
     expect(createSnippet).toHaveBeenCalledTimes(1);
     expect(createSnippet).toHaveBeenCalledWith('c1', {
       raw_text: 'tin',
-      position_x: expectedTopLeft.x,
-      position_y: expectedTopLeft.y,
+      position_x: 100 + 200 + MATERIALIZE_GAP_X,
+      position_y: 100,
       snippet_type: 'freestyle',
-      derived_from: {
-        provenance: 'dictionary',
-        source_unit_id: 'dict:tin',
-        score: 0.9,
-        match_depth: 1,
-        k: 2,
-        anchor_unit_id: 'note:a:0:0',
-        anchor_text: 'hinge',
-      },
+      derived_from: derivedFrom('dict:tin', 0.9),
     });
     const s = useRhymeStore.getState();
-    expect(s.candidates).toEqual([]);
+    expect(s.candidates.map((c) => c.id)).toEqual(['dict:bin']);
     expect(s.dismissed.has('dict:tin')).toBe(true);
+    expect(s.materializeCounts.get('a')).toBe(1);
     expect(useCanvasStore.getState().snippets.get('new1')).toEqual(created);
     expect(useCanvasStore.getState().past.length).toBe(pastBefore + 1);
     expect(s.error).toBeNull();
   });
 
-  it('uses the drop position when given', async () => {
+  it('steps each further materialization from the same anchor down a row', async () => {
     await loadOne();
-    createSnippet.mockResolvedValueOnce({ data: snippet('new2', 'tin', '1') } as never);
-    await useRhymeStore.getState().promote('dict:tin', { x: 12, y: 34 });
-    const body = createSnippet.mock.calls[0][1];
-    expect(body.position_x).toBe(12);
-    expect(body.position_y).toBe(34);
+    createSnippet.mockResolvedValueOnce({ data: snippet('new1', 'tin', '1') } as never);
+    createSnippet.mockResolvedValueOnce({ data: snippet('new2', 'bin', '1') } as never);
+    await useRhymeStore.getState().materialize('dict:tin');
+    await useRhymeStore.getState().materialize('dict:bin');
+    expect(createSnippet.mock.calls[1][1].position_x).toBe(100 + 200 + MATERIALIZE_GAP_X);
+    expect(createSnippet.mock.calls[1][1].position_y).toBe(100 + MATERIALIZE_STEP_Y);
+    expect(useRhymeStore.getState().materializeCounts.get('a')).toBe(2);
   });
 
-  it('stores a typed promote error, keeps the candidate, and does not throw', async () => {
+  it('places at the viewport centre for a typed-only anchor', async () => {
+    useCanvasStore.setState({ selectedSnippetIds: new Set(), viewport: { x: -100, y: 50, zoom: 2 } });
+    useRhymeStore.setState({ viewSize: { width: 800, height: 600 } });
+    enterQuietly();
+    useRhymeStore.getState().setTypedAnchor('hinge');
+    rhymeSuggest.mockResolvedValueOnce(response([cand('dict:tin', 'tin', 0.9)]) as never);
+    await useRhymeStore.getState().runQuery();
+    createSnippet.mockResolvedValueOnce({ data: snippet('new3', 'tin', '1') } as never);
+    await useRhymeStore.getState().materialize('dict:tin');
+    const body = createSnippet.mock.calls[0][1];
+    expect(body.position_x).toBe(300);
+    expect(body.position_y).toBe(100);
+    expect(useRhymeStore.getState().materializeCounts.size).toBe(0);
+  });
+
+  it('does not move the selection, so the anchor stays the query', async () => {
+    await loadOne();
+    createSnippet.mockResolvedValueOnce({ data: snippet('new1', 'tin', '1') } as never);
+    await useRhymeStore.getState().materialize('dict:tin');
+    expect(Array.from(useCanvasStore.getState().selectedSnippetIds)).toEqual(['a']);
+  });
+
+  it('stores a typed materialize error, keeps the row, and does not throw', async () => {
     await loadOne();
     createSnippet.mockRejectedValueOnce(axiosErr(500));
-    await expect(useRhymeStore.getState().promote('dict:tin')).resolves.toBeUndefined();
+    await expect(useRhymeStore.getState().materialize('dict:tin')).resolves.toBeUndefined();
     const s = useRhymeStore.getState();
     expect(s.error?.kind).toBe('server');
-    expect(s.error?.operation).toBe('promote');
-    expect(s.candidates.length).toBe(1);
+    expect(s.error?.operation).toBe('materialize');
+    expect(s.candidates.length).toBe(2);
+    expect(s.materializeCounts.size).toBe(0);
     expect(useCanvasStore.getState().snippets.size).toBe(2);
   });
 
   it('ignores unknown ids', async () => {
     await loadOne();
-    await useRhymeStore.getState().promote('dict:nope');
+    await useRhymeStore.getState().materialize('dict:nope');
     expect(createSnippet).not.toHaveBeenCalled();
   });
 });

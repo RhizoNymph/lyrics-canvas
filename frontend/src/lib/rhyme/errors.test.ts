@@ -35,9 +35,9 @@ describe('toRhymeError', () => {
   });
 
   it('maps 500 to server', () => {
-    const e = toRhymeError(axiosErr(500), 'promote');
+    const e = toRhymeError(axiosErr(500), 'materialize');
     expect(e.kind).toBe('server');
-    expect(e.operation).toBe('promote');
+    expect(e.operation).toBe('materialize');
   });
 
   it('wraps plain errors and non-errors as unknown', () => {
@@ -47,6 +47,6 @@ describe('toRhymeError', () => {
 
   it('passes through an existing RhymeError', () => {
     const orig = new RhymeError('server', 'query', 'x', 503);
-    expect(toRhymeError(orig, 'promote')).toBe(orig);
+    expect(toRhymeError(orig, 'materialize')).toBe(orig);
   });
 });

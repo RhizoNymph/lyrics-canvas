@@ -1,11 +1,10 @@
 import { create } from 'zustand';
 import { nlpApi } from '@/api/client';
 import { useCanvasStore } from './canvasStore';
-import { anchorsFromSelection, selectedSnippets } from '@/lib/rhyme/queryFromSelection';
+import { anchorsFromSelection, anchorSnippets } from '@/lib/rhyme/queryFromSelection';
 import { slotFromSnippet } from '@/lib/rhyme/slotFit';
-import { layoutCandidates, anchorCenter } from '@/lib/rhyme/radialLayout';
-import type { Point } from '@/lib/rhyme/radialLayout';
-import { candidateCardSize, candidateTopLeft } from '@/lib/rhyme/candidateGeometry';
+import { materializePosition } from '@/lib/rhyme/materializePosition';
+import type { ViewSize } from '@/lib/rhyme/geometry';
 import { toRhymeError } from '@/lib/rhyme/errors';
 import { RHYME_PAGE_SIZE } from '@/types/rhyme';
 import type {
@@ -21,62 +20,70 @@ import type {
 
 export type SlotMode = 'manual' | 'from-selection';
 
+/**
+ * Single owner of the rhyme sidebar session. Nothing here touches the canvas until
+ * `materialize` creates a real snippet through canvasStore.
+ */
 export interface RhymeState {
+  /** True while the rhyme sidebar is open. */
   active: boolean;
   typedAnchor: string;
+  /** Selected snippet ids removed from the anchors via their chip; pruned to the selection on each query. */
+  excludedAnchorIds: Set<string>;
   k: RhymeK;
   minScore: number;
   slot: Slot | null;
   slotMode: SlotMode;
   sources: { notes: boolean; dictionary: boolean };
+  includeRare: boolean;
   anchors: RhymeUnit[];
   candidates: RhymeCandidate[];
   total: number;
   offset: number;
-  /** World-coordinate card centres keyed by unit id; stable across re-queries. */
-  positions: Map<string, Point>;
   dismissed: Set<string>;
-  hoveredId: string | null;
-  /** Tooltip pinned by click; survives hover-out. */
-  pinnedId: string | null;
-  /** Canvas element size, used to centre typed-anchor layouts on the viewport. */
-  viewSize: { width: number; height: number };
+  /** Materializations made per anchor snippet id this session (drives the row step-down). */
+  materializeCounts: Map<string, number>;
+  /** Canvas element size, for the viewport-centre fallback when materializing without a single anchor. */
+  viewSize: ViewSize;
   loading: boolean;
   error: RhymeError | null;
 
+  /** Opens the session and queries immediately. */
   enter: () => void;
   exit: () => void;
   setTypedAnchor: (t: string) => void;
+  excludeAnchor: (snippetId: string) => void;
+  restoreAnchor: (snippetId: string) => void;
   setK: (k: RhymeK) => void;
   setMinScore: (v: number) => void;
   setSlot: (s: Slot | null) => void;
   setSlotMode: (m: SlotMode) => void;
   toggleSource: (name: SourceName) => void;
+  setIncludeRare: (v: boolean) => void;
   setViewSize: (width: number, height: number) => void;
   /** Debounced 150 ms by useRhymeQuery; replaces the candidate set (offset 0). */
   runQuery: () => Promise<void>;
   /** Appends the next page. */
   loadMore: () => Promise<void>;
   dismiss: (id: string) => void;
-  /** Creates a snippet from the candidate at `at` (world top-left) or at the card's own position. */
-  promote: (id: string, at?: Point) => Promise<void>;
-  setHovered: (id: string | null) => void;
-  setPinned: (id: string | null) => void;
+  /** Creates a snippet from the candidate on the canvas, then removes the row. */
+  materialize: (id: string) => Promise<void>;
 }
 
-const CLEARED = {
-  typedAnchor: '',
-  anchors: [] as RhymeUnit[],
-  candidates: [] as RhymeCandidate[],
-  total: 0,
-  offset: 0,
-  positions: new Map<string, Point>(),
-  dismissed: new Set<string>(),
-  hoveredId: null,
-  pinnedId: null,
-  loading: false,
-  error: null,
-};
+function cleared() {
+  return {
+    typedAnchor: '',
+    excludedAnchorIds: new Set<string>(),
+    anchors: [] as RhymeUnit[],
+    candidates: [] as RhymeCandidate[],
+    total: 0,
+    offset: 0,
+    dismissed: new Set<string>(),
+    materializeCounts: new Map<string, number>(),
+    loading: false,
+    error: null,
+  };
+}
 
 /** Monotonic query counter so a slow, older response never overwrites a newer one. */
 let querySeq = 0;
@@ -86,14 +93,6 @@ function enabledSources(sources: RhymeState['sources']): SourceName[] {
   if (sources.notes) out.push('notes');
   if (sources.dictionary) out.push('dictionary');
   return out;
-}
-
-function viewportCenter(viewSize: RhymeState['viewSize']): Point {
-  const { viewport } = useCanvasStore.getState();
-  return {
-    x: viewSize.width / (2 * viewport.zoom) - viewport.x,
-    y: viewSize.height / (2 * viewport.zoom) - viewport.y,
-  };
 }
 
 function derivedFromFor(c: RhymeCandidate, anchors: RhymeUnit[], k: RhymeK): DerivedFrom {
@@ -109,24 +108,39 @@ function derivedFromFor(c: RhymeCandidate, anchors: RhymeUnit[], k: RhymeK): Der
   };
 }
 
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
 export const useRhymeStore = create<RhymeState>((set, get) => {
+  /** Drop exclusions for snippets no longer selected ("for this query" semantics). */
+  const pruneExclusions = (): Set<string> => {
+    const { excludedAnchorIds } = get();
+    const { selectedSnippetIds } = useCanvasStore.getState();
+    const pruned = new Set(Array.from(excludedAnchorIds).filter((id) => selectedSnippetIds.has(id)));
+    if (!sameSet(pruned, excludedAnchorIds)) set({ excludedAnchorIds: pruned });
+    return pruned;
+  };
+
   /** Build the request for the current state, or null when nothing should be queried. */
-  const buildRequest = (offset: number): { request: RhymeSuggestRequest; center: Point; slot: Slot | null } | null => {
+  const buildRequest = (offset: number): { request: RhymeSuggestRequest; slot: Slot | null } | null => {
     const state = get();
     const canvas = useCanvasStore.getState();
     if (!state.active || !canvas.canvasId) return null;
-    const anchors = anchorsFromSelection(canvas.selectedSnippetIds, canvas.snippets, state.typedAnchor);
+    const excluded = pruneExclusions();
+    const anchors = anchorsFromSelection(canvas.selectedSnippetIds, canvas.snippets, state.typedAnchor, excluded);
     const sources = enabledSources(state.sources);
     if (anchors.length === 0 || sources.length === 0) return null;
 
-    const selected = selectedSnippets(canvas.selectedSnippetIds, canvas.snippets);
+    const anchorSnips = anchorSnippets(canvas.selectedSnippetIds, canvas.snippets, excluded);
     const slot =
       state.slotMode === 'from-selection'
-        ? selected.length > 0
-          ? slotFromSnippet(selected[0], null)
+        ? anchorSnips.length > 0
+          ? slotFromSnippet(anchorSnips[0], null)
           : null
         : state.slot;
-    const center = anchorCenter(selected, viewportCenter(state.viewSize));
     return {
       request: {
         canvas_id: canvas.canvasId,
@@ -136,14 +150,13 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
         k: state.k,
         min_score: state.minScore,
         sources,
-        include_rare: false,
+        include_rare: state.includeRare,
         exclude_ids: Array.from(state.dismissed),
         limit: RHYME_PAGE_SIZE,
         offset,
         weights: null,
         dialect: null,
       },
-      center,
       slot,
     };
   };
@@ -155,22 +168,39 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     slot: null,
     slotMode: 'from-selection',
     sources: { notes: true, dictionary: true },
+    includeRare: false,
     viewSize: { width: 800, height: 600 },
-    ...CLEARED,
+    ...cleared(),
 
-    enter: () => set({ active: true, error: null }),
+    enter: () => {
+      set({ active: true, error: null });
+      void get().runQuery();
+    },
 
     exit: () => {
       querySeq++;
-      set({ active: false, ...CLEARED, positions: new Map(), dismissed: new Set() });
+      set({ active: false, ...cleared() });
     },
 
     setTypedAnchor: (t) => set({ typedAnchor: t }),
+    excludeAnchor: (snippetId) =>
+      set((s) => {
+        const next = new Set(s.excludedAnchorIds);
+        next.add(snippetId);
+        return { excludedAnchorIds: next };
+      }),
+    restoreAnchor: (snippetId) =>
+      set((s) => {
+        const next = new Set(s.excludedAnchorIds);
+        next.delete(snippetId);
+        return { excludedAnchorIds: next };
+      }),
     setK: (k) => set({ k }),
     setMinScore: (v) => set({ minScore: Math.max(0, Math.min(1, v)) }),
     setSlot: (s) => set({ slot: s }),
     setSlotMode: (m) => set({ slotMode: m }),
     toggleSource: (name) => set((s) => ({ sources: { ...s.sources, [name]: !s.sources[name] } })),
+    setIncludeRare: (v) => set({ includeRare: v }),
     setViewSize: (width, height) => set({ viewSize: { width, height } }),
 
     runQuery: async () => {
@@ -178,7 +208,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       const seq = ++querySeq;
       if (!built) {
         if (get().active) {
-          set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: null, hoveredId: null, pinnedId: null });
+          set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: null });
         }
         return;
       }
@@ -186,14 +216,12 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       try {
         const res = await nlpApi.rhymeSuggest(built.request);
         if (seq !== querySeq) return;
-        const { dismissed, positions } = get();
-        const candidates = res.data.candidates.filter((c) => !dismissed.has(c.id));
+        const { dismissed } = get();
         set({
           anchors: res.data.anchors,
-          candidates,
+          candidates: res.data.candidates.filter((c) => !dismissed.has(c.id)),
           total: res.data.total,
           offset: 0,
-          positions: layoutCandidates(candidates, built.center, positions),
           loading: false,
           error: null,
         });
@@ -214,15 +242,13 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       try {
         const res = await nlpApi.rhymeSuggest(built.request);
         if (seq !== querySeq) return;
-        const { candidates, dismissed, positions } = get();
+        const { candidates, dismissed } = get();
         const seen = new Set(candidates.map((c) => c.id));
         const fresh = res.data.candidates.filter((c) => !dismissed.has(c.id) && !seen.has(c.id));
-        const merged = [...candidates, ...fresh];
         set({
-          candidates: merged,
+          candidates: [...candidates, ...fresh],
           total: res.data.total,
           offset: nextOffset,
-          positions: layoutCandidates(fresh, built.center, positions),
           loading: false,
           error: null,
         });
@@ -233,36 +259,33 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     },
 
     dismiss: (id) => {
-      const { candidates, dismissed, hoveredId, pinnedId } = get();
+      const { candidates, dismissed } = get();
       const next = new Set(dismissed);
       next.add(id);
-      set({
-        candidates: candidates.filter((c) => c.id !== id),
-        dismissed: next,
-        hoveredId: hoveredId === id ? null : hoveredId,
-        pinnedId: pinnedId === id ? null : pinnedId,
-      });
+      set({ candidates: candidates.filter((c) => c.id !== id), dismissed: next });
     },
 
-    promote: async (id, at) => {
-      const { candidates, positions, anchors, k } = get();
+    materialize: async (id) => {
+      const { candidates, anchors, k, excludedAnchorIds, materializeCounts, viewSize } = get();
       const candidate = candidates.find((c) => c.id === id);
       if (!candidate) return;
-      const center = positions.get(id) ?? { x: 0, y: 0 };
-      const topLeft = at ?? candidateTopLeft(center, candidateCardSize(candidate));
+      const canvas = useCanvasStore.getState();
+      const anchorSnips = anchorSnippets(canvas.selectedSnippetIds, canvas.snippets, excludedAnchorIds);
+      const at = materializePosition({ anchors: anchorSnips, counts: materializeCounts, viewport: canvas.viewport, viewSize });
       try {
-        const created = await useCanvasStore
-          .getState()
-          .addSnippetFromText(candidate.text, topLeft.x, topLeft.y, derivedFromFor(candidate, anchors, k));
+        const created = await canvas.addSnippetFromText(candidate.text, at.x, at.y, derivedFromFor(candidate, anchors, k));
         if (created === null) return;
+        if (anchorSnips.length === 1) {
+          const counts = new Map(get().materializeCounts);
+          const anchorId = anchorSnips[0].id;
+          counts.set(anchorId, (counts.get(anchorId) ?? 0) + 1);
+          set({ materializeCounts: counts });
+        }
         get().dismiss(id);
         set({ error: null });
       } catch (err) {
-        set({ error: toRhymeError(err, 'promote') });
+        set({ error: toRhymeError(err, 'materialize') });
       }
     },
-
-    setHovered: (id) => set({ hoveredId: id }),
-    setPinned: (id) => set({ pinnedId: id }),
   };
 });
