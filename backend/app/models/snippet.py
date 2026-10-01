@@ -38,6 +38,8 @@ class Snippet(Base):
     height: Mapped[float] = mapped_column(Float, default=200.0)
     z_index: Mapped[int] = mapped_column(Integer, default=0)
     group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=True)
+    phonetics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    derived_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

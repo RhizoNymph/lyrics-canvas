@@ -42,6 +42,8 @@ def _snippet_response(s) -> dict:
         "z_index": s.z_index,
         "group_id": str(s.group_id) if s.group_id else None,
         "tags": [{"id": str(t.id), "name": t.name, "color": t.color, "canvas_id": str(t.canvas_id)} for t in (s.tags or [])],
+        "phonetics": s.phonetics,
+        "derived_from": s.derived_from,
         "created_at": str(s.created_at),
         "updated_at": str(s.updated_at),
     }

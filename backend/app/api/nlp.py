@@ -11,12 +11,16 @@ from app.models.snippet import Snippet
 from app.models.canvas import Canvas
 from app.models.embedding import SnippetEmbedding
 from app.schemas.nlp import SyllabifyRequest, SyllabifyResponse, TSNERequest
+from app.schemas.rhyme import RhymeSuggestRequest, RhymeSuggestResponse
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.nlp.similarity_service import compute_tfidf_similarity
 from app.services.nlp.tsne_service import compute_tsne
 from app.services.nlp.rhyme_service import find_rhymes, find_rhymes_in_texts
 from app.services.nlp.search_service import search_snippets
 from app.services.nlp.embedding_service import compute_embedding
+from app.services import rhyme_suggest_service
+from app.services.phonetics.errors import DialectRuleError, PronunciationError, RhymeQueryError
+from app.services.rhyme_suggest_service import CanvasNotFoundError, SnippetNotFoundError
 
 router = APIRouter(tags=["nlp"])
 
@@ -131,3 +135,18 @@ async def get_rhymes(
         "dictionary": dict_rhymes,
         "snippets": snippet_rhymes,
     }
+
+
+@router.post("/api/nlp/rhyme-suggest", response_model=RhymeSuggestResponse)
+async def rhyme_suggest(
+    req: RhymeSuggestRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    repo = rhyme_suggest_service.DbSnippetRepository(db)
+    try:
+        return await rhyme_suggest_service.suggest(req, str(user.id), repo)
+    except (CanvasNotFoundError, SnippetNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (RhymeQueryError, DialectRuleError, PronunciationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

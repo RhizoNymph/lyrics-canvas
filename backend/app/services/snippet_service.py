@@ -33,6 +33,14 @@ async def get_snippet(db: AsyncSession, snippet_id: str) -> Snippet | None:
     return result.scalar_one_or_none()
 
 
+async def get_owned_snippet(db: AsyncSession, snippet_id: str, owner_id: str) -> Snippet | None:
+    result = await db.execute(
+        select(Snippet).join(Canvas).options(selectinload(Snippet.tags))
+        .where(Snippet.id == uuid.UUID(snippet_id), Canvas.owner_id == uuid.UUID(owner_id))
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_snippet(db: AsyncSession, snippet_id: str, owner_id: str, **kwargs) -> Snippet | None:
     result = await db.execute(
         select(Snippet).join(Canvas).options(selectinload(Snippet.tags))

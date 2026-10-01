@@ -1,52 +1,25 @@
-import re
-import pronouncing
+"""Beat-grid syllabification.
+
+Per-word phones and stress come from the phonetic engine (``phonetics.pronounce_word``: CMU
+dict, then g2p_en, then a letter heuristic) so grid cells and ``snippets.phonetics`` never
+disagree for new text. Only the mapping of syllables back onto the word's letters lives here.
+"""
+
+from app.services.phonetics import pronounce_word
+from app.services.phonetics.pronounce import clean_word
 
 
 def syllabify_word(word: str) -> list[dict]:
-    """Syllabify a single word using CMU dict, with fallback heuristic."""
-    clean = re.sub(r"[^a-zA-Z']", "", word).lower()
-    if not clean:
+    """Syllabify a single word into ``[{"syllable": str, "stress": 0|1|2}, ...]``."""
+    pron = pronounce_word(word)
+    if pron is None:
         return []
-
-    phones_list = pronouncing.phones_for_word(clean)
-    if phones_list:
-        phones = phones_list[0]
-        return _cmu_syllabify(clean, phones)
-    return _heuristic_syllabify(clean)
-
-
-def _cmu_syllabify(word: str, phones: str) -> list[dict]:
-    """Split CMU phonemes into syllables with stress markers."""
-    phoneme_list = phones.split()
-    syllables = []
-    current_syllable_phones = []
-    current_stress = 0
-
-    for phoneme in phoneme_list:
-        stress_match = re.search(r"\d", phoneme)
-        if stress_match:
-            # This is a vowel phoneme (nucleus of syllable)
-            if current_syllable_phones and any(re.search(r"\d", p) for p in current_syllable_phones):
-                # We already have a vowel — start new syllable
-                syllables.append({"stress": current_stress})
-                current_syllable_phones = []
-            current_stress = int(stress_match.group())
-            current_syllable_phones.append(phoneme)
-        else:
-            current_syllable_phones.append(phoneme)
-
-    if current_syllable_phones:
-        syllables.append({"stress": current_stress})
-
-    # Map syllables back to the word text
-    text_syllables = _split_word_text(word, len(syllables))
-    result = []
-    for i, syl in enumerate(syllables):
-        result.append({
-            "syllable": text_syllables[i] if i < len(text_syllables) else "",
-            "stress": syl["stress"],
-        })
-    return result
+    clean = clean_word(word)
+    text_syllables = _split_word_text(clean, len(pron.syllables))
+    return [
+        {"syllable": text_syllables[i] if i < len(text_syllables) else "", "stress": syllable.stress}
+        for i, syllable in enumerate(pron.syllables)
+    ]
 
 
 def _split_word_text(word: str, n_syllables: int) -> list[str]:
@@ -85,24 +58,6 @@ def _split_word_text(word: str, n_syllables: int) -> list[str]:
         splits.pop()
 
     return splits
-
-
-def _heuristic_syllabify(word: str) -> list[dict]:
-    """Fallback: count vowel groups as syllables."""
-    vowels = set("aeiouy")
-    groups = re.findall(r"[aeiouy]+", word.lower())
-    if not groups:
-        return [{"syllable": word, "stress": 0}]
-
-    n = len(groups)
-    parts = _split_word_text(word, n)
-    result = []
-    for i, part in enumerate(parts):
-        result.append({
-            "syllable": part,
-            "stress": 1 if i == 0 else 0,  # Default: stress first syllable
-        })
-    return result
 
 
 def syllabify_text(text: str) -> dict:

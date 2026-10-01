@@ -1,4 +1,6 @@
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +15,10 @@ from app.api.groups import router as groups_router
 from app.api.tags import router as tags_router
 from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
+from app.services.phonetics import ResourceError, ensure_resources
+from app.services.phonetics.resources import configure as configure_nltk_data
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -20,6 +26,12 @@ async def lifespan(app: FastAPI):
     # Create tables on startup (for dev; use alembic in production)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # NLTK data for g2p_en; the heuristic pronunciation path covers a failure
+    configure_nltk_data(Path(settings.nltk_data_dir))
+    try:
+        ensure_resources()
+    except ResourceError as exc:
+        logger.warning("phonetics.resources.unavailable dir=%s error=%s", settings.nltk_data_dir, exc)
     yield
     await engine.dispose()
 

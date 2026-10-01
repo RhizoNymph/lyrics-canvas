@@ -1,100 +1,80 @@
-# NLP: Rhyme Finder
+# NLP: Rhymes
 
-Phoneme-based rhyme detection using the CMU Pronouncing Dictionary plus in-corpus matching.
+Two routes, both backed by the [phonetic engine](./nlp-phonetics.md):
 
-**File:** `app/services/nlp/rhyme_service.py`
+- `POST /api/nlp/rhyme-suggest`: ranked, slot-checked candidates for the Rhyme View
+  (`app/services/rhyme_suggest_service.py`, `app/schemas/rhyme.py`).
+- `GET /api/nlp/rhymes?word=`: the older sidebar lookup, kept with its original response shape
+  (`app/services/nlp/rhyme_service.py`).
 
-## API
+## Rhyme suggest
+
+**Route:** `app/api/nlp.py::rhyme_suggest` (Bearer). Request/response models are the contract
+in [docs/features/rhyme_view.md](../features/rhyme_view.md#api-contract).
+
+```
+RhymeSuggestRequest
+  -> repo.canvas_owned(canvas_id, user)            else CanvasNotFoundError -> 404
+  -> resolve_dialect / resolve_weights             DialectRuleError -> 422
+  -> resolve_anchor per anchor
+       text:    unit_from_text(text)               no syllables -> RhymeQueryError -> 422
+       snippet: repo.snippet(id, user)             missing -> SnippetNotFoundError -> 404
+                snippet.phonetics (computed on the fly when NULL)
+                line_index null = last line; unknown line -> RhymeQueryError -> 422
+                note_unit(snippet, line, word_offset=0, dialect, tag ids)
+  -> context: tag ids of context snippet anchors (missing entries ignored)
+  -> sources (run in a worker thread):
+       notes:      NotesSource over every line and word-boundary suffix of the user's
+                   snippets, skipping the anchor lines
+       dictionary: DictionarySource(dialect, weights, include_rare)
+       each: suggest(anchors, k, min_score, limit=5000, exclude=exclude_ids + anchor ids)
+  -> drop candidates whose text equals an anchor's text
+  -> dedupe_note_suffixes: one suffix per (snippet, line): best score, depth, fits slot, longest
+  -> rank: score desc, match_depth desc, notes before dictionary, shared context tags desc, id
+  -> page [offset, offset + limit); total = ranked length (capped by 5000 per source)
+  -> models: RhymeUnitModel (effective syllables, rhyme_key, grid_line) and RhymeCandidateModel
+            (score, match_depth, best_anchor_id, fits_slot, alignment, source)
+```
+
+`fits_slot(stress, slot)`: the stress string has the slot's length and no stressed (1 or 2)
+syllable lands on a slot `0`; `True` when there is no slot. Non-fitting candidates are returned
+and flagged, not hidden.
+
+`grid_line`: for note units, the snippet's `grid_data` line sliced from `word_offset` (word
+indexes rebased, leading rests dropped); otherwise `syllabify_text(unit.text)`.
+
+Data access goes through the `SnippetRepository` protocol (`DbSnippetRepository` in
+production; `tests/fakes.py` in tests), so the service is tested without Postgres.
+
+### Errors
+
+| Condition | Exception | Status |
+|---|---|---|
+| canvas not owned / unknown | `CanvasNotFoundError` | 404 |
+| anchor snippet not owned / unknown | `SnippetNotFoundError` | 404 |
+| invalid k, limit, stress, empty anchors | pydantic | 422 |
+| bad line index, empty snippet, unpronounceable text anchor | `RhymeQueryError` | 422 |
+| malformed dialect rule | `DialectRuleError` | 422 |
+
+## Legacy lookup
 
 ```python
 def find_rhymes(word: str, include_near: bool = True) -> dict
 def find_rhymes_in_texts(word: str, texts: dict[str, str]) -> list[dict]
 ```
 
-## Dictionary Rhymes
-
-### Perfect Rhymes
-
-```
-word -> pronouncing.rhymes(word)
-     -> up to 50 results (sorted alphabetically)
-```
-
-Uses the CMU dictionary's built-in rhyme detection: words that share the same phoneme sequence from the last stressed vowel onward.
-
-### Near Rhymes
-
-```
-word -> pronouncing.phones_for_word(word)
-     -> find last vowel phoneme (contains digit 0-2)
-     -> extract rhyming part: phonemes from last vowel forward
-     -> pronouncing.search(rhyming_part + "$")  # regex end anchor
-     -> filter out: perfect rhymes, the query word itself
-     -> up to 30 results
-```
-
-Near rhymes match only the ending vowel+consonant pattern, which produces partial phoneme matches (assonance, slant rhymes).
-
-### Output
-
-```python
-{
-  "perfect": ["cat", "bat", "hat", ...],
-  "near": ["cot", "rot", "lot", ...]
-}
-```
-
-## Snippet Rhymes
-
-Finds rhyming words within the user's existing lyrics.
-
-```
-word -> get perfect rhymes from dictionary
-     -> tokenize all snippet texts (lowercase, strip punctuation)
-     -> set intersection: words_in_text & rhyme_set
-     -> for each match, record snippet context
-```
-
-### Output
-
-```python
-[
-  {
-    "word": "cat",
-    "rhyme_type": "perfect",
-    "source": "snippet",
-    "snippet_id": "uuid-...",
-    "snippet_preview": "first 100 chars of snippet text"
-  }
-]
-```
-
-## Route
-
-```
-GET /api/nlp/rhymes?word=<word>  (requires auth)
-```
-
-Combines both dictionary and snippet searches:
-
-1. `find_rhymes(word)` -> dictionary perfect + near rhymes
-2. Fetch all non-empty snippets across user's canvases
-3. Build corpus: `{snippet_id: raw_text}`
-4. `find_rhymes_in_texts(word, corpus)` -> snippet matches
-
-### Response
+`find_rhymes` queries the common-word dictionary index at the query's rhyme-key depth (from its
+last stressed syllable, capped at 4). Score 1.0 is "perfect" (sorted alphabetically, max 50);
+anything else at or above 0.5 is "near" (best first, max 30). `find_rhymes_in_texts` scores each
+distinct word of each snippet the same way ("perfect" at 1.0, "near" at >= 0.7) and keeps the
+old output shape:
 
 ```json
 {
-  "dictionary": { "perfect": [...], "near": [...] },
-  "snippets": [{ "word": "...", "rhyme_type": "...", ... }]
+  "dictionary": { "perfect": ["bat", "hat"], "near": ["bad", "cap"] },
+  "snippets": [{ "word": "hat", "rhyme_type": "perfect", "source": "snippet", "snippet_id": "...", "snippet_preview": "..." }]
 }
 ```
 
-## Limits
-
-| Category | Max Results |
-|----------|-------------|
-| Perfect rhymes (dictionary) | 50 |
-| Near rhymes (dictionary) | 30 |
-| Snippet rhymes | Unlimited (all matches) |
+Route: `GET /api/nlp/rhymes?word=<word>` (Bearer) fetches all non-empty snippets across the
+user's canvases and combines both calls.

@@ -52,7 +52,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
-- **Rhyme Finder**: Perfect and near rhymes from CMU dict, plus rhyme matches within canvas snippets
+- **Rhyme View / Rhymes**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
 - **Full-Text Search**: ILIKE-based search across snippet text within a canvas
@@ -96,8 +96,9 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [Database & Models](./backend/database.md) | PostgreSQL, ORM models, Alembic migrations |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippets, sharing, forking |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, tag labels, associations |
-| [NLP: Syllabifier](./backend/nlp-syllabifier.md) | CMU dict syllabification, stress markers |
-| [NLP: Rhyme Finder](./backend/nlp-rhymes.md) | Perfect/near rhymes, in-corpus matching |
+| [NLP: Phonetic Engine](./backend/nlp-phonetics.md) | Pronunciation, dialect map, rhyme scoring and index, snippet phonetics, backfill |
+| [NLP: Syllabifier](./backend/nlp-syllabifier.md) | Engine-backed syllabification, stress markers |
+| [NLP: Rhymes](./backend/nlp-rhymes.md) | Rhyme suggest endpoint and legacy lookup |
 | [NLP: Similarity](./backend/nlp-similarity.md) | TF-IDF cosine similarity, sentence embeddings |
 | [NLP: t-SNE Layout](./backend/nlp-tsne.md) | Dimensionality reduction for spatial clustering |
 | [NLP: Search](./backend/nlp-search.md) | Full-text search |
@@ -121,7 +122,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | 384-dim semantic vectors |
 | Similarity | scikit-learn TF-IDF + cosine | Snippet comparison |
 | Visualization | scikit-learn t-SNE | Dimensionality reduction |
-| Rhymes | pronouncing (CMU dict) | Phoneme-based rhyme detection |
+| Rhymes | pronouncing (CMU dict), g2p-en, wordfreq | Phonetic engine: pronunciation, near-rhyme scoring, rhyme index |
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
 
@@ -144,10 +145,10 @@ User 1──N Canvas 1──N Snippet N──M Tag
 | Snippets | 4 (CRUD + batch position) | Bearer |
 | Tags | 5 (CRUD + update + link/unlink) | Bearer |
 | Groups | 3 (CRUD) | Bearer |
-| NLP | 5 (syllabify, search, similar, tsne, rhymes) | Mixed |
+| NLP | 6 (syllabify, search, similar, tsne, rhymes, rhyme-suggest) | Mixed |
 | Export | 1 (text/md/pdf) | Bearer |
 | Health | 1 | Public |
-| **Total** | **30 endpoints** | |
+| **Total** | **31 endpoints** | |
 
 ## Development Quick Start
 
