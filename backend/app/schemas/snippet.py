@@ -1,7 +1,34 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
+
+
+class GridCellModel(BaseModel):
+    """One beat of a grid line. Extra keys are kept so client-side annotations survive."""
+
+    model_config = ConfigDict(extra="allow")
+
+    syllable: str | None = None
+    stress: int | None = None
+    word_index: int | None = None
+    rest: bool | None = None
+
+
+class GridLineModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    cells: list[GridCellModel]
+    syllable_count: int = 0
+    raw_text: str = ""
+
+
+class GridDataModel(BaseModel):
+    """A client-supplied beat grid: ``{"lines": [{"cells": [...]}, ...]}``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    lines: list[GridLineModel]
 
 
 class SnippetCreate(BaseModel):
@@ -9,10 +36,13 @@ class SnippetCreate(BaseModel):
     grid_mode: GridMode = GridMode.auto
     beats_per_line: int | None = None
     raw_text: str = ""
+    # When given, stored as-is (no re-syllabification); rests and stress are preserved.
+    grid_data: GridDataModel | None = None
     position_x: float = 0.0
     position_y: float = 0.0
     width: float = 300.0
     height: float = 200.0
+    group_id: str | None = None
     derived_from: DerivedFromModel | None = None
 
 

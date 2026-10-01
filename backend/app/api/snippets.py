@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,8 +51,16 @@ async def create_snippet(
     # strings into the response serializer.
     data = req.model_dump()
     raw_text = data.pop("raw_text", "")
-    grid_data = syllabify_text(raw_text) if raw_text else {"lines": []}
+    # A client-supplied grid (block merging) is stored as-is so its rests and stress survive;
+    # otherwise the text is syllabified. Either way phonetics follow the stored grid.
+    data.pop("grid_data", None)
+    if req.grid_data is not None:
+        grid_data = req.grid_data.model_dump(exclude_unset=True)
+    else:
+        grid_data = syllabify_text(raw_text) if raw_text else {"lines": []}
     phonetics = compute_snippet_phonetics(raw_text, grid_data, None).model_dump(mode="json")
+    group_id = data.pop("group_id", None)
+    data["group_id"] = uuid.UUID(group_id) if group_id else None
     width, height = _compute_size(grid_data)
     data["width"] = width
     data["height"] = height
