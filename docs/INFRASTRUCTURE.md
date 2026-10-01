@@ -9,7 +9,7 @@ The project uses Docker Compose to orchestrate three services: PostgreSQL (with 
 ### PostgreSQL (`postgres`)
 
 - **Image**: `pgvector/pgvector:pg16` (PostgreSQL 16 with pgvector extension)
-- **Port**: 5433 (host) -> 5432 (container)
+- **Port**: 5435 (host) -> 5432 (container)
 - **Database**: `lyrics_canvas`
 - **Credentials**: `lyrics` / `lyrics_dev`
 - **Volumes**:
@@ -61,7 +61,7 @@ Frontend (Vite dev server, port 5173)
 Backend (FastAPI/Uvicorn, port 8000)
     |
     v
-PostgreSQL + pgvector (port 5433 external / 5432 internal)
+PostgreSQL + pgvector (port 5435 external / 5432 internal)
 ```
 
 In Docker Compose, services communicate via internal hostnames (`postgres`, `backend`, `frontend`).
@@ -91,7 +91,7 @@ docker-compose up --build
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
 - API docs (Swagger): http://localhost:8000/docs
-- PostgreSQL: `psql -h localhost -p 5433 -U lyrics -d lyrics_canvas`
+- PostgreSQL: `psql -h localhost -p 5435 -U lyrics -d lyrics_canvas`
 
 ### Database migrations (production)
 ```bash

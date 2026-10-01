@@ -159,7 +159,7 @@ docker-compose up
 # Frontend:  http://localhost:5173
 # Backend:   http://localhost:8000
 # Swagger:   http://localhost:8000/docs
-# Postgres:  localhost:5433 (lyrics/lyrics_dev)
+# Postgres:  localhost:5435 (lyrics/lyrics_dev)
 ```
 
 All services hot-reload via bind-mounted source volumes.
