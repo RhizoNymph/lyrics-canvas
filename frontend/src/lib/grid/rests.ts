@@ -8,12 +8,19 @@ export function insertRest(line: GridLine, at: number): GridLine {
   return { ...line, cells };
 }
 
-/** Remove cell `at`; removing a syllable recounts and renumbers words. Same line when out of range. */
+/**
+ * Remove cell `at`. Removing a syllable recounts, renumbers words and drops
+ * the surface `word` from the rest of that word (it no longer spells it).
+ * Same line when out of range.
+ */
 export function removeCell(line: GridLine, at: number): GridLine {
   if (at < 0 || at >= line.cells.length) return line;
   const removed = line.cells[at];
   const remaining = [...line.cells.slice(0, at), ...line.cells.slice(at + 1)];
   if (removed.rest) return { ...line, cells: remaining };
-  const cells = rebaseWordIndexes(remaining);
+  const orphaned = remaining.map((cell) =>
+    !cell.rest && cell.word !== undefined && cell.word_index === removed.word_index ? { ...cell, word: undefined } : cell,
+  );
+  const cells = rebaseWordIndexes(orphaned);
   return { ...line, cells, syllable_count: countSyllables(cells) };
 }

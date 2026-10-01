@@ -40,6 +40,12 @@ describe('removeCell', () => {
     expect(out2.cells.map((x) => x.word_index)).toEqual([0]);
   });
 
+  it('drops the surface word from the remaining syllables of a trimmed word', () => {
+    const worded: GridLine = { ...base, cells: base.cells.map((x) => ({ ...x, word: x.word_index === 0 ? 'hello' : 'world' })) };
+    const out = removeCell(worded, 0);
+    expect(out.cells.map((x) => x.word)).toEqual([undefined, 'world']);
+  });
+
   it('is a no-op out of range', () => {
     expect(removeCell(base, 3)).toBe(base);
     expect(removeCell(base, -1)).toBe(base);
