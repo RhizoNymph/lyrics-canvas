@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
+import type { MergeMode } from '@/lib/merge';
 
 const TAG_COLORS = [
   '#ef4444', '#f59e0b', '#22c55e', '#3b82f6',
@@ -9,7 +10,9 @@ const TAG_COLORS = [
 
 export default function SnippetContextMenu() {
   const { contextMenu, closeContextMenu } = useUIStore();
-  const { snippets, tags, addTagToSnippet, removeTagFromSnippet, createTag, updateTag, deleteTag, deleteSnippet } = useCanvasStore();
+  const {
+    snippets, tags, selectedSnippetIds, addTagToSnippet, removeTagFromSnippet, createTag, updateTag, deleteTag, deleteSnippet, mergeSelected,
+  } = useCanvasStore();
 
   const [creating, setCreating] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -173,6 +176,11 @@ export default function SnippetContextMenu() {
     closeContextMenu();
   }, [contextMenu, deleteSnippet, closeContextMenu]);
 
+  const handleMerge = useCallback(async (mode: MergeMode) => {
+    closeContextMenu();
+    await mergeSelected(mode);
+  }, [mergeSelected, closeContextMenu]);
+
   if (!contextMenu) return null;
 
   const snippet = snippets.get(contextMenu.snippetId);
@@ -180,6 +188,15 @@ export default function SnippetContextMenu() {
 
   const allTags = Array.from(tags.values());
   const assignedTagIds = new Set(snippet.tags.map((t) => t.id));
+  const canMerge = selectedSnippetIds.size >= 2 && selectedSnippetIds.has(snippet.id);
+
+  const itemStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '6px 12px',
+    cursor: 'pointer',
+  } as const;
 
   const inputStyle = {
     flex: 1,
@@ -401,6 +418,33 @@ export default function SnippetContextMenu() {
 
       {/* Divider */}
       <div style={{ height: 1, background: '#3a3a5c', margin: '4px 0' }} />
+
+      {/* Merge the multi-selection (this snippet included) into one block */}
+      {canMerge && (
+        <>
+          <div
+            onClick={() => handleMerge('vertical')}
+            style={itemStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            title={`Stack the ${selectedSnippetIds.size} selected snippets top to bottom (Ctrl+Shift+V)`}
+          >
+            <span style={{ width: 16, textAlign: 'center', fontSize: 13 }}>⇣</span>
+            <span>Merge vertically</span>
+          </div>
+          <div
+            onClick={() => handleMerge('horizontal')}
+            style={itemStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            title={`Join the ${selectedSnippetIds.size} selected snippets left to right (Ctrl+Shift+H)`}
+          >
+            <span style={{ width: 16, textAlign: 'center', fontSize: 13 }}>⇢</span>
+            <span>Merge horizontally</span>
+          </div>
+          <div style={{ height: 1, background: '#3a3a5c', margin: '4px 0' }} />
+        </>
+      )}
 
       {/* Delete snippet */}
       <div

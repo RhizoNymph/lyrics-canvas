@@ -14,7 +14,7 @@ import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { loadCanvas, undo, redo, selectedSnippetIds, deleteSnippet } = useCanvasStore();
+  const { loadCanvas, undo, redo, deleteSnippet, mergeSelected } = useCanvasStore();
   const { setSearchModalOpen, rhymeSidebarOpen } = useUIStore();
   useRhymeQuery();
 
@@ -26,9 +26,21 @@ export default function CanvasPage() {
 
   // Keyboard shortcuts
   useEffect(() => {
+    const typingOrEditing = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return useUIStore.getState().editingSnippetId !== null;
+    };
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.key === 'z' && !e.shiftKey) {
+      const key = e.key.toLowerCase();
+      if (ctrl && e.shiftKey && (key === 'v' || key === 'h')) {
+        // Merge the selection: Ctrl/Cmd+Shift+V stacks, Ctrl/Cmd+Shift+H joins
+        if (typingOrEditing(e)) return;
+        if (useCanvasStore.getState().selectedSnippetIds.size < 2) return;
+        e.preventDefault();
+        mergeSelected(key === 'v' ? 'vertical' : 'horizontal');
+      } else if (ctrl && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
       } else if (ctrl && e.key === 'z' && e.shiftKey) {
@@ -39,10 +51,7 @@ export default function CanvasPage() {
         setSearchModalOpen(true);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !ctrl) {
         // Delete selected snippets — only when not editing text
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        const { editingSnippetId } = useUIStore.getState();
-        if (editingSnippetId) return;
+        if (typingOrEditing(e)) return;
         const ids = useCanvasStore.getState().selectedSnippetIds;
         if (ids.size === 0) return;
         e.preventDefault();
@@ -53,7 +62,7 @@ export default function CanvasPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, setSearchModalOpen, deleteSnippet]);
+  }, [undo, redo, setSearchModalOpen, deleteSnippet, mergeSelected]);
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

@@ -187,7 +187,10 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
           x: nativeEvent.clientX,
           y: nativeEvent.clientY,
         });
-        selectSnippet(snippet.id, false);
+        // Right-clicking a member of a multi-selection keeps it so the menu can merge the set.
+        if (!useCanvasStore.getState().selectedSnippetIds.has(snippet.id)) {
+          selectSnippet(snippet.id, false);
+        }
         return;
       }
 

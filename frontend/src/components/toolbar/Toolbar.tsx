@@ -3,8 +3,12 @@ import { useUIStore } from '@/stores/uiStore';
 import { nlpApi, exportApi } from '@/api/client';
 
 export default function Toolbar() {
-  const { canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE } = useCanvasStore();
+  const {
+    canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
+    selectedSnippetIds, mergeSelected, mergeError, clearMergeError,
+  } = useCanvasStore();
   const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, rhymeSidebarOpen } = useUIStore();
+  const canMerge = selectedSnippetIds.size >= 2;
 
   const handleTSNE = async () => {
     if (tsneMode) {
@@ -41,6 +45,16 @@ export default function Toolbar() {
     color: '#fff',
     borderColor: '#6366f1',
   };
+
+  const disabledBtnStyle: React.CSSProperties = {
+    ...btnStyle,
+    color: '#666',
+    cursor: 'default',
+    opacity: 0.6,
+  };
+
+  const mergeBtnStyle = canMerge ? btnStyle : disabledBtnStyle;
+  const mergeNoticeColor = mergeError?.level === 'warning' ? '#f59e0b' : '#ef4444';
 
   return (
     <div
@@ -87,6 +101,37 @@ export default function Toolbar() {
       <button onClick={handleTSNE} style={tsneMode ? activeBtnStyle : btnStyle}>
         {tsneMode ? 'Exit t-SNE' : 't-SNE'}
       </button>
+
+      <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
+
+      <button
+        onClick={() => mergeSelected('vertical')}
+        disabled={!canMerge}
+        style={mergeBtnStyle}
+        title="Merge the selected snippets top to bottom (Ctrl+Shift+V)"
+      >
+        Merge ⇣
+      </button>
+      <button
+        onClick={() => mergeSelected('horizontal')}
+        disabled={!canMerge}
+        style={mergeBtnStyle}
+        title="Merge the selected snippets left to right (Ctrl+Shift+H)"
+      >
+        Merge ⇢
+      </button>
+
+      {mergeError && (
+        <span
+          role="status"
+          onClick={clearMergeError}
+          title="Click to dismiss"
+          style={{ fontSize: 12, color: mergeNoticeColor, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}
+        >
+          {mergeError.level === 'warning' ? 'Merged with a problem: ' : 'Merge failed: '}
+          {mergeError.message}
+        </span>
+      )}
 
       <div style={{ flex: 1 }} />
 
