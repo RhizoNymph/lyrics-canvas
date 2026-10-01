@@ -169,7 +169,7 @@ All services hot-reload via bind-mounted source volumes.
 ```yaml
 Features Index:
   rhyme_view:
-    description: Select a snippet or type a phrase; a sidebar lists engine-scored rhyme and near-rhyme candidates that fit the slot, each materializable into a snippet on the canvas.
+    description: Select a snippet (whole last line, or a word range of a line picked on its sidebar chip) or type a phrase; a sidebar lists engine-scored rhyme and near-rhyme candidates that fit the slot, each materializable into a snippet on the canvas.
     entry_points:
       - backend/app/services/phonetics/
       - backend/app/api/nlp.py (POST /api/nlp/rhyme-suggest)

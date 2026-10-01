@@ -26,8 +26,9 @@ under [Decisions](#decisions).
 ## Non-scope (v0)
 
 - Multi-word phrase rhymes (beam search or LLM), Datamuse, semantic axes, UMAP/blended layout, beat/BPM.
-- Cell-level (single syllable) selection inside a snippet. Selection today is snippet-level only; v0 anchors
-  are a whole snippet line's tail. A typed phrase covers the "tail from here" case.
+- Cell-level (single syllable) selection inside a snippet on the canvas. Canvas selection stays
+  snippet-level; partial anchors are picked in the sidebar as a **word range** of one line (see
+  Interactions), since the engine rhymes on words. Sub-word (syllable) ranges remain out of scope.
 - Persisted per-user controls panel (milestone 5). v0 controls live in the sidebar for the session.
 - Any new workspace, group, or rename features.
 
@@ -95,7 +96,8 @@ class DerivedFrom:
 
 @dataclass(frozen=True, slots=True)
 class Unit:
-    id: str                    # "dict:<word>" | "note:<snippet_id>:<line>:<word_offset>" | "text:<sha1(text)>"
+    id: str                    # "dict:<word>" | "note:<snippet_id>:<line>:<word_offset>" (suffix)
+                               # | "note:<snippet_id>:<line>:<start>-<end>" (word range) | "text:<sha1(text)>"
     text: str
     pronunciation: Pronunciation
     stress: str                # e.g. "1010", derived
@@ -109,7 +111,8 @@ class Unit:
     derived_from: DerivedFrom | None
     snippet_id: str | None
     line_index: int | None
-    word_offset: int | None    # for note suffix units: first word included
+    word_offset: int | None    # for note units: first word included
+    word_end: int | None       # for note range units: one past the last word included; None = to the end
     effective_pronunciation: Pronunciation   # derived: dialect applied to override-or-pronunciation
     dialect_digest: str                      # derived: the map the derived fields were computed under
 ```
@@ -300,6 +303,8 @@ raw text with the existing overrides as the base; a text change recomputes from 
   "canvas_id": "uuid",
   "anchors": [
     {"kind": "snippet", "snippet_id": "uuid", "line_index": 0},   // line_index null = last non-empty line
+    {"kind": "snippet", "snippet_id": "uuid", "line_index": 1, "word_start": 1, "word_end": 3},
+                                  // words [word_start, word_end) of the line; word_end null/omitted = to the end
     {"kind": "text", "text": "door hinge"}
   ],
   "context": [ /* same shape; v0 uses their tag ids for tie-breaking only */ ],
@@ -329,7 +334,9 @@ interface RhymeUnit {
   id: string; text: string; provenance: 'note' | 'dictionary' | 'datamuse' | 'generated';
   ephemeral: boolean; syllable_count: number; stress: string; rhyme_key: string[];
   syllables: RhymeSyllable[]; grid_line: GridLine;           // grid_line renders with the existing cell code
-  snippet_id?: string; line_index?: number; word_offset?: number; tags: string[];
+  snippet_id?: string; line_index?: number; word_offset?: number;
+  word_end?: number | null;                                  // range anchors only: exclusive end word
+  tags: string[];
 }
 interface SyllableAlignment { cand_index: number | null; anchor_index: number | null; nucleus: number; coda: number; onset: number; total: number }
 interface RhymeCandidate extends RhymeUnit {
@@ -349,10 +356,19 @@ Semantics:
   syllable (1 or 2) lands on a slot `0`. Non-fitting candidates are returned, not hidden.
 - Anchor units are echoed back with their computed phonetics so the UI can show the tail and each anchor's
   rhyme key.
+- A snippet anchor with `word_start` and/or `word_end` resolves to the words `[word_start, word_end)` of
+  the line (`word_start` defaults to 0, `word_end` to the word count). The echoed unit has id
+  `note:<snippet_id>:<line>:<start>-<end>`, `text` = those words, phonetics of that slice only,
+  `word_offset = start`, `word_end = end`, and `grid_line` = the matching slice of the snippet grid
+  (cells whose `word_index` is in range, re-based; leading and trailing rests dropped). `word_end` is
+  null for every other unit. The anchor's whole line is still excluded from note candidates, and
+  the range unit itself is never a candidate.
 - Errors: 404 canvas not owned or anchor snippet not owned (`CanvasNotFoundError`,
-  `SnippetNotFoundError` in `rhyme_suggest_service`); 422 on invalid k, stress string, limit, or empty
-  anchors (pydantic), on a bad line index, an empty snippet or an unpronounceable text anchor
-  (`RhymeQueryError`), and on a malformed dialect rule (`DialectRuleError`). Mapped in the route.
+  `SnippetNotFoundError` in `rhyme_suggest_service`); 422 on invalid k, stress string, limit, empty
+  anchors, a negative `word_start`, a `word_end` below 1, or `word_start >= word_end` (pydantic), on a
+  bad line index, an empty snippet, a word range outside the line's words or without a pronounceable
+  word, or an unpronounceable text anchor (`RhymeQueryError`), and on a malformed dialect rule
+  (`DialectRuleError`). Mapped in the route.
 - Budget: dictionary query ≤ 200 ms warm, measured by a test.
 
 Materializing (the brief's "promote") is the existing `POST /api/canvases/{id}/snippets` with `raw_text`,
@@ -384,18 +400,19 @@ The frontend is a sidebar, not a canvas layer (see Decisions, 2026-09-30). Files
 |---|---|
 | `types/rhyme.ts` | TS mirrors of the API contract; `RhymeError` (`operation: 'query' \| 'materialize'`) |
 | `api/client.ts` | `nlpApi.rhymeSuggest(req)`; `snippetApi.create` accepts `derived_from` |
-| `stores/rhymeStore.ts` | Session (`active`), query inputs, anchors, candidates, dismissed ids, chip exclusions, materialize counts, loading/error; `materialize` is the only path to the canvas |
+| `stores/rhymeStore.ts` | Session (`active`), query inputs, anchors, candidates, dismissed ids, chip exclusions, anchor word ranges, materialize counts, loading/error; `materialize` is the only path to the canvas |
+| `lib/rhyme/anchorRange.ts` | Click-to-range reducer (`clickWord`, `wordSpan`: inclusive clicks to an exclusive range), grid-line slicing (`sliceGridLine`), `rangeText`, `rangeFits`, `anchorRefFor` |
 | `lib/rhyme/materializePosition.ts` | Where a materialized snippet lands: right of the single anchor (+40 px), stepping down 60 px per earlier materialization from it; else the viewport centre |
 | `lib/rhyme/candidateList.ts` | List rows (dismissed excluded, limited to the loaded pages), "Showing a–b of total", More enablement |
 | `lib/rhyme/geometry.ts` | `Point`, `Viewport`, `ViewSize`, `viewportCenter` |
-| `lib/rhyme/slotFit.ts` | Slot derivation from a selected snippet line; client-side fit check; manual slot validation |
-| `lib/rhyme/queryFromSelection.ts` | Builds anchors from `selectedSnippetIds` minus chip exclusions + typed text |
+| `lib/rhyme/slotFit.ts` | Slot derivation from a selected snippet line or a word range of it; client-side fit check; manual slot validation |
+| `lib/rhyme/queryFromSelection.ts` | Builds anchors from `selectedSnippetIds` minus chip exclusions, with each snippet's word range if one is set, + typed text |
 | `lib/rhyme/debounce.ts` | Debounced runner behind the 150 ms re-query hook |
 | `lib/rhyme/errors.ts` | `toRhymeError`: axios failures to the typed `RhymeError` |
-| `hooks/useRhymeQuery.ts` | 150 ms debounced re-query on selection / anchor / chip / param changes while open |
+| `hooks/useRhymeQuery.ts` | 150 ms debounced re-query on selection / anchor / chip / word range / param changes while open |
 | `components/sidebar/RhymeSidebar.tsx` | 380 px right sidebar; `enter()` on mount, `exit()` on unmount |
-| `components/rhyme/QueryControls.tsx`, `AnchorChips.tsx` | Search box, anchor chips with echoed rhyme keys (× removes for this query), k, min score, slot, sources, rare words |
-| `components/rhyme/CandidateList.tsx`, `CandidateRow.tsx`, `SyllableStrip.tsx`, `AlignmentTable.tsx` | Status line + More, rows (text, syllable strip, score, depth, fit badge, source colour), expand to the aligned tail, Materialize / Dismiss |
+| `components/rhyme/QueryControls.tsx`, `AnchorChips.tsx` | Search box, anchor chips with echoed rhyme keys (× removes for this query; ▸ expands the chip to the snippet's lines as clickable syllable strips to pick a word range), k, min score, slot, sources, rare words |
+| `components/rhyme/CandidateList.tsx`, `CandidateRow.tsx`, `SyllableStrip.tsx`, `AlignmentTable.tsx` | Status line + More, rows (text, syllable strip, score, depth, fit badge, source colour), expand to the aligned tail, Materialize / Dismiss; `SyllableStrip` optionally highlights a word range and reports word clicks |
 | `components/rhyme/rhymeColors.ts`, `sidebarStyles.ts` | Provenance colours and labels, non-fit alpha, alignment colour scale; sidebar styles |
 | `components/canvas/gridDraw.ts`, `gridConstants.ts` | Beat-grid drawing and constants used by `SnippetCard` (unchanged by this feature) |
 
@@ -405,6 +422,7 @@ Store shape:
 interface RhymeState {
   active: boolean;                       // sidebar open
   typedAnchor: string; excludedAnchorIds: Set<string>;
+  anchorRanges: Map<string, AnchorRange>; // snippet id -> { lineIndex, wordStart, wordEnd (exclusive) }
   k: 1 | 2 | 3 | 4; minScore: number;
   slot: Slot | null; slotMode: 'manual' | 'from-selection';
   sources: { notes: boolean; dictionary: boolean }; includeRare: boolean;
@@ -414,6 +432,7 @@ interface RhymeState {
   loading: boolean; error: RhymeError | null;
   enter(): void;                         // activates and queries immediately
   exit(): void; setTypedAnchor(t): void; excludeAnchor(id): void; restoreAnchor(id): void;
+  setAnchorRange(snippetId, range | null): void;   // null = whole last line again
   setK(k): void; setMinScore(v): void; setSlot(s | null): void; setSlotMode(m): void;
   toggleSource(name): void; setIncludeRare(v): void; setViewSize(w, h): void;
   runQuery(): Promise<void>;             // debounced 150 ms by the caller hook
@@ -428,6 +447,14 @@ Interactions:
 - Selection, typed anchor, chip, and parameter changes re-query after 150 ms; Enter in the search box queries now.
 - A chip's × removes that selected snippet from the anchors for this query (restored by + or by deselecting
   and reselecting it).
+- A chip's ▸ expands it to every line of the snippet as a syllable strip built from its `grid_data`. Click
+  a word's cell to set the start word (a single-word range, queried at once), then another cell on the
+  same line to set the end word (inclusive on click, stored exclusive; either order); the picked words
+  are highlighted, the chip label becomes the picked text with the echoed rhyme key of that slice, and
+  the from-selection slot is the picked words' cells. Clicking the start word again, or "whole line",
+  returns to the whole last line. Rests are not selectable; the canvas selection is untouched. A range
+  is forgotten when its snippet leaves the selection or its text no longer has those words; an
+  excluded chip keeps its range for when it is restored.
 - Click a candidate's text to make it the typed anchor (chain search). Click a row to expand the aligned tail
   against the anchor.
 - Materialize: a snippet is created to the right of the single anchor snippet (stepping down per
@@ -440,10 +467,10 @@ Interactions:
 ## Data / control flow
 
 ```
-select snippet(s) or type phrase
-  -> rhymeStore builds RhymeSuggestRequest (anchors, slot, k, min_score, sources, exclude=dismissed)
+select snippet(s) or type phrase (optionally pick a word range on a chip)
+  -> rhymeStore builds RhymeSuggestRequest (anchors incl. line_index/word_start/word_end, slot, k, min_score, sources, exclude=dismissed)
   -> POST /api/nlp/rhyme-suggest
-       -> resolve anchors to Units (snippet.phonetics lines, or pronounce(text))
+       -> resolve anchors to Units (snippet.phonetics lines or word slices of them, or pronounce(text))
        -> NotesSource.suggest + DictionarySource.suggest (both via RhymeIndex.query, engine-scored)
        -> merge, dedupe by unit id, rank, slot-fit check, page
   <- anchors + candidates
@@ -529,7 +556,8 @@ select snippet(s) or type phrase
   member takes the same short-side discount a direct `score()` call applies (hinge / door hinge at k=2
   is 0.59 from both paths). Before this fix the live endpoint ranked monosyllabic perfect rhymes at 1.0
   above every two-syllable match at k=2.
-- **Cell-level selection deferred** (see Non-scope).
+- **Cell-level selection on the canvas deferred** (see Non-scope); partial anchors are word ranges picked
+  in the sidebar (2026-09-30, below).
 - **Datamuse and LLM deferred**; v0 is fully offline after install.
 - **Sidebar list instead of a canvas layer (2026-09-30).** User decision: nothing reaches the canvas until
   materialized. Milestone 4's radial candidate layer, Pixi candidate cards, hover tooltip, drag-to-promote
@@ -557,3 +585,17 @@ select snippet(s) or type phrase
 - **`derived_from.anchor_text`** is taken from the echoed anchor unit whose id equals `best_anchor_id`
   (empty string if the server did not echo it).
 - **Vitest 3.2.7** (exact pin) is the test runner; Vite 5 in this project is incompatible with vitest 4.
+- **Partial-line anchors as word ranges, picked on the chip (2026-09-30).** User request: "anchor it on
+  only part of a line". The part is chosen in the sidebar (expand the chip, click a start and an end
+  word on one of its syllable strips), not on the canvas, so canvas selection semantics are unchanged.
+  Ranges snap to word boundaries because the engine rhymes on words; a sub-word pick would need a new
+  unit kind. `SnippetAnchor` gains `word_start` / `word_end` (exclusive, open-ended when omitted) and
+  the server validates the range against the line's word count at resolve time (422). The echoed unit
+  gets a range id (`note:<sid>:<line>:<start>-<end>`), the phonetics of the slice only, and the
+  matching slice of the snippet grid as `grid_line`; `RhymeUnitModel` gains `word_end` (null unless a
+  range) so the client can tell a range unit from a suffix. The first click already sends a
+  single-word range rather than waiting for the second, so a one-word anchor needs one click and the
+  list never shows a stale whole-line result while a range is half picked. Ranges live in the store
+  (`anchorRanges`) with the same lifetime rules as chip exclusions, plus pruning when the snippet's
+  text no longer has those words, which keeps a 422 from an edited snippet off the screen. The
+  from-selection slot follows the range (its words' cells, interior rests included).

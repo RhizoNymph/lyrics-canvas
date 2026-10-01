@@ -21,7 +21,13 @@ RhymeSuggestRequest
        snippet: repo.snippet(id, user)             missing -> SnippetNotFoundError -> 404
                 snippet.phonetics (computed on the fly when NULL)
                 line_index null = last line; unknown line -> RhymeQueryError -> 422
-                note_unit(snippet, line, word_offset=0, dialect, tag ids)
+                resolve_word_range(anchor, word count): (0, None) for a whole line; with
+                  word_start / word_end a checked [start, end) (end defaults to the word
+                  count); outside the line -> RhymeQueryError -> 422
+                note_unit(snippet, line, start, dialect, tag ids, word_end=end)
+                  whole line: id note:<sid>:<line>:0;  range: note:<sid>:<line>:<start>-<end>
+                  with text = the range's words, phonetics of the slice only, word_end set;
+                  no pronounceable word in the range -> RhymeQueryError -> 422
   -> context: tag ids of context snippet anchors (missing entries ignored)
   -> sources (run in a worker thread):
        notes:      NotesSource over every line and word-boundary suffix of the user's
@@ -40,8 +46,10 @@ RhymeSuggestRequest
 syllable lands on a slot `0`; `True` when there is no slot. Non-fitting candidates are returned
 and flagged, not hidden.
 
-`grid_line`: for note units, the snippet's `grid_data` line sliced from `word_offset` (word
-indexes rebased, leading rests dropped); otherwise `syllabify_text(unit.text)`.
+`grid_line`: for note units, the snippet's `grid_data` line sliced to `[word_offset, word_end)`
+by `slice_grid_line` (word indexes rebased, leading rests dropped, trailing rests dropped too when
+`word_end` is set); otherwise `syllabify_text(unit.text)`. `RhymeUnitModel.word_end` is set only
+for range anchors.
 
 Data access goes through the `SnippetRepository` protocol (`DbSnippetRepository` in
 production; `tests/fakes.py` in tests), so the service is tested without Postgres.
@@ -52,8 +60,8 @@ production; `tests/fakes.py` in tests), so the service is tested without Postgre
 |---|---|---|
 | canvas not owned / unknown | `CanvasNotFoundError` | 404 |
 | anchor snippet not owned / unknown | `SnippetNotFoundError` | 404 |
-| invalid k, limit, stress, empty anchors | pydantic | 422 |
-| bad line index, empty snippet, unpronounceable text anchor | `RhymeQueryError` | 422 |
+| invalid k, limit, stress, empty anchors, `word_start < 0`, `word_end < 1`, `word_start >= word_end` | pydantic | 422 |
+| bad line index, empty snippet, word range outside the line or without a pronounceable word, unpronounceable text anchor | `RhymeQueryError` | 422 |
 | malformed dialect rule | `DialectRuleError` | 422 |
 
 ## Legacy lookup
