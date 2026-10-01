@@ -173,7 +173,10 @@ class RhymeIndex:
                 ]
                 if not members:
                     continue
-                result = score(effective, bucket.tail, d, weights)
+                # Score at the requested depth, not the bucket depth: members with fewer
+                # than k_eff syllables (d < k_eff) must take the short-side discount that
+                # score() applies, exactly as a direct score(anchor, candidate, k) would.
+                result = score(effective, bucket.tail, k_eff, weights)
                 if result.score < min_score:
                     continue
                 for uid in members:

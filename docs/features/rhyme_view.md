@@ -520,6 +520,11 @@ select snippet(s) or type phrase
   service keeps the one that fits the slot, else the longest, so the layer is not flooded with near-copies.
 - **Legacy `GET /api/nlp/rhymes`**: "perfect" is a 1.0 engine score over the query's rhyme-key depth,
   "near" anything else at or above 0.5 (dictionary) or 0.7 (snippets); the response shape is unchanged.
+- **Index hits are scored at the requested depth.** `RhymeIndex.query` scores each bucket's
+  representative tail with `score(anchor, tail, k)`, not at the bucket depth `d`, so a one-syllable
+  member takes the same short-side discount a direct `score()` call applies (hinge / door hinge at k=2
+  is 0.59 from both paths). Before this fix the live endpoint ranked monosyllabic perfect rhymes at 1.0
+  above every two-syllable match at k=2.
 - **Cell-level selection deferred** (see Non-scope).
 - **Datamuse and LLM deferred**; v0 is fully offline after install.
 - **Frontend store additions (milestone 4).** `pinnedId`/`setPinned` back the "click pins tooltip"

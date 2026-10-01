@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.phonetics import DEFAULT_DIALECT_MAP, RhymeIndex, pronounce
+from app.services.phonetics import DEFAULT_DIALECT_MAP, RhymeIndex, pronounce, score
 from app.services.phonetics.dialect import DialectMap
 from app.services.phonetics.errors import RhymeIndexError, RhymeQueryError
 from app.services.phonetics.types import Provenance
@@ -113,3 +113,17 @@ def test_insert_rejects_unit_built_with_another_dialect(index: RhymeIndex):
 
 def test_empty_tail_returns_nothing(index: RhymeIndex):
     assert index.query(pronounce(""), k=2, min_score=0.5, limit=10) == []
+
+
+def test_query_scores_short_members_at_requested_depth():
+    """A one-syllable member must take the same short-side discount from the index
+    that score(anchor, candidate, k) applies directly, so k=2 ranks true
+    two-syllable rhymes above monosyllabic perfect rhymes."""
+    index = RhymeIndex(DEFAULT_DIALECT_MAP)
+    for word in ("hinge", "syringe", "orange"):
+        index.insert(_unit(word))
+    hits = {h.unit_id: h.score for h in index.query(pronounce("door hinge"), k=2, min_score=0.3, limit=10)}
+    direct = score(DEFAULT_DIALECT_MAP.apply(pronounce("door hinge")), DEFAULT_DIALECT_MAP.apply(pronounce("hinge")), 2)
+    assert hits["dict:hinge"].score == pytest.approx(direct.score)
+    assert hits["dict:hinge"].score < 0.6
+    assert hits["dict:syringe"].score > hits["dict:hinge"].score
