@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Snippet, SnippetType } from '@/types';
+import type { GridData, GridMode, Snippet, SnippetType } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 
 const api = axios.create({
@@ -55,6 +55,11 @@ export interface SnippetCreateBody {
   position_y: number;
   snippet_type?: SnippetType;
   raw_text?: string;
+  grid_mode?: GridMode;
+  beats_per_line?: number | null;
+  /** Stored as-is (no re-syllabification); set by block merging. */
+  grid_data?: GridData;
+  group_id?: string | null;
   /** Set only by rhyme-view promotion. */
   derived_from?: DerivedFrom;
 }

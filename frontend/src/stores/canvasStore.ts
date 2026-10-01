@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { canvasApi, snippetApi, groupApi, tagApi } from '@/api/client';
 import type { Snippet, Group, Tag, CanvasDetail, SnippetType, GridMode } from '@/types';
 import type { DerivedFrom } from '@/types/rhyme';
+import { MergeError, mergeSnippets, toMergeError } from '@/lib/merge';
+import type { MergeMode, MergeResult, NonEmptySnippets } from '@/lib/merge';
 
 interface Viewport {
   x: number;
@@ -37,6 +39,9 @@ interface CanvasState {
   tsneMode: boolean;
   savedPositions: Map<string, { x: number; y: number }> | null;
 
+  /** Outcome of the last merge worth showing: an error, the first warning, or null. */
+  mergeError: MergeError | null;
+
   // Actions
   loadCanvas: (id: string) => Promise<void>;
   setViewport: (v: Partial<Viewport>) => void;
@@ -49,6 +54,12 @@ interface CanvasState {
   deleteSnippet: (id: string) => Promise<void>;
   moveSnippet: (id: string, x: number, y: number) => void;
   commitPositions: () => Promise<void>;
+  /**
+   * Replace the selected snippets (two or more) with one merged snippet at the first
+   * block's position, combining them in canvas-position order. Never throws.
+   */
+  mergeSelected: (mode: MergeMode) => Promise<MergeResult>;
+  clearMergeError: () => void;
 
   // Selection
   selectSnippet: (id: string, multi?: boolean) => void;
@@ -94,6 +105,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   future: [],
   tsneMode: false,
   savedPositions: null,
+  mergeError: null,
 
   loadCanvas: async (id) => {
     const res = await canvasApi.get(id);
@@ -189,6 +201,69 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }));
     await snippetApi.batchPosition(updates);
   },
+
+  mergeSelected: async (mode) => {
+    const fail = (error: MergeError): MergeResult => {
+      set({ mergeError: error });
+      return { ok: false, error };
+    };
+    const { canvasId, snippets, selectedSnippetIds, tags } = get();
+    if (!canvasId) return fail(new MergeError('no_canvas', 'No canvas is loaded'));
+    const selected = [...selectedSnippetIds].map((id) => snippets.get(id)).filter((s): s is Snippet => s !== undefined);
+    if (selected.length < 2) {
+      return fail(new MergeError('too_few_selected', 'Select at least two snippets to merge', null, selected.map((s) => s.id)));
+    }
+    const merged = mergeSnippets(selected as unknown as NonEmptySnippets, mode);
+
+    let created: Snippet;
+    try {
+      const res = await snippetApi.create(canvasId, {
+        raw_text: merged.raw_text,
+        grid_data: merged.grid_data,
+        snippet_type: merged.snippet_type,
+        grid_mode: merged.grid_mode,
+        beats_per_line: merged.beats_per_line,
+        group_id: merged.group_id,
+        position_x: merged.position_x,
+        position_y: merged.position_y,
+      });
+      created = res.data;
+    } catch (err) {
+      return fail(toMergeError(err, 'create_failed', merged.source_ids));
+    }
+
+    // From here on the merged snippet exists; every later failure is a warning, never a rollback.
+    const warnings: MergeError[] = [];
+    const attached: Tag[] = [];
+    const tagResults = await Promise.allSettled(merged.tag_ids.map((tagId) => tagApi.addToSnippet(created.id, tagId)));
+    tagResults.forEach((r, i) => {
+      const tagId = merged.tag_ids[i];
+      if (r.status === 'rejected') {
+        warnings.push(toMergeError(r.reason, 'tag_failed', [tagId]));
+        return;
+      }
+      const tag = tags.get(tagId);
+      if (tag) attached.push(tag);
+    });
+
+    const deleted = new Set<string>();
+    const deleteResults = await Promise.allSettled(merged.source_ids.map((id) => snippetApi.delete(id)));
+    deleteResults.forEach((r, i) => {
+      const id = merged.source_ids[i];
+      if (r.status === 'rejected') warnings.push(toMergeError(r.reason, 'delete_failed', [id]));
+      else deleted.add(id);
+    });
+
+    const next = new Map(get().snippets);
+    for (const id of deleted) next.delete(id);
+    const snippet: Snippet = { ...created, tags: attached };
+    next.set(snippet.id, snippet);
+    get().pushUndoState();
+    set({ snippets: next, selectedSnippetIds: new Set([snippet.id]), mergeError: warnings[0] ?? null });
+    return { ok: true, snippet, warnings };
+  },
+
+  clearMergeError: () => set({ mergeError: null }),
 
   selectSnippet: (id, multi = false) => {
     const { selectedSnippetIds } = get();
