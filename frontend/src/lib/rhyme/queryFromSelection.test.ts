@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { anchorsFromSelection, selectedSnippets } from './queryFromSelection';
+import { anchorsFromSelection, anchorSnippets, selectedSnippets } from './queryFromSelection';
 import type { Snippet } from '@/types';
 
 const snip = (id: string, raw_text: string): Snippet => ({ id, raw_text } as unknown as Snippet);
@@ -39,5 +39,26 @@ describe('anchorsFromSelection', () => {
 describe('selectedSnippets', () => {
   it('returns present snippets in id order', () => {
     expect(selectedSnippets(new Set(['b', 'zzz', 'a']), snippets).map((s) => s.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('anchor exclusion', () => {
+  it('skips snippet anchors whose id was excluded for this query', () => {
+    const out = anchorsFromSelection(new Set(['a', 'b']), snippets, 'tin', new Set(['a']));
+    expect(out).toEqual([
+      { kind: 'snippet', snippet_id: 'b', line_index: null },
+      { kind: 'text', text: 'tin' },
+    ]);
+  });
+
+  it('can exclude every snippet and leave only the typed anchor', () => {
+    expect(anchorsFromSelection(new Set(['a', 'b']), snippets, 'tin', new Set(['a', 'b']))).toEqual([{ kind: 'text', text: 'tin' }]);
+  });
+});
+
+describe('anchorSnippets', () => {
+  it('returns selected, non-blank, non-excluded snippets in id order', () => {
+    expect(anchorSnippets(new Set(['b', 'empty', 'a', 'zzz']), snippets, new Set()).map((s) => s.id)).toEqual(['a', 'b']);
+    expect(anchorSnippets(new Set(['b', 'a']), snippets, new Set(['b'])).map((s) => s.id)).toEqual(['a']);
   });
 });
