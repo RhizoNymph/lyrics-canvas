@@ -77,7 +77,7 @@ describe('mergeHorizontal', () => {
     const merged = mergeHorizontal([a, b]);
     expect(merged.beats_per_line).toBe(3);
     expect(merged.grid_data.lines.map((l) => l.cells.length)).toEqual([3, 3]);
-    expect(merged.grid_data.lines[1].cells.at(-1)).toEqual({ rest: true });
+    expect(merged.grid_data.lines[1].cells[2]).toEqual({ rest: true });
   });
 
   it('unions tags and uses cell-less text lines for a snippet without a grid', () => {
