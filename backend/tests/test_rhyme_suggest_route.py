@@ -53,6 +53,25 @@ def test_rhyme_suggest_ok(client: TestClient):
     assert anchor["provenance"] == "generated" and anchor["text"] == "cat"
 
 
+def test_rhyme_suggest_range_anchor_is_echoed_with_its_grid_slice(client: TestClient):
+    res = client.post(
+        "/api/nlp/rhyme-suggest",
+        json={
+            "canvas_id": "c1",
+            "anchors": [{"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": 3, "word_end": 5}],
+            "k": 1,
+            "limit": 5,
+        },
+    )
+    assert res.status_code == 200, res.text
+    anchor = res.json()["anchors"][0]
+    assert anchor["id"] == "note:s-cat:0:3-5"
+    assert anchor["text"] == "black cat"
+    assert anchor["word_offset"] == 3 and anchor["word_end"] == 5
+    assert anchor["grid_line"]["raw_text"] == "black cat"
+    assert [c["word_index"] for c in anchor["grid_line"]["cells"]] == [0, 1]
+
+
 def test_rhyme_suggest_404_for_foreign_canvas_and_snippet(client: TestClient):
     res = client.post("/api/nlp/rhyme-suggest", json={"canvas_id": "c-other", "anchors": [{"kind": "text", "text": "cat"}]})
     assert res.status_code == 404
@@ -69,6 +88,9 @@ def test_rhyme_suggest_404_for_foreign_canvas_and_snippet(client: TestClient):
         {"canvas_id": "c1", "anchors": [{"kind": "text", "text": "cat"}], "k": 9},
         {"canvas_id": "c1", "anchors": [{"kind": "text", "text": "cat"}], "slot": {"syllable_count": 2, "stress": "1a"}},
         {"canvas_id": "c1", "anchors": [{"kind": "snippet", "snippet_id": "s-cat", "line_index": 9}]},
+        {"canvas_id": "c1", "anchors": [{"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": 9}]},
+        {"canvas_id": "c1", "anchors": [{"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": 2, "word_end": 1}]},
+        {"canvas_id": "c1", "anchors": [{"kind": "snippet", "snippet_id": "s-cat", "line_index": 0, "word_start": -1}]},
         {"canvas_id": "c1", "anchors": [{"kind": "text", "text": "42"}]},
         {"canvas_id": "c1", "anchors": [{"kind": "text", "text": "cat"}], "dialect": {"rules": [{"kind": "merge", "source": ["XX"], "target": ["AA"]}]}},
     ],

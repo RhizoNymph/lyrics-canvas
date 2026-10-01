@@ -199,24 +199,34 @@ def _suffix_key(c: Candidate, slot: Slot | None) -> tuple[float, int, int, int]:
     return (-c.score.score, -c.score.match_depth, 0 if fits_slot(c.unit.stress, slot) else 1, c.unit.word_offset or 0)
 
 
+def slice_grid_line(line: Mapping[str, object], offset: int, end: int | None) -> GridLineModel:
+    """Cells of ``line`` whose word index falls in ``[offset, end)``, re-based to the range.
+
+    Leading rests are dropped; interior rests are kept; trailing rests are kept only for an
+    open-ended slice (``end`` None), so a range's strip ends on its last word.
+    """
+    cells: list[GridCellModel] = []
+    for cell in line.get("cells", []):  # type: ignore[union-attr]
+        word_index = cell.get("word_index")
+        if cell.get("rest"):
+            if cells:
+                cells.append(GridCellModel.model_validate(cell))
+            continue
+        if isinstance(word_index, int) and word_index >= offset and (end is None or word_index < end):
+            cells.append(GridCellModel.model_validate({**cell, "word_index": word_index - offset}))
+    if end is not None:
+        while cells and cells[-1].rest:
+            cells.pop()
+    raw_text = " ".join(str(line.get("raw_text", "")).split()[offset:end])
+    return GridLineModel(cells=cells, syllable_count=sum(1 for c in cells if not c.rest), raw_text=raw_text)
+
+
 def grid_line_for(unit: Unit, grid_data: Mapping[str, object] | None) -> GridLineModel:
     """The unit's beat-grid line: sliced from the snippet grid when available, else syllabified."""
     if unit.line_index is not None and grid_data:
         lines = grid_data.get("lines") or []  # type: ignore[union-attr]
         if unit.line_index < len(lines):
-            line = lines[unit.line_index]
-            offset = unit.word_offset or 0
-            cells: list[GridCellModel] = []
-            for cell in line.get("cells", []):
-                word_index = cell.get("word_index")
-                if cell.get("rest"):
-                    if cells:
-                        cells.append(GridCellModel.model_validate(cell))
-                    continue
-                if isinstance(word_index, int) and word_index >= offset:
-                    cells.append(GridCellModel.model_validate({**cell, "word_index": word_index - offset}))
-            raw_text = " ".join(str(line.get("raw_text", "")).split()[offset:])
-            return GridLineModel(cells=cells, syllable_count=sum(1 for c in cells if not c.rest), raw_text=raw_text)
+            return slice_grid_line(lines[unit.line_index], unit.word_offset or 0, unit.word_end)
     lines = syllabify_text(unit.text)["lines"]
     if lines:
         return GridLineModel.model_validate(lines[0])
@@ -240,6 +250,7 @@ def unit_model(unit: Unit, grid_data: Mapping[str, object] | None = None) -> Rhy
         snippet_id=unit.snippet_id,
         line_index=unit.line_index,
         word_offset=unit.word_offset,
+        word_end=unit.word_end,
         tags=list(unit.tags),
     )
 
@@ -292,11 +303,27 @@ async def resolve_anchor(anchor: Anchor, user_id: str, repo: SnippetRepository, 
                 if found is None:
                     raise RhymeQueryError(f"snippet {snippet_id} has no line {line_index}")
                 line = found
-            unit = note_unit(record.id, line, 0, dialect, record.tag_ids)
+            start, end = resolve_word_range(anchor, len(line.words))
+            unit = note_unit(record.id, line, start, dialect, record.tag_ids, word_end=end)
             if unit is None:
-                raise RhymeQueryError(f"snippet {snippet_id} line {line.line_index} has no pronounceable words")
+                where = f"words {start}-{end}" if end is not None else "line"
+                raise RhymeQueryError(f"snippet {snippet_id} line {line.line_index} {where} has no pronounceable words")
             return ResolvedAnchor(unit, record)
     raise RhymeQueryError("unknown anchor kind")
+
+
+def resolve_word_range(anchor: SnippetAnchor, word_count: int) -> tuple[int, int | None]:
+    """``(word_offset, word_end)`` for the anchor: ``(0, None)`` for a whole line, else a checked
+    ``[start, end)`` with ``0 <= start < end <= word_count`` (an omitted end runs to the line's end)."""
+    if not anchor.has_range:
+        return 0, None
+    start = anchor.word_start or 0
+    end = word_count if anchor.word_end is None else anchor.word_end
+    if start >= word_count or end > word_count or start >= end:
+        raise RhymeQueryError(
+            f"snippet {anchor.snippet_id} word range {start}-{end} is outside the line's {word_count} words"
+        )
+    return start, end
 
 
 async def context_tags(context: Sequence[Anchor], user_id: str, repo: SnippetRepository) -> frozenset[str]:
