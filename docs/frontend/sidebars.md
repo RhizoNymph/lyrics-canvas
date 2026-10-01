@@ -4,44 +4,32 @@ Right-side and bottom panel components for NLP-powered analysis.
 
 ## RhymeSidebar
 
-**File:** `src/components/sidebar/RhymeSidebar.tsx`
+**File:** `src/components/sidebar/RhymeSidebar.tsx` (pieces in `src/components/rhyme/`)
 
-Right-side panel for rhyme lookup. Shows dictionary rhymes (perfect and near) plus rhyme matches found within the user's canvas snippets.
+Right-side panel for the engine-backed rhyme search (`POST /api/nlp/rhyme-suggest`). The selected snippet(s)
+and/or a typed phrase are the anchors; ranked, slot-checked candidates are listed in the panel and reach the
+canvas only when a row is materialized. Full description in [rhyme-view.md](./rhyme-view.md).
 
 ### State
 
-| State | Type | Source | Purpose |
-|-------|------|--------|---------|
-| `input` | string | Local | Current search term |
-| `dictRhymes` | `{ perfect: string[], near: string[] }` | API | Dictionary results |
-| `snippetRhymes` | RhymeResult[] | API | In-snippet matches |
-| `loading` | boolean | Local | API call state |
-| `rhymeSidebarOpen` | boolean | uiStore | Visibility toggle |
-| `rhymeWord` | string | uiStore | Synced search word |
+All state lives in `rhymeStore` (session, params, results, dismissed, exclusions, materialize counts,
+loading/error). The sidebar owns only the expanded row. `uiStore.rhymeSidebarOpen` controls mounting;
+`CanvasPage` renders the sidebar while it is true and the sidebar calls `rhymeStore.enter()` on mount and
+`exit()` on unmount.
 
 ### Interactions
 
-- Type a word and press Enter or click "Find" to search
-- Click any rhyme word to search for that word instead
-- Setting `rhymeWord` in uiStore auto-opens the sidebar
-
-### API Call
-
-```
-GET /api/nlp/rhymes?word=<word>
-Response: {
-  dictionary: { perfect: string[], near: string[] },
-  snippets: RhymeResult[]
-}
-```
+- Type a word or phrase (Enter queries now, typing re-queries after 150 ms); select snippets on the canvas
+- Remove a selected snippet from the anchors with its chip's ×, restore with +
+- Click a candidate's text to search for that phrase instead (chain search)
+- Click a row to see the aligned tail against the anchor
+- Materialize creates a snippet on the canvas; Dismiss hides the row for the session
+- More loads the next 40
 
 ### Layout
 
-Width: 280px fixed. Three sections rendered conditionally:
-
-1. **Perfect Rhymes**: Up to 30 clickable tags
-2. **Near Rhymes**: Up to 20 clickable tags (slightly transparent at 0.8 opacity)
-3. **In Your Snippets**: Rhyme matches from user's lyrics with snippet preview text
+Width: 380px fixed, full height of the canvas area. Header, query controls (search, chips, k, min score,
+slot, sources, rare words), status line with More, scrollable result rows.
 
 ---
 

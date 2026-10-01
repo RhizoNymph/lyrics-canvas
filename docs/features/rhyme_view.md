@@ -1,8 +1,8 @@
 # Rhyme View
 
-Select a snippet (or type a phrase), and the canvas fills with rhyme and near-rhyme candidates that fit
-the slot you are writing into. Supports a rhymes-first writing method: solve the rhyme scheme, then write
-the flow around it.
+Select a snippet (or type a phrase), and a sidebar lists rhyme and near-rhyme candidates that fit the slot
+you are writing into; materialize the ones you want onto the canvas. Supports a rhymes-first writing method:
+solve the rhyme scheme, then write the flow around it.
 
 Source brief: "Rhyme View — Implementation Brief" (Sep 22, 2026). This doc is the implementation contract
 derived from it after reading the codebase. Where the two disagree, this doc wins and the reason is noted
@@ -17,16 +17,18 @@ under [Decisions](#decisions).
   engine and are stored as overrides; a report lists disagreements.
 - **Suggest endpoint**: `POST /api/nlp/rhyme-suggest` returns ranked, slot-checked candidates from the
   dictionary and the user's notes.
-- **Candidate layer** on the canvas: ephemeral candidate blocks rendered with the same beat-grid cells and
-  stress marks as snippets, radial layout around the anchor, capped at 40 visible, promote to snippet,
-  dismiss, discard all on exit.
+- **Rhyme sidebar**: a full-height right sidebar with the query inputs (search box, selected-snippet
+  anchor chips, k, min score, slot, sources, rare words) and the ranked candidates as a list, 40 per page,
+  each row with its beat-grid syllable strip, score, depth and fit; materialize a row to create a snippet on
+  the canvas, dismiss to hide it; nothing reaches the canvas until materialized, and closing the sidebar
+  discards the list.
 
 ## Non-scope (v0)
 
 - Multi-word phrase rhymes (beam search or LLM), Datamuse, semantic axes, UMAP/blended layout, beat/BPM.
 - Cell-level (single syllable) selection inside a snippet. Selection today is snippet-level only; v0 anchors
   are a whole snippet line's tail. A typed phrase covers the "tail from here" case.
-- Persisted per-user controls panel (milestone 5). v0 controls live in the rhyme panel for the session.
+- Persisted per-user controls panel (milestone 5). v0 controls live in the sidebar for the session.
 - Any new workspace, group, or rename features.
 
 ## Vocabulary mapping
@@ -122,7 +124,7 @@ Rules:
   (else the last secondary, else the last syllable).
 - `pronunciation_override` wins over lookup. Backfill creates overrides where existing grid stress differs
   from the engine.
-- Unit ids are deterministic so the frontend can keep candidate positions stable across re-queries.
+- Unit ids are deterministic so the frontend can dedupe pages and track dismissed / materialized units across re-queries.
 
 ### Dialect map (`dialect.py`)
 
@@ -271,7 +273,7 @@ Migration `002_snippet_phonetics` adds two nullable JSONB columns to `snippets`:
   carry the grid's stress on the engine's phones; when the syllable counts differ the engine's syllables are
   right-aligned to the grid cells and missing ones are filled with a stressless AH. Unpronounceable tokens
   keep their word index with an empty syllable list. Rest cells are ignored.
-- `derived_from`: `DerivedFrom` as JSON, set only by promotion.
+- `derived_from`: `DerivedFrom` as JSON, set only by materializing a candidate.
 
 `syllabify_text` keeps producing `grid_data`, but its per-word phones now come from `phonetics.pronounce`
 (CMU, then g2p, then heuristic) so grid cells and phonetics never disagree for new text. The create and
@@ -345,15 +347,16 @@ Semantics:
   `total` is the number of ranked candidates (each source contributes at most 5000).
 - `fits_slot` is true when the candidate's stress string has the slot's length and no candidate stressed
   syllable (1 or 2) lands on a slot `0`. Non-fitting candidates are returned, not hidden.
-- Anchor units are echoed back with their computed phonetics so the UI can show the tail.
+- Anchor units are echoed back with their computed phonetics so the UI can show the tail and each anchor's
+  rhyme key.
 - Errors: 404 canvas not owned or anchor snippet not owned (`CanvasNotFoundError`,
   `SnippetNotFoundError` in `rhyme_suggest_service`); 422 on invalid k, stress string, limit, or empty
   anchors (pydantic), on a bad line index, an empty snippet or an unpronounceable text anchor
   (`RhymeQueryError`), and on a malformed dialect rule (`DialectRuleError`). Mapped in the route.
 - Budget: dictionary query ≤ 200 ms warm, measured by a test.
 
-Promotion is the existing `POST /api/canvases/{id}/snippets` with `raw_text`, `position_x/y`, and the new
-optional `derived_from` field on `SnippetCreate`.
+Materializing (the brief's "promote") is the existing `POST /api/canvases/{id}/snippets` with `raw_text`,
+`position_x/y`, and the new optional `derived_from` field on `SnippetCreate`.
 
 ## Backend files
 
@@ -375,65 +378,64 @@ optional `derived_from` field on `SnippetCreate`.
 
 ## Frontend design
 
-Files under `frontend/src/`:
+The frontend is a sidebar, not a canvas layer (see Decisions, 2026-09-30). Files under `frontend/src/`:
 
 | File | Role |
 |---|---|
-| `types/rhyme.ts` | TS mirrors of the API contract |
+| `types/rhyme.ts` | TS mirrors of the API contract; `RhymeError` (`operation: 'query' \| 'materialize'`) |
 | `api/client.ts` | `nlpApi.rhymeSuggest(req)`; `snippetApi.create` accepts `derived_from` |
-| `stores/rhymeStore.ts` | Rhyme view mode, query params, candidates, dismissed ids, positions, loading/error |
-| `lib/rhyme/radialLayout.ts` | Deterministic radial positions around the anchor; stable for existing ids |
-| `lib/rhyme/slotFit.ts` | Slot derivation from a selected snippet line; client-side fit check for the panel |
-| `lib/rhyme/queryFromSelection.ts` | Builds anchors from `selectedSnippetIds` + typed text |
-| `components/canvas/gridDraw.ts` | Beat-grid drawing and cell text placement extracted from `SnippetCard` so both cards share it |
-| `components/rhyme/CandidateCard.tsx` | Pixi block: provenance-coloured header, dashed border while ephemeral, grid cells, dimmed when `!fits_slot` |
-| `components/rhyme/RhymeLayer.tsx` | Renders capped candidate cards inside the Pixi container above snippets |
-| `components/rhyme/RhymePanel.tsx` | HTML overlay: typed anchor, k, min score, slot, sources, count, More, Exit |
-| `components/rhyme/CandidateTooltip.tsx` | HTML overlay on hover: score, depth, aligned tail vs anchor, source, Promote/Dismiss |
-| `components/rhyme/rhymeColors.ts` | Provenance colours and labels, non-fit alpha, alignment colour scale |
-| `components/rhyme/dashedRect.ts` | Dashed rounded-rect stroke (Pixi v7 has no dashed line style) |
-| `components/canvas/gridConstants.ts` | Cell/padding/header constants without Pixi imports (used by pure modules) |
-| `lib/rhyme/candidateGeometry.ts` | Candidate card size and centre-to-top-left conversion, shared by the store and the card |
+| `stores/rhymeStore.ts` | Session (`active`), query inputs, anchors, candidates, dismissed ids, chip exclusions, materialize counts, loading/error; `materialize` is the only path to the canvas |
+| `lib/rhyme/materializePosition.ts` | Where a materialized snippet lands: right of the single anchor (+40 px), stepping down 60 px per earlier materialization from it; else the viewport centre |
+| `lib/rhyme/candidateList.ts` | List rows (dismissed excluded, limited to the loaded pages), "Showing a–b of total", More enablement |
+| `lib/rhyme/geometry.ts` | `Point`, `Viewport`, `ViewSize`, `viewportCenter` |
+| `lib/rhyme/slotFit.ts` | Slot derivation from a selected snippet line; client-side fit check; manual slot validation |
+| `lib/rhyme/queryFromSelection.ts` | Builds anchors from `selectedSnippetIds` minus chip exclusions + typed text |
 | `lib/rhyme/debounce.ts` | Debounced runner behind the 150 ms re-query hook |
 | `lib/rhyme/errors.ts` | `toRhymeError`: axios failures to the typed `RhymeError` |
-| `hooks/useRhymeQuery.ts` | Immediate query on enter; 150 ms debounced re-query on selection / anchor / param changes |
+| `hooks/useRhymeQuery.ts` | 150 ms debounced re-query on selection / anchor / chip / param changes while open |
+| `components/sidebar/RhymeSidebar.tsx` | 380 px right sidebar; `enter()` on mount, `exit()` on unmount |
+| `components/rhyme/QueryControls.tsx`, `AnchorChips.tsx` | Search box, anchor chips with echoed rhyme keys (× removes for this query), k, min score, slot, sources, rare words |
+| `components/rhyme/CandidateList.tsx`, `CandidateRow.tsx`, `SyllableStrip.tsx`, `AlignmentTable.tsx` | Status line + More, rows (text, syllable strip, score, depth, fit badge, source colour), expand to the aligned tail, Materialize / Dismiss |
+| `components/rhyme/rhymeColors.ts`, `sidebarStyles.ts` | Provenance colours and labels, non-fit alpha, alignment colour scale; sidebar styles |
+| `components/canvas/gridDraw.ts`, `gridConstants.ts` | Beat-grid drawing and constants used by `SnippetCard` (unchanged by this feature) |
 
 Store shape:
 
 ```ts
 interface RhymeState {
-  active: boolean;
-  typedAnchor: string;
+  active: boolean;                       // sidebar open
+  typedAnchor: string; excludedAnchorIds: Set<string>;
   k: 1 | 2 | 3 | 4; minScore: number;
   slot: Slot | null; slotMode: 'manual' | 'from-selection';
-  sources: { notes: boolean; dictionary: boolean };
+  sources: { notes: boolean; dictionary: boolean }; includeRare: boolean;
   anchors: RhymeUnit[]; candidates: RhymeCandidate[]; total: number; offset: number;
-  positions: Map<string, { x: number; y: number }>;
-  dismissed: Set<string>; hoveredId: string | null;
+  dismissed: Set<string>; materializeCounts: Map<string, number>;
+  viewSize: { width: number; height: number };
   loading: boolean; error: RhymeError | null;
-  enter(): void; exit(): void; setTypedAnchor(t): void; setK(k): void; setMinScore(v): void;
-  setSlot(s | null): void; toggleSource(name): void;
-  runQuery(): Promise<void>;   // debounced 150 ms by the caller hook
-  loadMore(): Promise<void>; dismiss(id): void; promote(id, at?): Promise<void>; setHovered(id | null): void;
-  // additions (see Decisions): pinnedId, setPinned(id | null), setSlotMode(mode), viewSize, setViewSize(w, h)
+  enter(): void;                         // activates and queries immediately
+  exit(): void; setTypedAnchor(t): void; excludeAnchor(id): void; restoreAnchor(id): void;
+  setK(k): void; setMinScore(v): void; setSlot(s | null): void; setSlotMode(m): void;
+  toggleSource(name): void; setIncludeRare(v): void; setViewSize(w, h): void;
+  runQuery(): Promise<void>;             // debounced 150 ms by the caller hook
+  loadMore(): Promise<void>; dismiss(id): void; materialize(id): Promise<void>;
 }
 ```
 
-Layout: `distance = base + (1 - score) * spread`, `angle = hash(rhyme_key.join(' ')) mod 2π` plus a small
-per-id jitter so a rhyme family forms a wedge without overlapping. Existing ids keep their position across
-re-queries; new ids are placed fresh. Anchor centre is the centroid of anchor snippets, or the viewport
-centre for typed anchors.
-
 Interactions:
 
-- Toolbar button "Rhyme View" toggles `rhymeStore.active`. Entering with a selection queries immediately.
-- Selection changes while active re-query after 150 ms.
-- Hover a candidate: tooltip. Click: pin tooltip. Promote: button in tooltip or drag the card off the
-  layer (drop anywhere on the canvas). Dismiss: button; id joins `dismissed` for the session.
-- 40 visible; "More" appends the next 40 (offset paging).
-- Exit: candidates, positions, and typed anchor cleared; snippets untouched.
-- Promoted snippet appears at the drop position or the card's position, becomes a normal snippet, and the
-  candidate is removed from the layer.
+- Toolbar button "Rhymes" toggles `uiStore.rhymeSidebarOpen`; the sidebar mounts, calls `enter()`, and
+  queries immediately when a snippet is selected or a phrase is typed.
+- Selection, typed anchor, chip, and parameter changes re-query after 150 ms; Enter in the search box queries now.
+- A chip's × removes that selected snippet from the anchors for this query (restored by + or by deselecting
+  and reselecting it).
+- Click a candidate's text to make it the typed anchor (chain search). Click a row to expand the aligned tail
+  against the anchor.
+- Materialize: a snippet is created to the right of the single anchor snippet (stepping down per
+  materialization) or at the viewport centre; the row is removed and its id joins `dismissed`. The selection
+  is unchanged so the next search keeps the same anchor.
+- Dismiss: row removed; id joins `dismissed` for the session.
+- 40 per page; "More" appends the next 40 (offset paging); "Showing a–b of total".
+- Close: list, typed anchor, exclusions and dismissed ids cleared; snippets untouched.
 
 ## Data / control flow
 
@@ -445,22 +447,23 @@ select snippet(s) or type phrase
        -> NotesSource.suggest + DictionarySource.suggest (both via RhymeIndex.query, engine-scored)
        -> merge, dedupe by unit id, rank, slot-fit check, page
   <- anchors + candidates
-  -> radialLayout (stable positions) -> RhymeLayer renders CandidateCards above snippets
-  -> promote -> POST /api/canvases/{id}/snippets {raw_text, position, derived_from}
+  -> sidebar list (rows; nothing on the canvas)
+  -> materialize -> materializePosition -> POST /api/canvases/{id}/snippets {raw_text, position, derived_from}
        -> syllabify_text + phonetics computed server-side -> snippet inserted in canvasStore
-  -> exit -> layer cleared; nothing persisted except promoted snippets
+  -> close -> list cleared; nothing persisted except materialized snippets
 ```
 
 ## Invariants
 
-- Only promotion writes anything durable. Candidates never touch `snippets` or the DB.
+- Only materializing writes anything durable. Candidates never touch `snippets` or the DB; nothing is drawn on
+  the canvas until a row is materialized.
 - Every candidate shown passed through `score()` and the slot check on the server.
-- The user's snippets never move because of this view.
+- The user's snippets never move because of this feature.
 - `grid_data` stress and `phonetics` stress agree for every snippet; overrides encode any user-side
   disagreement so nothing the user marked changes.
 - Derived Unit fields are recomputed whenever text, override, or dialect digest changes; the cache key
   includes all three.
-- Hard cap of 100 candidates per response and 40 rendered per page.
+- Hard cap of 100 candidates per response and 40 listed per page.
 - `k` in 1..4; stress strings match `^[012]+$`.
 
 ## Milestones and branches
@@ -471,6 +474,7 @@ select snippet(s) or type phrase
 | 2 | Backfill | `feat/rhyme-engine` | migration + script; report of disagreements; syllabifier uses engine phones |
 | 3 | Suggest endpoint | `feat/rhyme-engine` | ranked, fit-checked candidates for an anchor in < 200 ms (dictionary) |
 | 4 | Candidate layer | `feat/rhyme-view` | enter, select, see capped radial candidates, promote, exit with nothing else changed |
+| 4b | Rhyme sidebar | `feat/rhyme-sidebar` | replaces 4: open the sidebar, select or type, see the list, materialize, close with nothing else changed |
 
 `feat/rhyme-view` (frontend) is built against the contract above with mocked responses and needs
 `feat/rhyme-engine` merged to function end to end. Both branches touch `docs/OVERVIEW.md` and this file.
@@ -517,7 +521,7 @@ select snippet(s) or type phrase
   `nltk.data.find` expects, and `Settings.nltk_data_dir` (default `backend/.nltk_data`, ignored by git) is
   registered at startup and populated in the Docker build.
 - **One note suffix per line in the response.** All suffixes of a line share a tail and a score; the
-  service keeps the one that fits the slot, else the longest, so the layer is not flooded with near-copies.
+  service keeps the one that fits the slot, else the longest, so the list is not flooded with near-copies.
 - **Legacy `GET /api/nlp/rhymes`**: "perfect" is a 1.0 engine score over the query's rhyme-key depth,
   "near" anything else at or above 0.5 (dictionary) or 0.7 (snippets); the response shape is unchanged.
 - **Index hits are scored at the requested depth.** `RhymeIndex.query` scores each bucket's
@@ -527,19 +531,28 @@ select snippet(s) or type phrase
   above every two-syllable match at k=2.
 - **Cell-level selection deferred** (see Non-scope).
 - **Datamuse and LLM deferred**; v0 is fully offline after install.
-- **Frontend store additions (milestone 4).** `pinnedId`/`setPinned` back the "click pins tooltip"
-  interaction; `setSlotMode` is needed to switch between from-selection and manual slots; `viewSize`/
-  `setViewSize` let the store centre typed-anchor layouts on the viewport without knowing the DOM; `promote`
-  takes an optional world top-left so a drag-drop can place the snippet where it landed. Nothing in the
-  contract's fields or semantics changed.
-- **Page window rendering.** `loadMore` appends pages to `candidates` (offset paging as specified) but the
-  layer renders only `candidates.slice(offset, offset + 40)`, so at most 40 cards are on the canvas at once;
-  the panel shows "Showing a–b of total".
-- **Dismissed ids are cleared on exit** (session = one rhyme-view session), and a promoted id joins
+- **Sidebar list instead of a canvas layer (2026-09-30).** User decision: nothing reaches the canvas until
+  materialized. Milestone 4's radial candidate layer, Pixi candidate cards, hover tooltip, drag-to-promote
+  and the separate "Rhyme View" toggle are removed; the engine now backs the right sidebar (replacing the old
+  word-lookup sidebar behind the "Rhymes" button). Results are a scrollable list with the same per-row data
+  (syllable strip, score, depth, fit, source, aligned tail on expand) and two actions, Materialize and
+  Dismiss. Materialize places the snippet beside the single anchor snippet (right edge + 40, stepping down 60
+  per earlier materialization from that anchor) or at the viewport centre, and does not change the selection
+  so the next search keeps its anchor. Store fields that only served the layer (`positions`, `pinnedId`,
+  `hoveredId`) are gone; `viewSize` stays because the viewport-centre fallback needs it. The API contract is
+  unchanged.
+- **Anchor chips with per-query exclusion.** Each selected snippet is a chip showing its echoed rhyme key; ×
+  removes it from the anchors (and from slot derivation) while it stays selected, so a multi-select can be
+  narrowed without touching the canvas selection.
+- **`setSlotMode`** switches between from-selection and manual slots; **`includeRare`** exposes the request's
+  `include_rare` flag.
+- **Pages append.** `loadMore` appends pages to `candidates` (offset paging as specified); the list shows every
+  loaded row minus dismissed ones (`listRows`), with "Showing a–b of total".
+- **Dismissed ids are cleared on close** (session = one sidebar session), and a materialized id joins
   `dismissed` so a re-query does not bring the same unit back as a candidate next to its new snippet.
-- **No anchors or no enabled source clears the layer client-side** instead of sending a request the server
+- **No anchors or no enabled source clears the list client-side** instead of sending a request the server
   would reject with 422.
-- **Manual slot validation** lives in the panel (`parseManualSlot`); invalid input sends `slot: null` and
+- **Manual slot validation** lives in the sidebar (`parseManualSlot`); invalid input sends `slot: null` and
   shows the reason rather than blocking the query.
 - **`derived_from.anchor_text`** is taken from the echoed anchor unit whose id equals `best_anchor_id`
   (empty string if the server did not echo it).

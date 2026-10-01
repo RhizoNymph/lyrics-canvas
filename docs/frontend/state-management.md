@@ -1,6 +1,6 @@
 # State Management
 
-Four Zustand stores managing authentication, canvas data, UI state, and the rhyme view.
+Four Zustand stores managing authentication, canvas data, UI state, and the rhyme sidebar session.
 
 ## authStore
 
@@ -76,7 +76,7 @@ The primary store managing all canvas data and interactions.
 | Action | API Call | Notes |
 |--------|---------|-------|
 | `addSnippet(x, y, type)` | `POST /api/canvases/{id}/snippets` | Pushes undo state |
-| `addSnippetFromText(text, x, y, derived_from?)` | `POST /api/canvases/{id}/snippets` | Body `{ raw_text, position_x, position_y, snippet_type: 'freestyle', derived_from }`; inserts the returned snippet, pushes undo state, returns it (`null` when no canvas is loaded). Used by rhyme-view promotion |
+| `addSnippetFromText(text, x, y, derived_from?)` | `POST /api/canvases/{id}/snippets` | Body `{ raw_text, position_x, position_y, snippet_type: 'freestyle', derived_from }`; inserts the returned snippet, pushes undo state, returns it (`null` when no canvas is loaded). Used by the rhyme sidebar's Materialize |
 | `updateSnippet(id, data)` | `PUT /api/snippets/{id}` | Pushes undo state |
 | `deleteSnippet(id)` | `DELETE /api/snippets/{id}` | Pushes undo state |
 | `moveSnippet(id, x, y)` | None | Local only (optimistic) |
@@ -137,7 +137,6 @@ Lightweight store for UI panel visibility and editing state.
 | `searchModalOpen` | boolean | false |
 | `exportDialogOpen` | boolean | false |
 | `editingSnippetId` | `string \| null` | null |
-| `rhymeWord` | string | '' |
 | `similarityTargetId` | `string \| null` | null |
 | `contextMenu` | `{ snippetId: string; x: number; y: number } \| null` | null |
 
@@ -145,12 +144,11 @@ Lightweight store for UI panel visibility and editing state.
 
 | Action | Side Effect |
 |--------|-------------|
-| `toggleRhymeSidebar()` | Toggle boolean |
+| `toggleRhymeSidebar()` | Toggle boolean; `CanvasPage` mounts `RhymeSidebar` while true, which runs `rhymeStore.enter()` / `exit()` |
 | `toggleSimilarityPanel()` | Toggle boolean |
 | `setSearchModalOpen(open)` | Set directly |
 | `setExportDialogOpen(open)` | Set directly |
 | `setEditingSnippet(id)` | Set editing state |
-| `setRhymeWord(word)` | **Also opens rhyme sidebar** |
 | `setSimilarityTarget(id)` | **Also opens similarity panel** |
 | `setContextMenu(menu)` | Set context menu state (snippet ID + screen position) |
 | `closeContextMenu()` | Set contextMenu to null |
@@ -162,21 +160,24 @@ Lightweight store for UI panel visibility and editing state.
 **File:** `src/stores/rhymeStore.ts`
 **Hook:** `useRhymeStore`
 
-Session state for the rhyme view: `active`, query parameters (`typedAnchor`, `k`, `minScore`, `slot`,
-`slotMode`, `sources`), results (`anchors`, `candidates`, `total`, `offset`), `positions` (stable world
-centres per unit id), `dismissed`, `hoveredId`/`pinnedId`, `viewSize`, `loading`, `error: RhymeError | null`.
+Session state for the rhyme sidebar: `active`, query inputs (`typedAnchor`, `excludedAnchorIds`, `k`,
+`minScore`, `slot`, `slotMode`, `sources`, `includeRare`), results (`anchors`, `candidates`, `total`, `offset`),
+`dismissed`, `materializeCounts` (per anchor snippet id), `viewSize`, `loading`, `error: RhymeError | null`.
+Nothing in it is drawn on the canvas; `materialize` is the only path that creates a snippet.
 
 | Action | API Call | Notes |
 |--------|---------|-------|
-| `enter()` / `exit()` | None | Exit clears all results and positions; snippets untouched |
-| `runQuery()` | `POST /api/nlp/rhyme-suggest` | Builds the request from `canvasStore.selectedSnippetIds` + typed anchor; stale responses dropped |
+| `enter()` | `POST /api/nlp/rhyme-suggest` | Activates and queries immediately |
+| `exit()` | None | Clears all session state; params persist; snippets untouched |
+| `runQuery()` | `POST /api/nlp/rhyme-suggest` | Builds the request from `canvasStore.selectedSnippetIds` minus exclusions + typed anchor; stale responses dropped |
 | `loadMore()` | `POST /api/nlp/rhyme-suggest` | Next page (`offset + 40`), appended |
-| `dismiss(id)` | None | Removes the candidate; id sent as `exclude_ids` afterwards |
-| `promote(id, at?)` | via `canvasStore.addSnippetFromText` | Creates a snippet with `derived_from`, then dismisses the id |
-| setters | None | `setTypedAnchor`, `setK`, `setMinScore`, `setSlot`, `setSlotMode`, `toggleSource`, `setViewSize`, `setHovered`, `setPinned` |
+| `dismiss(id)` | None | Removes the row; id sent as `exclude_ids` afterwards |
+| `materialize(id)` | via `canvasStore.addSnippetFromText` | Creates a snippet with `derived_from` beside the single anchor (or at the viewport centre), then dismisses the id |
+| `excludeAnchor(id)` / `restoreAnchor(id)` | None | Chip removal / restore; exclusions are pruned to the selection on each query |
+| setters | None | `setTypedAnchor`, `setK`, `setMinScore`, `setSlot`, `setSlotMode`, `toggleSource`, `setIncludeRare`, `setViewSize` |
 
-Errors are stored as `RhymeError` (`kind`, `operation`, `status`) and never thrown. Full description in
-[rhyme-view.md](./rhyme-view.md).
+Errors are stored as `RhymeError` (`kind`, `operation: 'query' | 'materialize'`, `status`) and never thrown.
+Full description in [rhyme-view.md](./rhyme-view.md).
 
 ---
 
@@ -186,6 +187,6 @@ Errors are stored as `RhymeError` (`kind`, `operation`, `status`) and never thro
 - **Sets for selections/filters**: O(1) membership checks
 - **Optimistic updates**: `moveSnippet` is local-only; `commitPositions` batches to backend on mouseup
 - **Cascade reloads**: Tag operations reload entire canvas for consistency
-- **Auto-open panels**: Setting a rhyme word or similarity target automatically opens the relevant panel
+- **Auto-open panels**: Setting a similarity target automatically opens the similarity panel
 - **Undo snapshots**: Deep copies of snippet + group Maps, 50-state limit
-- **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so overlays can render the failure
+- **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so the sidebar can render the failure

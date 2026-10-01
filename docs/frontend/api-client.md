@@ -223,7 +223,7 @@ Mirrors of `backend/app/schemas/rhyme.py` as specified in
 ```typescript
 class RhymeError extends Error {
   kind: 'network' | 'not_found' | 'invalid_request' | 'server' | 'unknown';
-  operation: 'query' | 'promote';
+  operation: 'query' | 'materialize';
   status: number | null;
 }
 ```

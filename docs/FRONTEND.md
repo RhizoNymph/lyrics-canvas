@@ -10,12 +10,12 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 |--------|-------|-----------|
 | [Canvas Rendering](./frontend/canvas-rendering.md) | Pixi.js viewport, snippet cards, inline grid editor, context menu, grid background, group containers | `CanvasViewport`, `SnippetCard`, `SnippetContextMenu`, `InlineGridEditor`, `InfiniteGrid`, `GroupContainer` |
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing, grid modes, CMU integration | `BeatGridDisplay`, `BeatGridEditor` |
-| [Sidebars](./frontend/sidebars.md) | Rhyme lookup panel, similarity analysis panel | `RhymeSidebar`, `SimilarityPanel` |
+| [Sidebars](./frontend/sidebars.md) | Rhyme sidebar, similarity analysis panel | `RhymeSidebar`, `SimilarityPanel` |
 | [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag filter pills | `Toolbar`, `TagFilterBar` |
 | [Modals](./frontend/modals.md) | Full-text search dialog, export format dialog | `SearchModal`, `ExportDialog` |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor | `App`, `LoginPage`, `RegisterPage`, `CanvasListPage`, `CanvasPage` |
-| [Rhyme View](./frontend/rhyme-view.md) | Ephemeral rhyme-candidate layer: radial layout, candidate cards, panel, tooltip, promotion | `rhymeStore`, `RhymeLayer`, `CandidateCard`, `RhymePanel`, `CandidateTooltip`, `lib/rhyme/*` |
-| [State Management](./frontend/state-management.md) | Zustand stores for auth, canvas data, UI state, rhyme view | `authStore`, `canvasStore`, `uiStore`, `rhymeStore` |
+| [Rhyme Sidebar](./frontend/rhyme-view.md) | Engine-backed rhyme search list with materialize-to-canvas | `rhymeStore`, `RhymeSidebar`, `QueryControls`, `CandidateList`, `CandidateRow`, `lib/rhyme/*` |
+| [State Management](./frontend/state-management.md) | Zustand stores for auth, canvas data, UI state, rhyme sidebar | `authStore`, `canvasStore`, `uiStore`, `rhymeStore` |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces, constants | `client.ts`, `types/index.ts` |
 
 ## Architecture Summary
@@ -28,41 +28,44 @@ src/
   types/rhyme.ts                    Rhyme-suggest API contract types + RhymeError
   api/client.ts                     Axios instance + endpoint modules
   hooks/
-    useRhymeQuery.ts                Debounced rhyme re-query while the view is active
+    useRhymeQuery.ts                Debounced rhyme re-query while the sidebar is open
   lib/rhyme/
-    radialLayout.ts                 Deterministic candidate positions
+    geometry.ts                     Point / viewport types, viewportCenter
+    materializePosition.ts          Where a materialized candidate lands
+    candidateList.ts                Result-list rows, shown range, More
     slotFit.ts                      Slot derivation + fit rule
-    queryFromSelection.ts           Anchors from selection + typed text
-    candidateGeometry.ts            Candidate card size / top-left
+    queryFromSelection.ts           Anchors from selection (minus chips) + typed text
     debounce.ts                     Debounced runner
     errors.ts                       axios -> RhymeError mapping
   stores/
     authStore.ts                    Auth state + JWT persistence
     canvasStore.ts                  Canvas data + undo/redo + t-SNE
     uiStore.ts                      Panel visibility + editing state
-    rhymeStore.ts                   Rhyme view state, query, promote
+    rhymeStore.ts                   Rhyme sidebar session, query, materialize
   components/
     canvas/
       CanvasViewport.tsx            Pixi Stage orchestrator
       SnippetCard.tsx               Individual snippet rendering
       gridConstants.ts              Beat-grid geometry constants
-      gridDraw.ts                   Shared beat-grid drawing (SnippetCard + CandidateCard)
+      gridDraw.ts                   Beat-grid drawing for SnippetCard
       SnippetContextMenu.tsx        Right-click tag assignment menu
       InlineGridEditor.tsx          Inline beat grid editing overlay
       InfiniteGrid.tsx              Background grid
       GroupContainer.tsx            Group bounding boxes
     rhyme/
-      CandidateCard.tsx             Pixi candidate card
-      RhymeLayer.tsx                Candidate cards inside the Pixi container
-      RhymePanel.tsx                Rhyme view controls overlay
-      CandidateTooltip.tsx          Hover/pinned candidate overlay
+      QueryControls.tsx             Search box, chips, k / score / slot / sources
+      AnchorChips.tsx               Selected-snippet anchors with rhyme keys
+      CandidateList.tsx             Status line, rows, More
+      CandidateRow.tsx              One result with Materialize / Dismiss
+      SyllableStrip.tsx             Compact grid_line strip
+      AlignmentTable.tsx            Aligned tail vs anchor
       rhymeColors.ts                Provenance colours
-      dashedRect.ts                 Dashed rounded-rect helper
+      sidebarStyles.ts              Sidebar width + shared styles
     beatgrid/
       BeatGridDisplay.tsx           Read-only grid table
       BeatGridEditor.tsx            Full grid editing UI
     sidebar/
-      RhymeSidebar.tsx              Rhyme lookup panel
+      RhymeSidebar.tsx              Engine-backed rhyme sidebar
       SimilarityPanel.tsx           Similarity results panel
     toolbar/
       Toolbar.tsx                   Top control bar

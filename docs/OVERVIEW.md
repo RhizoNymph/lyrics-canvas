@@ -52,7 +52,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
-- **Rhyme View / Rhymes**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
+- **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
 - **Full-Text Search**: ILIKE-based search across snippet text within a canvas
@@ -81,7 +81,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 |--------|-------|
 | [Canvas Rendering](./frontend/canvas-rendering.md) | Pixi.js viewport, snippet cards, grid background, group containers |
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing |
-| [Sidebars](./frontend/sidebars.md) | Rhyme lookup and similarity analysis panels |
+| [Sidebars](./frontend/sidebars.md) | Rhyme sidebar and similarity analysis panel |
 | [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag filter pills |
 | [Modals](./frontend/modals.md) | Search and export dialogs |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor |
@@ -169,12 +169,13 @@ All services hot-reload via bind-mounted source volumes.
 ```yaml
 Features Index:
   rhyme_view:
-    description: Select a snippet or type a phrase; the canvas fills with engine-scored rhyme and near-rhyme candidates that fit the slot, promotable to snippets.
+    description: Select a snippet or type a phrase; a sidebar lists engine-scored rhyme and near-rhyme candidates that fit the slot, each materializable into a snippet on the canvas.
     entry_points:
       - backend/app/services/phonetics/
       - backend/app/api/nlp.py (POST /api/nlp/rhyme-suggest)
       - backend/scripts/backfill_phonetics.py
       - frontend/src/stores/rhymeStore.ts
+      - frontend/src/components/sidebar/RhymeSidebar.tsx
       - frontend/src/components/rhyme/
       - frontend/src/lib/rhyme/
       - frontend/src/hooks/useRhymeQuery.ts

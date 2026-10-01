@@ -11,15 +11,13 @@ CanvasViewport (root)
       InfiniteGrid        (background grid)
       GroupContainer[]     (group bounding boxes, behind snippets)
       SnippetCard[]        (snippet cards, in front)
-      RhymeLayer           (ephemeral rhyme CandidateCards, above snippets; empty unless rhyme view is active)
   InlineGridEditor         (HTML overlay — inline beat grid editing)
   SnippetContextMenu       (HTML overlay — right-click tag assignment menu)
-  RhymePanel               (HTML overlay — rhyme view controls, only while active)
-  CandidateTooltip         (HTML overlay — hovered/pinned candidate, only while active)
 ```
 
-The container div is `position: relative` so the rhyme overlays can be positioned in canvas-local pixels. See
-[rhyme-view.md](./rhyme-view.md) for the rhyme components.
+The container div is `position: relative` so the HTML overlays can be positioned in canvas-local pixels. Rhyme
+candidates are never drawn here: they live in the [rhyme sidebar](./rhyme-view.md) until materialized into
+ordinary snippets.
 
 ## CanvasViewport
 
@@ -45,14 +43,10 @@ Pixi's `stopPropagation()` only prevents event bubbling within the Pixi scene gr
 
 To distinguish snippet clicks from background clicks, a module-level `_snippetInteracted` flag is used:
 
-1. `SnippetCard.onPointerDown` (and `CandidateCard.onPointerDown`) calls `markSnippetInteraction()` (exported from `CanvasViewport.tsx`)
+1. `SnippetCard.onPointerDown` calls `markSnippetInteraction()` (exported from `CanvasViewport.tsx`)
 2. `onStageClick` sets a 50ms timer; when it fires, it checks and resets the flag
 3. If the flag was set, the click was on a card — skip `clearSelection()`
 4. If the flag was not set, the click was on the background — clear selection
-
-`markSnippetInteraction()` also records a timestamp; the double-click-to-create path skips creation when a card
-was interacted with in the last 500ms, so double-clicking a rhyme candidate does not drop an empty snippet
-under it.
 
 ### Coordinate Transform
 
@@ -76,7 +70,7 @@ When `activeTagFilters` is non-empty, only snippets whose tags intersect the fil
 |-------|-------------------|
 | canvasStore | `viewport`, `setViewport`, `snippets`, `groups`, `activeTagFilters`, `addSnippet`, `clearSelection`, `commitPositions` |
 | uiStore | `editingSnippetId`, `setEditingSnippet` |
-| rhymeStore | `active` (mount overlays), `setViewSize` (on resize, for the typed-anchor layout centre) |
+| rhymeStore | `setViewSize` (on resize; the viewport-centre fallback when materializing a candidate) |
 
 ---
 
@@ -84,12 +78,10 @@ When `activeTagFilters` is non-empty, only snippets whose tags intersect the fil
 
 **Files:** `src/components/canvas/gridConstants.ts`, `src/components/canvas/gridDraw.ts`
 
-The beat-grid drawing shared by `SnippetCard` and the rhyme `CandidateCard`, extracted from `SnippetCard`
-without changing its output.
+The beat-grid drawing used by `SnippetCard`, extracted so the grid geometry has one home.
 
 - `gridConstants.ts` holds `CELL_WIDTH` (60), `CELL_HEIGHT` (24), `PADDING` (14), `HEADER_HEIGHT` (30) and
-  `COUNT_COLUMN_WIDTH` (28) with no Pixi imports, so pure modules (`lib/rhyme/candidateGeometry.ts`) and tests can
-  use them.
+  `COUNT_COLUMN_WIDTH` (28) with no Pixi imports, so pure modules and tests can use them.
 - `drawBeatGrid(g, lines, { s, left, top, maxRight })`: alternating row backgrounds (`0x242448` at 50%) and grid
   lines (`0x4a4a6a` at 50%), clipped at `maxRight`. No-op for empty input. Leaves the 1px grid line style set,
   exactly as the inline code did.
@@ -317,9 +309,6 @@ Dragging the group container moves the group and all contained snippets by the s
 | Grid lines | Dark gray | 0x2a2a4a |
 | Selection border | White | 0xffffff |
 | Group border/fill | Indigo | 0x6366f1 |
-| Rhyme candidate (note) | Sky | #0ea5e9 |
-| Rhyme candidate (dictionary) | Teal | #14b8a6 |
-| Rhyme candidate (generated) | Zinc grey | #71717a |
 | Verse header | Blue | #3b82f6 |
 | Chorus header | Amber | #f59e0b |
 | Bridge header | Purple | #8b5cf6 |
