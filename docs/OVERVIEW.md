@@ -45,7 +45,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging.
 
 ### Beat Grid
-Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line.
+Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)).
 
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are canvas-scoped color labels that can be attached to snippets and used as visibility filters — when a tag filter is active, only snippets with that tag are shown. Tags are assigned via a right-click context menu on snippets, which also supports inline tag creation (auto-assigned to the snippet), editing (name and color), and snippet deletion. Assigned tags appear as colored pill labels in the snippet header.
@@ -193,4 +193,14 @@ Features Index:
       - backend/app/api/snippets.py (POST create with grid_data)
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/merge_blocks.md
+  grid_rearrange:
+    description: In the inline beat-grid editor, select and drag syllable chunks along a line (free reorder over rests and other syllables), insert or remove rests, and move lines up or down; hand-arranged rows survive the debounced syllabify and the text is rebuilt from the grid on save.
+    entry_points:
+      - frontend/src/components/canvas/InlineGridEditor.tsx
+      - frontend/src/components/canvas/GridRow.tsx
+      - frontend/src/components/canvas/useChunkDrag.ts
+      - frontend/src/components/canvas/editorState.ts
+      - frontend/src/lib/grid/
+    depends_on: [beat_grid, canvas_rendering, snippet_crud]
+    doc: docs/features/grid_rearrange.md
 ```

@@ -11,7 +11,7 @@ CanvasViewport (root)
       InfiniteGrid        (background grid)
       GroupContainer[]     (group bounding boxes, behind snippets)
       SnippetCard[]        (snippet cards, in front)
-  InlineGridEditor         (HTML overlay — inline beat grid editing)
+  InlineGridEditor         (HTML overlay — inline beat grid editing; GridRow per line)
   SnippetContextMenu       (HTML overlay — right-click tag assignment menu)
 ```
 
@@ -167,38 +167,63 @@ Cell and count styles come from `gridDraw.createGridTextStyles(s)`.
 
 ## InlineGridEditor
 
-**File:** `src/components/canvas/InlineGridEditor.tsx`
+**Files:** `src/components/canvas/InlineGridEditor.tsx` (orchestration), `src/components/canvas/GridRow.tsx`
+(one row's cells, selection, drag, row buttons), `src/components/canvas/useChunkDrag.ts` (pointer logic),
+`src/components/canvas/editorState.ts` (pure reducers over the row state), with the grid helpers in
+`src/lib/grid/`.
 
 Inline HTML overlay that replaces the Pixi snippet card with an editable beat grid when a snippet is double-clicked. Positioned using viewport coordinates at z-index 1000, scaled to match the Pixi card (`s = zoom * snippetScale`).
 
 ### Editing Model
 
-Each row of the snippet can be either **active** (being typed into) or **inactive** (displaying syllable cells). The grid cells expand dynamically as the user types, providing real-time syllable count feedback.
+State is one `EditorRowsState` (`lines`, `gridData`, `arranged`, `activeRow`) changed only through the
+reducers in `editorState.ts`, plus a `CellSelection` (`row`, `start`, `end`). `gridData` always holds one
+line per non-blank row with `raw_text` in sync, so every row's cells come from `gridData`.
 
-- **Active row**: Displays a live syllable grid (cells + count) above a compact text input. Syllabification uses the API result when fresh (raw_text matches current input), falling back to a local vowel-group heuristic during the ~300ms debounce gap.
-- **Inactive row**: Displays API-syllabified cells from `gridData`, with hover highlight. Click to activate.
+- **Active row**: cells strip above a compact text input. Typing replaces the row's grid line with a
+  local vowel-group estimate (`lib/grid/localSyllabify.ts`) until the debounced `POST /api/nlp/syllabify`
+  result is merged in.
+- **Inactive row**: cells strip with hover highlight. Click the row background (or double-click a cell)
+  to activate it.
+- **Arranged rows**: rows whose cells were moved by hand, had rests inserted, or were loaded from the
+  saved grid with matching text. `mergeSyllabified` never replaces them; typing into one clears the flag.
+- **Chunk selection and drag**: click a cell to select it, shift-click to extend within the row, Escape
+  to clear. Pointer-down on a selected cell starts a drag after 4 px (`useChunkDrag`, pointer capture); a
+  drop indicator marks the gap under the pointer; release calls `moveChunkInRow`, which reorders cells
+  (rests included), re-bases `word_index`, rebuilds the row's text and marks the row arranged. See
+  [Grid Rearrange](../features/grid_rearrange.md).
 
-### Local Syllable Estimation
+### Keyboard
 
-For instant visual feedback while typing, `localSyllabifyLine()` estimates syllable count per word by counting vowel groups (with silent-e adjustment) and splits each word into roughly equal character chunks. This is replaced by the accurate API result once the debounced `POST /api/nlp/syllabify` call returns.
+| Context | Key | Action |
+|---------|-----|--------|
+| Input | Enter | Insert new row below, focus it |
+| Input | Tab / Shift+Tab | Next row (create if on last) / previous row |
+| Input | Escape | Deactivate row (show as cells) |
+| Input | ArrowUp / ArrowDown | Navigate rows |
+| Input | Alt+ArrowUp / Alt+ArrowDown | Move this line up / down |
+| Input | Backspace (empty row) | Delete row, focus previous |
+| Editor | Escape | Clear selection, else deactivate the row, else save and close |
+| Selection | ArrowLeft / ArrowRight | Nudge the chunk one cell |
+| Selection | Insert or `+` | Insert a rest before the selection |
+| Selection | Delete / Backspace / `-` | Remove the selected rests (only when all selected cells are rests) |
+| Selection | Alt+ArrowUp / Alt+ArrowDown | Move the selection's line up / down |
 
-### Keyboard Navigation
-
-| Key | Action |
-|-----|--------|
-| Enter | Syllabify current row, insert new row below, focus it |
-| Tab | Move to next row (create if on last) |
-| Shift+Tab | Move to previous row |
-| Escape (from input) | Deactivate row (show as cells) |
-| Escape (no active row) | Save and close editor |
-| ArrowUp/Down | Navigate rows |
-| Backspace (empty row) | Delete row, focus previous |
+Each row also has `+·` / `−` buttons (shown while that row holds the selection) and `▲` / `▼` buttons
+(disabled at the ends).
 
 ### Save Behavior
 
-- Click outside the editor or Escape (with no active row) triggers save
-- Saves `{ raw_text, grid_data, snippet_type }` via `updateSnippet`, then clears `editingSnippetId`
+- Click outside the editor or Escape (with nothing selected and no active row) triggers save
+- Saves `{ raw_text: rawTextForSave(state), grid_data, snippet_type }` via `updateSnippet`, then clears
+  `editingSnippetId`. Arranged rows' text is rebuilt from their grid; the backend recomputes phonetics
+  from the pair (grid stress wins)
 - Click-outside listener is attached with a 100ms delay to avoid catching the opening double-click
+
+### Layout
+
+Editor width is `max((maxCells * CELL_WIDTH + 2 * PADDING + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s,
+snippet.width * s)`, with the geometry from `gridConstants.ts` and `ROW_CONTROLS_WIDTH` from `GridRow.tsx`.
 
 ### Store Dependencies
 

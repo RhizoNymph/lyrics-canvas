@@ -4,6 +4,8 @@ export interface GridCell {
   stress?: number; // 0=unstressed, 1=primary, 2=secondary
   word_index?: number;
   rest?: boolean;
+  /** Surface word this syllable belongs to (as typed, incl. punctuation); lets raw_text be rebuilt after rearranging. */
+  word?: string;
 }
 
 export interface GridLine {
