@@ -4,7 +4,8 @@
  */
 import type { GridLine, Snippet } from '@/types';
 import { STRESS_PATTERN } from '@/types/rhyme';
-import type { Slot } from '@/types/rhyme';
+import type { AnchorRange, Slot } from '@/types/rhyme';
+import { gridLineOf, sliceGridLine } from './anchorRange';
 
 /** One character per cell; rests and missing stress are "0". */
 export function slotFromGridLine(line: GridLine): Slot | null {
@@ -27,6 +28,13 @@ export function slotFromSnippet(snippet: Snippet, lineIndex: number | null): Slo
   const idx = lineIndex === null ? lastNonEmptyLineIndex(snippet) : lineIndex;
   if (idx === null || idx < 0 || idx >= lines.length) return null;
   return slotFromGridLine(lines[idx]);
+}
+
+/** The slot of a word range: the cells of those words (interior rests included), else null. */
+export function slotFromRange(snippet: Snippet, range: AnchorRange): Slot | null {
+  const line = gridLineOf(snippet, range.lineIndex);
+  if (line === null) return null;
+  return slotFromGridLine(sliceGridLine(line, range));
 }
 
 /**

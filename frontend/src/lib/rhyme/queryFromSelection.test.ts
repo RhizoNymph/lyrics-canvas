@@ -62,3 +62,26 @@ describe('anchorSnippets', () => {
     expect(anchorSnippets(new Set(['b', 'a']), snippets, new Set(['b'])).map((s) => s.id)).toEqual(['a']);
   });
 });
+
+describe('anchor word ranges', () => {
+  const ranged = new Map<string, Snippet>([
+    ['a', { id: 'a', raw_text: 'I saw a black cat\norange door hinge', grid_data: { lines: [
+      { cells: [], syllable_count: 0, raw_text: 'I saw a black cat' },
+      { cells: [], syllable_count: 0, raw_text: 'orange door hinge' },
+    ] } } as unknown as Snippet],
+    ['b', snip('b', 'four inch')],
+  ]);
+
+  it('sends line_index, word_start and word_end for a snippet with a range', () => {
+    const ranges = new Map([['a', { lineIndex: 0, wordStart: 3, wordEnd: 5 }]]);
+    expect(anchorsFromSelection(new Set(['a', 'b']), ranged, '', new Set(), ranges)).toEqual([
+      { kind: 'snippet', snippet_id: 'a', line_index: 0, word_start: 3, word_end: 5 },
+      { kind: 'snippet', snippet_id: 'b', line_index: null },
+    ]);
+  });
+
+  it('an excluded snippet sends nothing even with a range', () => {
+    const ranges = new Map([['a', { lineIndex: 0, wordStart: 3, wordEnd: 5 }]]);
+    expect(anchorsFromSelection(new Set(['a']), ranged, 'tin', new Set(['a']), ranges)).toEqual([{ kind: 'text', text: 'tin' }]);
+  });
+});

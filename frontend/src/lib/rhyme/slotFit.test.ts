@@ -74,3 +74,36 @@ describe('parseManualSlot', () => {
     expect(parseManualSlot('0', '')).toEqual({ ok: false, reason: 'stress' });
   });
 });
+
+describe('slotFromRange', () => {
+  const snippet = {
+    grid_data: {
+      lines: [
+        {
+          cells: [
+            { syllable: 'or', stress: 1, word_index: 0 },
+            { syllable: 'ange', stress: 0, word_index: 0 },
+            { rest: true },
+            { syllable: 'door', stress: 1, word_index: 1 },
+            { syllable: 'hinge', stress: 1, word_index: 2 },
+            { rest: true },
+          ],
+          syllable_count: 4,
+          raw_text: 'orange door hinge',
+        },
+      ],
+    },
+  } as unknown as Snippet;
+
+  it('derives the slot from the cells of the selected words, interior rests included', async () => {
+    const { slotFromRange } = await import('./slotFit');
+    expect(slotFromRange(snippet, { lineIndex: 0, wordStart: 1, wordEnd: 3 })).toEqual({ syllable_count: 2, stress: '11' });
+    expect(slotFromRange(snippet, { lineIndex: 0, wordStart: 0, wordEnd: 2 })).toEqual({ syllable_count: 4, stress: '1001' });
+  });
+
+  it('returns null when the range has no cells or the line is missing', async () => {
+    const { slotFromRange } = await import('./slotFit');
+    expect(slotFromRange(snippet, { lineIndex: 3, wordStart: 0, wordEnd: 1 })).toBeNull();
+    expect(slotFromRange(snippet, { lineIndex: 0, wordStart: 7, wordEnd: 8 })).toBeNull();
+  });
+});

@@ -1,10 +1,12 @@
 /**
  * Builds the `anchors` of a RhymeSuggestRequest from the canvas selection and the
- * sidebar's typed phrase. Snippet anchors use `line_index: null` (last non-empty line); ids in
- * `excluded` (chips removed for this query) are skipped.
+ * sidebar's typed phrase. Snippet anchors use `line_index: null` (last non-empty line) unless a
+ * word range was picked for them in `ranges`; ids in `excluded` (chips removed for this query)
+ * are skipped.
  */
 import type { Snippet } from '@/types';
-import type { AnchorRef } from '@/types/rhyme';
+import type { AnchorRange, AnchorRef } from '@/types/rhyme';
+import { anchorRefFor } from './anchorRange';
 
 /** Selected snippets that exist, in id order for deterministic requests. */
 export function selectedSnippets(selectedIds: ReadonlySet<string>, snippets: ReadonlyMap<string, Snippet>): Snippet[] {
@@ -27,13 +29,10 @@ export function anchorsFromSelection(
   selectedIds: ReadonlySet<string>,
   snippets: ReadonlyMap<string, Snippet>,
   typedText: string,
-  excluded: ReadonlySet<string> = new Set()
+  excluded: ReadonlySet<string> = new Set(),
+  ranges: ReadonlyMap<string, AnchorRange> = new Map()
 ): AnchorRef[] {
-  const anchors: AnchorRef[] = anchorSnippets(selectedIds, snippets, excluded).map((s) => ({
-    kind: 'snippet',
-    snippet_id: s.id,
-    line_index: null,
-  }));
+  const anchors: AnchorRef[] = anchorSnippets(selectedIds, snippets, excluded).map((s) => anchorRefFor(s, ranges.get(s.id)));
   const text = typedText.trim();
   if (text.length > 0) anchors.push({ kind: 'text', text });
   return anchors;

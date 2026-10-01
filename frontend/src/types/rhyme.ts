@@ -35,7 +35,10 @@ export interface RhymeUnit {
   grid_line: GridLine;
   snippet_id?: string;
   line_index?: number;
+  /** Note units: first word of the line included. Echoes `word_start` for a range anchor. */
   word_offset?: number;
+  /** Range anchors only: one past the last word included. Null / absent for whole-line and suffix units. */
+  word_end?: number | null;
   tags: string[];
 }
 
@@ -58,9 +61,32 @@ export interface RhymeCandidate extends RhymeUnit {
   source: SourceName;
 }
 
-export type AnchorRef =
-  | { kind: 'snippet'; snippet_id: string; line_index: number | null }
-  | { kind: 'text'; text: string };
+/**
+ * A snippet line (`line_index: null` = last non-empty line), optionally narrowed to the words
+ * `[word_start, word_end)` of it. Ranges snap to word boundaries: the engine rhymes on words.
+ */
+export interface SnippetAnchorRef {
+  kind: 'snippet';
+  snippet_id: string;
+  line_index: number | null;
+  word_start?: number;
+  /** Exclusive; omitted = to the end of the line. */
+  word_end?: number;
+}
+
+export interface TextAnchorRef {
+  kind: 'text';
+  text: string;
+}
+
+export type AnchorRef = SnippetAnchorRef | TextAnchorRef;
+
+/** The part of a selected snippet a rhyme query anchors on; `wordEnd` is exclusive. */
+export interface AnchorRange {
+  lineIndex: number;
+  wordStart: number;
+  wordEnd: number;
+}
 
 export interface Slot {
   syllable_count: number;
