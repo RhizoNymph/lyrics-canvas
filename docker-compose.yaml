@@ -1,3 +1,5 @@
+name: lyrics-canvas
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
