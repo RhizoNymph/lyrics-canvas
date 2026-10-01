@@ -81,6 +81,10 @@ export function useChunkDrag(options: Options): ChunkDrag {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     justDraggedRef.current = true;
+    // The click that follows a captured pointerup fires synchronously; if a browser skips it, do not eat the next one.
+    setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 0);
     setDragging(false);
     const gap = gapRef.current;
     gapRef.current = null;
