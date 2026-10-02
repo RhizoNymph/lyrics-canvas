@@ -41,6 +41,7 @@ Axios instance with JWT injection and 401 handling.
 | `share(id)` | POST `/api/canvases/{id}/share` | - |
 | `fork(id)` | POST `/api/canvases/{id}/fork` | - |
 | `getShared(token)` | GET `/api/canvases/shared/{token}` | - |
+| `merge(canvasId, snippetIds, mode)` | POST `/api/canvases/{id}/merge` | `{ snippet_ids, mode }` -> `MergeResponse { snippet, deleted_ids }` |
 
 #### snippetApi
 

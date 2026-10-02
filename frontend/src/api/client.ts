@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { GridData, GridMode, Snippet, SnippetType } from '@/types';
+import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 
 const api = axios.create({
@@ -47,6 +47,9 @@ export const canvasApi = {
   share: (id: string) => api.post(`/api/canvases/${id}/share`),
   fork: (id: string) => api.post(`/api/canvases/${id}/fork`),
   getShared: (token: string) => api.get(`/api/canvases/shared/${token}`),
+  /** Replace two or more snippets with one merged snippet, server-side and all or nothing. */
+  merge: (canvasId: string, snippetIds: string[], mode: MergeMode) =>
+    api.post<MergeResponse>(`/api/canvases/${canvasId}/merge`, { snippet_ids: snippetIds, mode }),
 };
 
 // ---- Snippets ----
@@ -57,7 +60,7 @@ export interface SnippetCreateBody {
   raw_text?: string;
   grid_mode?: GridMode;
   beats_per_line?: number | null;
-  /** Stored as-is (no re-syllabification); set by block merging. */
+  /** Stored as-is (no re-syllabification). */
   grid_data?: GridData;
   group_id?: string | null;
   /** Set only by rhyme-view promotion. */

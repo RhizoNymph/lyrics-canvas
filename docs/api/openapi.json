@@ -1,0 +1,3708 @@
+{
+  "components": {
+    "schemas": {
+      "BatchPositionResult": {
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "BatchPositionResult",
+        "type": "object"
+      },
+      "BatchPositionUpdate": {
+        "properties": {
+          "updates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Updates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "updates"
+        ],
+        "title": "BatchPositionUpdate",
+        "type": "object"
+      },
+      "CanvasCreate": {
+        "properties": {
+          "title": {
+            "default": "Untitled Canvas",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "CanvasCreate",
+        "type": "object"
+      },
+      "CanvasDetailResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "groups": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GroupResponse"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "share_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Token"
+          },
+          "snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SnippetResponse"
+            },
+            "title": "Snippets",
+            "type": "array"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "viewport_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewport State"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "title",
+          "is_public",
+          "share_token",
+          "viewport_state",
+          "created_at",
+          "updated_at",
+          "snippets",
+          "groups",
+          "tags"
+        ],
+        "title": "CanvasDetailResponse",
+        "type": "object"
+      },
+      "CanvasResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "share_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Token"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "viewport_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewport State"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "title",
+          "is_public",
+          "share_token",
+          "viewport_state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CanvasResponse",
+        "type": "object"
+      },
+      "CanvasUpdate": {
+        "properties": {
+          "is_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Public"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "viewport_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewport State"
+          }
+        },
+        "title": "CanvasUpdate",
+        "type": "object"
+      },
+      "DerivedFromModel": {
+        "properties": {
+          "anchor_text": {
+            "title": "Anchor Text",
+            "type": "string"
+          },
+          "anchor_unit_id": {
+            "title": "Anchor Unit Id",
+            "type": "string"
+          },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
+          "match_depth": {
+            "title": "Match Depth",
+            "type": "integer"
+          },
+          "provenance": {
+            "enum": [
+              "note",
+              "dictionary",
+              "datamuse",
+              "generated"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "source_unit_id": {
+            "title": "Source Unit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provenance",
+          "source_unit_id",
+          "score",
+          "match_depth",
+          "k",
+          "anchor_unit_id",
+          "anchor_text"
+        ],
+        "title": "DerivedFromModel",
+        "type": "object"
+      },
+      "DialectMapModel": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/DialectRuleModel"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "DialectMapModel",
+        "type": "object"
+      },
+      "DialectRuleModel": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "merge",
+              "final_merge",
+              "optional_final"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source",
+            "type": "array"
+          },
+          "target": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "source"
+        ],
+        "title": "DialectRuleModel",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "properties": {
+          "format": {
+            "default": "markdown",
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "title": "ExportRequest",
+        "type": "object"
+      },
+      "GoogleAuthRequest": {
+        "properties": {
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential"
+        ],
+        "title": "GoogleAuthRequest",
+        "type": "object"
+      },
+      "GridCellModel": {
+        "additionalProperties": true,
+        "description": "One beat of a grid line. Extra keys are kept so client-side annotations survive.",
+        "properties": {
+          "rest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest"
+          },
+          "stress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress"
+          },
+          "syllable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syllable"
+          },
+          "word_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Index"
+          }
+        },
+        "title": "GridCellModel",
+        "type": "object"
+      },
+      "GridDataModel": {
+        "additionalProperties": true,
+        "description": "A beat grid: ``{\"lines\": [{\"cells\": [...]}, ...]}``.",
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/GridLineModel"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "title": "GridDataModel",
+        "type": "object"
+      },
+      "GridLineModel": {
+        "additionalProperties": true,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/GridCellModel"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "raw_text": {
+            "default": "",
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "syllable_count": {
+            "default": 0,
+            "title": "Syllable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cells"
+        ],
+        "title": "GridLineModel",
+        "type": "object"
+      },
+      "GridMode": {
+        "enum": [
+          "auto",
+          "fixed"
+        ],
+        "title": "GridMode",
+        "type": "string"
+      },
+      "GroupCreate": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position_x": {
+            "default": 0.0,
+            "title": "Position X",
+            "type": "number"
+          },
+          "position_y": {
+            "default": 0.0,
+            "title": "Position Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "GroupCreate",
+        "type": "object"
+      },
+      "GroupResponse": {
+        "properties": {
+          "canvas_id": {
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position_x": {
+            "title": "Position X",
+            "type": "number"
+          },
+          "position_y": {
+            "title": "Position Y",
+            "type": "number"
+          },
+          "snippet_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Snippet Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "canvas_id",
+          "name",
+          "position_x",
+          "position_y",
+          "snippet_ids",
+          "created_at"
+        ],
+        "title": "GroupResponse",
+        "type": "object"
+      },
+      "GroupUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          }
+        },
+        "title": "GroupUpdate",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LinePhonetics": {
+        "properties": {
+          "line_index": {
+            "title": "Line Index",
+            "type": "integer"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "rhyme_keys": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rhyme Keys",
+            "type": "object"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/WordPhonetics"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "line_index",
+          "stress",
+          "syllable_count"
+        ],
+        "title": "LinePhonetics",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "MergeMode": {
+        "enum": [
+          "vertical",
+          "horizontal"
+        ],
+        "title": "MergeMode",
+        "type": "string"
+      },
+      "MergeRequest": {
+        "description": "``snippet_ids`` are de-duplicated (first occurrence kept); at least two must remain.",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/MergeMode"
+          },
+          "snippet_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Snippet Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "snippet_ids",
+          "mode"
+        ],
+        "title": "MergeRequest",
+        "type": "object"
+      },
+      "MergeResponse": {
+        "properties": {
+          "deleted_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deleted Ids",
+            "type": "array"
+          },
+          "snippet": {
+            "$ref": "#/components/schemas/SnippetResponse"
+          }
+        },
+        "required": [
+          "snippet",
+          "deleted_ids"
+        ],
+        "title": "MergeResponse",
+        "type": "object"
+      },
+      "PronunciationOverride": {
+        "properties": {
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/SyllableModel"
+            },
+            "title": "Syllables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "syllables"
+        ],
+        "title": "PronunciationOverride",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "display_name"
+        ],
+        "title": "RegisterRequest",
+        "type": "object"
+      },
+      "RhymeCandidateModel": {
+        "properties": {
+          "alignment": {
+            "items": {
+              "$ref": "#/components/schemas/SyllableAlignmentModel"
+            },
+            "title": "Alignment",
+            "type": "array"
+          },
+          "best_anchor_id": {
+            "title": "Best Anchor Id",
+            "type": "string"
+          },
+          "ephemeral": {
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "fits_slot": {
+            "title": "Fits Slot",
+            "type": "boolean"
+          },
+          "grid_line": {
+            "$ref": "#/components/schemas/RhymeGridLineModel"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Index"
+          },
+          "match_depth": {
+            "title": "Match Depth",
+            "type": "integer"
+          },
+          "provenance": {
+            "enum": [
+              "note",
+              "dictionary",
+              "datamuse",
+              "generated"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet Id"
+          },
+          "source": {
+            "enum": [
+              "notes",
+              "dictionary"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeSyllable"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word End"
+          },
+          "word_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Offset"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "provenance",
+          "ephemeral",
+          "syllable_count",
+          "stress",
+          "rhyme_key",
+          "syllables",
+          "grid_line",
+          "score",
+          "match_depth",
+          "best_anchor_id",
+          "fits_slot",
+          "alignment",
+          "source"
+        ],
+        "title": "RhymeCandidateModel",
+        "type": "object"
+      },
+      "RhymeGridCellModel": {
+        "additionalProperties": true,
+        "description": "A grid cell in a rhyme unit's ``grid_line``. Unlike the snippet ``GridCellModel`` it emits\nevery field (unset ones as null), which is the rhyme-suggest wire shape the web client reads.",
+        "properties": {
+          "rest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest"
+          },
+          "stress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress"
+          },
+          "syllable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syllable"
+          },
+          "word_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Index"
+          }
+        },
+        "title": "RhymeGridCellModel",
+        "type": "object"
+      },
+      "RhymeGridLineModel": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeGridCellModel"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cells",
+          "syllable_count",
+          "raw_text"
+        ],
+        "title": "RhymeGridLineModel",
+        "type": "object"
+      },
+      "RhymeSuggestRequest": {
+        "properties": {
+          "anchors": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "snippet": "#/components/schemas/SnippetAnchor",
+                  "text": "#/components/schemas/TextAnchor"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SnippetAnchor"
+                },
+                {
+                  "$ref": "#/components/schemas/TextAnchor"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Anchors",
+            "type": "array"
+          },
+          "canvas_id": {
+            "minLength": 1,
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "context": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "snippet": "#/components/schemas/SnippetAnchor",
+                  "text": "#/components/schemas/TextAnchor"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SnippetAnchor"
+                },
+                {
+                  "$ref": "#/components/schemas/TextAnchor"
+                }
+              ]
+            },
+            "title": "Context",
+            "type": "array"
+          },
+          "dialect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DialectMapModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclude_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclude Ids",
+            "type": "array"
+          },
+          "include_rare": {
+            "default": false,
+            "title": "Include Rare",
+            "type": "boolean"
+          },
+          "k": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 40,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "items": {
+              "enum": [
+                "notes",
+                "dictionary"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreWeightsModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "canvas_id",
+          "anchors"
+        ],
+        "title": "RhymeSuggestRequest",
+        "type": "object"
+      },
+      "RhymeSuggestResponse": {
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeUnitModel"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeCandidateModel"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "anchors",
+          "candidates",
+          "total",
+          "elapsed_ms"
+        ],
+        "title": "RhymeSuggestResponse",
+        "type": "object"
+      },
+      "RhymeSyllable": {
+        "properties": {
+          "coda": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Coda",
+            "type": "array"
+          },
+          "nucleus": {
+            "title": "Nucleus",
+            "type": "string"
+          },
+          "onset": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Onset",
+            "type": "array"
+          },
+          "stress": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "Stress",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "onset",
+          "nucleus",
+          "coda",
+          "stress"
+        ],
+        "title": "RhymeSyllable",
+        "type": "object"
+      },
+      "RhymeUnitModel": {
+        "properties": {
+          "ephemeral": {
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "grid_line": {
+            "$ref": "#/components/schemas/RhymeGridLineModel"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Index"
+          },
+          "provenance": {
+            "enum": [
+              "note",
+              "dictionary",
+              "datamuse",
+              "generated"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "snippet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet Id"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeSyllable"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word End"
+          },
+          "word_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Offset"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "provenance",
+          "ephemeral",
+          "syllable_count",
+          "stress",
+          "rhyme_key",
+          "syllables",
+          "grid_line"
+        ],
+        "title": "RhymeUnitModel",
+        "type": "object"
+      },
+      "ScoreWeightsModel": {
+        "properties": {
+          "coda": {
+            "default": 0.6,
+            "minimum": 0.0,
+            "title": "Coda",
+            "type": "number"
+          },
+          "onset": {
+            "default": 0.25,
+            "minimum": 0.0,
+            "title": "Onset",
+            "type": "number"
+          },
+          "vowel": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Vowel",
+            "type": "number"
+          }
+        },
+        "title": "ScoreWeightsModel",
+        "type": "object"
+      },
+      "ShareResponse": {
+        "properties": {
+          "share_token": {
+            "title": "Share Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_token"
+        ],
+        "title": "ShareResponse",
+        "type": "object"
+      },
+      "Slot": {
+        "properties": {
+          "stress": {
+            "pattern": "^[012]+$",
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Syllable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "syllable_count",
+          "stress"
+        ],
+        "title": "Slot",
+        "type": "object"
+      },
+      "SnippetAnchor": {
+        "description": "A snippet line, or a word range of it (``word_end`` exclusive; None = to the end of the line).",
+        "properties": {
+          "kind": {
+            "const": "snippet",
+            "title": "Kind",
+            "type": "string"
+          },
+          "line_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Index"
+          },
+          "snippet_id": {
+            "minLength": 1,
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "word_end": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word End"
+          },
+          "word_start": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Start"
+          }
+        },
+        "required": [
+          "kind",
+          "snippet_id"
+        ],
+        "title": "SnippetAnchor",
+        "type": "object"
+      },
+      "SnippetCreate": {
+        "properties": {
+          "beats_per_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beats Per Line"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DerivedFromModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GridDataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_mode": {
+            "$ref": "#/components/schemas/GridMode",
+            "default": "auto"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "height": {
+            "default": 200.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "position_x": {
+            "default": 0.0,
+            "title": "Position X",
+            "type": "number"
+          },
+          "position_y": {
+            "default": 0.0,
+            "title": "Position Y",
+            "type": "number"
+          },
+          "raw_text": {
+            "default": "",
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "snippet_type": {
+            "$ref": "#/components/schemas/SnippetType",
+            "default": "freestyle"
+          },
+          "width": {
+            "default": 300.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "title": "SnippetCreate",
+        "type": "object"
+      },
+      "SnippetPhonetics": {
+        "properties": {
+          "dialect_digest": {
+            "title": "Dialect Digest",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LinePhonetics"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PronunciationOverride"
+            },
+            "title": "Overrides",
+            "type": "object"
+          }
+        },
+        "required": [
+          "dialect_digest"
+        ],
+        "title": "SnippetPhonetics",
+        "type": "object"
+      },
+      "SnippetResponse": {
+        "properties": {
+          "beats_per_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beats Per Line"
+          },
+          "canvas_id": {
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DerivedFromModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GridDataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_mode": {
+            "$ref": "#/components/schemas/GridMode"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "phonetics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnippetPhonetics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position_x": {
+            "title": "Position X",
+            "type": "number"
+          },
+          "position_y": {
+            "title": "Position Y",
+            "type": "number"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "snippet_type": {
+            "$ref": "#/components/schemas/SnippetType"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "z_index": {
+            "title": "Z Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "canvas_id",
+          "snippet_type",
+          "grid_mode",
+          "beats_per_line",
+          "grid_data",
+          "raw_text",
+          "position_x",
+          "position_y",
+          "width",
+          "height",
+          "z_index",
+          "group_id",
+          "tags",
+          "phonetics",
+          "derived_from",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SnippetResponse",
+        "type": "object"
+      },
+      "SnippetType": {
+        "enum": [
+          "verse",
+          "chorus",
+          "bridge",
+          "hook",
+          "freestyle"
+        ],
+        "title": "SnippetType",
+        "type": "string"
+      },
+      "SnippetUpdate": {
+        "properties": {
+          "beats_per_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beats Per Line"
+          },
+          "grid_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GridDataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GridMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "snippet_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnippetType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "z_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z Index"
+          }
+        },
+        "title": "SnippetUpdate",
+        "type": "object"
+      },
+      "SyllabifyRequest": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SyllabifyRequest",
+        "type": "object"
+      },
+      "SyllabifyResponse": {
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/GridLineModel"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "title": "SyllabifyResponse",
+        "type": "object"
+      },
+      "SyllableAlignmentModel": {
+        "properties": {
+          "anchor_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Index"
+          },
+          "cand_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cand Index"
+          },
+          "coda": {
+            "title": "Coda",
+            "type": "number"
+          },
+          "nucleus": {
+            "title": "Nucleus",
+            "type": "number"
+          },
+          "onset": {
+            "title": "Onset",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cand_index",
+          "anchor_index",
+          "nucleus",
+          "coda",
+          "onset",
+          "total"
+        ],
+        "title": "SyllableAlignmentModel",
+        "type": "object"
+      },
+      "SyllableModel": {
+        "properties": {
+          "coda": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Coda",
+            "type": "array"
+          },
+          "nucleus": {
+            "title": "Nucleus",
+            "type": "string"
+          },
+          "onset": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Onset",
+            "type": "array"
+          },
+          "stress": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "Stress",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nucleus",
+          "stress"
+        ],
+        "title": "SyllableModel",
+        "type": "object"
+      },
+      "TSNERequest": {
+        "properties": {
+          "n_components": {
+            "default": 2,
+            "title": "N Components",
+            "type": "integer"
+          },
+          "perplexity": {
+            "default": 30.0,
+            "title": "Perplexity",
+            "type": "number"
+          }
+        },
+        "title": "TSNERequest",
+        "type": "object"
+      },
+      "TagCreate": {
+        "properties": {
+          "color": {
+            "default": "#6366f1",
+            "title": "Color",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TagCreate",
+        "type": "object"
+      },
+      "TagLinkResponse": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "TagLinkResponse",
+        "type": "object"
+      },
+      "TagResponse": {
+        "properties": {
+          "canvas_id": {
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "canvas_id",
+          "name",
+          "color"
+        ],
+        "title": "TagResponse",
+        "type": "object"
+      },
+      "TagUpdate": {
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "TagUpdate",
+        "type": "object"
+      },
+      "TextAnchor": {
+        "properties": {
+          "kind": {
+            "const": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "TextAnchor",
+        "type": "object"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "UserResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "oauth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Provider"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "oauth_provider",
+          "created_at"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WordPhonetics": {
+        "properties": {
+          "source": {
+            "enum": [
+              "cmudict",
+              "g2p",
+              "heuristic",
+              "override"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/SyllableModel"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "word": {
+            "title": "Word",
+            "type": "string"
+          }
+        },
+        "required": [
+          "word",
+          "source"
+        ],
+        "title": "WordPhonetics",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Lyrics Canvas",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/google": {
+      "post": {
+        "operationId": "google_auth_api_auth_google_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleAuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Auth",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/canvases": {
+      "get": {
+        "operationId": "list_canvases_api_canvases_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CanvasResponse"
+                  },
+                  "title": "Response List Canvases Api Canvases Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Canvases",
+        "tags": [
+          "canvases"
+        ]
+      },
+      "post": {
+        "operationId": "create_canvas_api_canvases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanvasCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Canvas",
+        "tags": [
+          "canvases"
+        ]
+      }
+    },
+    "/api/canvases/shared/{token}": {
+      "get": {
+        "operationId": "get_shared_canvas_api_canvases_shared__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Shared Canvas",
+        "tags": [
+          "canvases"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}": {
+      "delete": {
+        "operationId": "delete_canvas_api_canvases__canvas_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Canvas",
+        "tags": [
+          "canvases"
+        ]
+      },
+      "get": {
+        "operationId": "get_canvas_api_canvases__canvas_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Canvas",
+        "tags": [
+          "canvases"
+        ]
+      },
+      "put": {
+        "operationId": "update_canvas_api_canvases__canvas_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanvasUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Canvas",
+        "tags": [
+          "canvases"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/export": {
+      "post": {
+        "operationId": "export_canvas_api_canvases__canvas_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Canvas",
+        "tags": [
+          "export"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/fork": {
+      "post": {
+        "operationId": "fork_canvas_api_canvases__canvas_id__fork_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fork Canvas",
+        "tags": [
+          "canvases"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/groups": {
+      "post": {
+        "operationId": "create_group_api_canvases__canvas_id__groups_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Group",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/merge": {
+      "post": {
+        "description": "Replace two or more snippets with one merged snippet (see docs/features/merge_blocks.md).",
+        "operationId": "merge_snippets_api_canvases__canvas_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Merge Snippets",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/search": {
+      "get": {
+        "operationId": "search_api_canvases__canvas_id__search_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/share": {
+      "post": {
+        "operationId": "share_canvas_api_canvases__canvas_id__share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Share Canvas",
+        "tags": [
+          "canvases"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/snippets": {
+      "post": {
+        "operationId": "create_snippet_api_canvases__canvas_id__snippets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnippetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Snippet",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/tags": {
+      "post": {
+        "operationId": "create_tag_api_canvases__canvas_id__tags_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/tsne": {
+      "post": {
+        "operationId": "tsne_layout_api_canvases__canvas_id__tsne_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TSNERequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tsne Layout",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/groups/{group_id}": {
+      "delete": {
+        "operationId": "delete_group_api_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Group",
+        "tags": [
+          "groups"
+        ]
+      },
+      "put": {
+        "operationId": "update_group_api_groups__group_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Group",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/nlp/rhyme-suggest": {
+      "post": {
+        "operationId": "rhyme_suggest_api_nlp_rhyme_suggest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RhymeSuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RhymeSuggestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rhyme Suggest",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/nlp/rhymes": {
+      "get": {
+        "operationId": "get_rhymes_api_nlp_rhymes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "word",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Word",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Rhymes",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/nlp/syllabify": {
+      "post": {
+        "operationId": "syllabify_api_nlp_syllabify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyllabifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyllabifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Syllabify",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/snippets/batch-position": {
+      "patch": {
+        "operationId": "batch_position_api_snippets_batch_position_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchPositionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchPositionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Batch Position",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}": {
+      "delete": {
+        "operationId": "delete_snippet_api_snippets__snippet_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Snippet",
+        "tags": [
+          "snippets"
+        ]
+      },
+      "put": {
+        "operationId": "update_snippet_api_snippets__snippet_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnippetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Snippet",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/similar": {
+      "get": {
+        "operationId": "find_similar_api_snippets__snippet_id__similar_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "top_k",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Top K",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Find Similar",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/tags": {
+      "post": {
+        "operationId": "add_tag_api_snippets__snippet_id__tags_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/tags/{tag_id}": {
+      "delete": {
+        "operationId": "remove_tag_api_snippets__snippet_id__tags__tag_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/tags/{tag_id}": {
+      "delete": {
+        "operationId": "delete_tag_api_tags__tag_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Tag",
+        "tags": [
+          "tags"
+        ]
+      },
+      "put": {
+        "operationId": "update_tag_api_tags__tag_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    }
+  }
+}

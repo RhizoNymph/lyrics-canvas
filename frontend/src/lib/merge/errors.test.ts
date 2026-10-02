@@ -15,32 +15,29 @@ function axiosErr(status: number | null, detail?: string): AxiosError {
 }
 
 describe('MergeError', () => {
-  it('derives its level from the kind', () => {
-    expect(new MergeError('create_failed', 'x').level).toBe('error');
-    expect(new MergeError('too_few_selected', 'x').level).toBe('error');
-    expect(new MergeError('delete_failed', 'x').level).toBe('warning');
-    expect(new MergeError('tag_failed', 'x').level).toBe('warning');
+  it('defaults to no status and no ids', () => {
+    expect(new MergeError('too_few_selected', 'x')).toMatchObject({ kind: 'too_few_selected', status: null, ids: [] });
   });
 });
 
 describe('toMergeError', () => {
   it('passes a MergeError through', () => {
     const e = new MergeError('no_canvas', 'x');
-    expect(toMergeError(e, 'create_failed')).toBe(e);
+    expect(toMergeError(e, 'merge_failed')).toBe(e);
   });
 
   it('maps axios errors with status and detail', () => {
-    const e = toMergeError(axiosErr(404, 'Snippet not found'), 'delete_failed', ['s1']);
-    expect(e).toMatchObject({ kind: 'delete_failed', level: 'warning', status: 404, message: 'Snippet not found', ids: ['s1'] });
+    const e = toMergeError(axiosErr(404, 'Snippet not found'), 'merge_failed', ['s1', 's2']);
+    expect(e).toMatchObject({ kind: 'merge_failed', status: 404, message: 'Snippet not found', ids: ['s1', 's2'] });
   });
 
   it('maps a network error to a null status', () => {
-    const e = toMergeError(axiosErr(null), 'create_failed');
-    expect(e).toMatchObject({ kind: 'create_failed', status: null, message: 'fail' });
+    const e = toMergeError(axiosErr(null), 'merge_failed');
+    expect(e).toMatchObject({ kind: 'merge_failed', status: null, message: 'fail' });
   });
 
   it('maps plain errors and other throwables', () => {
-    expect(toMergeError(new Error('boom'), 'tag_failed').message).toBe('boom');
-    expect(toMergeError('boom', 'tag_failed').message).toBe('boom');
+    expect(toMergeError(new Error('boom'), 'merge_failed').message).toBe('boom');
+    expect(toMergeError('boom', 'merge_failed').message).toBe('boom');
   });
 });

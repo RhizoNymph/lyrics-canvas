@@ -75,6 +75,16 @@ export interface CanvasDetail extends Canvas {
   tags: Tag[];
 }
 
+// ---- Merge (POST /api/canvases/{id}/merge) ----
+export type MergeMode = 'vertical' | 'horizontal';
+
+export interface MergeResponse {
+  /** The merged snippet, created at the first block's position with the union of the tags. */
+  snippet: Snippet;
+  /** The originals the server deleted, in merge order. */
+  deleted_ids: string[];
+}
+
 export interface User {
   id: string;
   email: string;

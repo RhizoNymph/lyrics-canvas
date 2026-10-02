@@ -18,8 +18,8 @@ from app.models.snippet import Snippet
 from app.schemas.phonetics import SnippetPhonetics
 from app.schemas.rhyme import (
     Anchor,
-    GridCellModel,
-    GridLineModel,
+    RhymeGridCellModel,
+    RhymeGridLineModel,
     RhymeCandidateModel,
     RhymeSuggestRequest,
     RhymeSuggestResponse,
@@ -199,29 +199,29 @@ def _suffix_key(c: Candidate, slot: Slot | None) -> tuple[float, int, int, int]:
     return (-c.score.score, -c.score.match_depth, 0 if fits_slot(c.unit.stress, slot) else 1, c.unit.word_offset or 0)
 
 
-def slice_grid_line(line: Mapping[str, object], offset: int, end: int | None) -> GridLineModel:
+def slice_grid_line(line: Mapping[str, object], offset: int, end: int | None) -> RhymeGridLineModel:
     """Cells of ``line`` whose word index falls in ``[offset, end)``, re-based to the range.
 
     Leading rests are dropped; interior rests are kept; trailing rests are kept only for an
     open-ended slice (``end`` None), so a range's strip ends on its last word.
     """
-    cells: list[GridCellModel] = []
+    cells: list[RhymeGridCellModel] = []
     for cell in line.get("cells", []):  # type: ignore[union-attr]
         word_index = cell.get("word_index")
         if cell.get("rest"):
             if cells:
-                cells.append(GridCellModel.model_validate(cell))
+                cells.append(RhymeGridCellModel.model_validate(cell))
             continue
         if isinstance(word_index, int) and word_index >= offset and (end is None or word_index < end):
-            cells.append(GridCellModel.model_validate({**cell, "word_index": word_index - offset}))
+            cells.append(RhymeGridCellModel.model_validate({**cell, "word_index": word_index - offset}))
     if end is not None:
         while cells and cells[-1].rest:
             cells.pop()
     raw_text = " ".join(str(line.get("raw_text", "")).split()[offset:end])
-    return GridLineModel(cells=cells, syllable_count=sum(1 for c in cells if not c.rest), raw_text=raw_text)
+    return RhymeGridLineModel(cells=cells, syllable_count=sum(1 for c in cells if not c.rest), raw_text=raw_text)
 
 
-def grid_line_for(unit: Unit, grid_data: Mapping[str, object] | None) -> GridLineModel:
+def grid_line_for(unit: Unit, grid_data: Mapping[str, object] | None) -> RhymeGridLineModel:
     """The unit's beat-grid line: sliced from the snippet grid when available, else syllabified."""
     if unit.line_index is not None and grid_data:
         lines = grid_data.get("lines") or []  # type: ignore[union-attr]
@@ -229,8 +229,8 @@ def grid_line_for(unit: Unit, grid_data: Mapping[str, object] | None) -> GridLin
             return slice_grid_line(lines[unit.line_index], unit.word_offset or 0, unit.word_end)
     lines = syllabify_text(unit.text)["lines"]
     if lines:
-        return GridLineModel.model_validate(lines[0])
-    return GridLineModel(cells=[], syllable_count=0, raw_text=unit.text)
+        return RhymeGridLineModel.model_validate(lines[0])
+    return RhymeGridLineModel(cells=[], syllable_count=0, raw_text=unit.text)
 
 
 def unit_model(unit: Unit, grid_data: Mapping[str, object] | None = None) -> RhymeUnitModel:

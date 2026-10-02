@@ -96,7 +96,10 @@ class RhymeSyllable(BaseModel):
     stress: Literal[0, 1, 2]
 
 
-class GridCellModel(BaseModel):
+class RhymeGridCellModel(BaseModel):
+    """A grid cell in a rhyme unit's ``grid_line``. Unlike the snippet ``GridCellModel`` it emits
+    every field (unset ones as null), which is the rhyme-suggest wire shape the web client reads."""
+
     model_config = ConfigDict(extra="allow")
 
     syllable: str | None = None
@@ -105,8 +108,8 @@ class GridCellModel(BaseModel):
     rest: bool | None = None
 
 
-class GridLineModel(BaseModel):
-    cells: list[GridCellModel]
+class RhymeGridLineModel(BaseModel):
+    cells: list[RhymeGridCellModel]
     syllable_count: int
     raw_text: str
 
@@ -120,7 +123,7 @@ class RhymeUnitModel(BaseModel):
     stress: str
     rhyme_key: list[str]
     syllables: list[RhymeSyllable]
-    grid_line: GridLineModel
+    grid_line: RhymeGridLineModel
     snippet_id: str | None = None
     line_index: int | None = None
     word_offset: int | None = None

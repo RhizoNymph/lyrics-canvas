@@ -54,7 +54,6 @@ export default function Toolbar() {
   };
 
   const mergeBtnStyle = canMerge ? btnStyle : disabledBtnStyle;
-  const mergeNoticeColor = mergeError?.level === 'warning' ? '#f59e0b' : '#ef4444';
 
   return (
     <div
@@ -126,9 +125,9 @@ export default function Toolbar() {
           role="status"
           onClick={clearMergeError}
           title="Click to dismiss"
-          style={{ fontSize: 12, color: mergeNoticeColor, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}
+          style={{ fontSize: 12, color: '#ef4444', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}
         >
-          {mergeError.level === 'warning' ? 'Merged with a problem: ' : 'Merge failed: '}
+          Merge failed:{' '}
           {mergeError.message}
         </span>
       )}

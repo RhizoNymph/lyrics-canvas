@@ -1,12 +1,14 @@
 from pydantic import BaseModel
 
+from app.schemas.snippet import GridLineModel
+
 
 class SyllabifyRequest(BaseModel):
     text: str
 
 
 class SyllabifyResponse(BaseModel):
-    lines: list[dict]
+    lines: list[GridLineModel]
 
 
 class SearchResult(BaseModel):

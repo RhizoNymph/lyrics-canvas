@@ -33,6 +33,7 @@ app/
     user.py / canvas.py / snippet.py / group.py / tag.py / embedding.py
   schemas/
     auth.py / canvas.py / snippet.py / group.py / tag.py / nlp.py
+    merge.py                        Merge request/response
     phonetics.py                    SnippetPhonetics (snippets.phonetics column)
     rhyme.py                        Rhyme suggest request/response
   services/
@@ -40,6 +41,8 @@ app/
     canvas_service.py               Canvas CRUD + sharing + forking
     group_service.py                Group CRUD
     tag_service.py                  Tag CRUD + associations
+    snippet_service.py              Snippet CRUD + merge transaction (replace_with_merged)
+    merge_service.py                Block merge rules (pure)
     export_service.py               Text/Markdown/PDF generation
     phonetics_service.py            Snippet phonetics + grid reconciliation + note units
     rhyme_suggest_service.py        Rhyme suggest: anchors, sources, rank, slot fit, page
@@ -56,23 +59,27 @@ app/
       search_service.py             ILIKE text search
   api/
     deps.py                         Auth dependency injection
-    auth.py / canvases.py / groups.py / tags.py / nlp.py / export.py
+    auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py
 scripts/
   backfill_phonetics.py             Fill snippets.phonetics for existing rows
+  export_openapi.py                 Write docs/api/openapi.json (committed snapshot)
 ```
 
-## API Surface (30 endpoints)
+## API Surface (33 endpoints)
 
 | Area | Count | Auth |
 |------|-------|------|
-| Authentication | 3 | Public / Bearer |
+| Authentication | 4 (register, login, google, me) | Public / Bearer |
 | Canvases | 8 | Bearer (shared is public) |
-| Snippets | 4 | Bearer |
+| Snippets | 5 (create, update, delete, batch position, merge) | Bearer |
 | Groups | 3 | Bearer |
-| Tags | 4 | Bearer |
+| Tags | 5 (create, update, delete, link, unlink) | Bearer |
 | NLP | 6 | Mixed |
 | Export | 1 | Bearer |
 | Health | 1 | Public |
+
+Every route the clients call declares a pydantic `response_model`; the generated OpenAPI document is
+committed at [docs/api/openapi.json](./api/README.md) and a test fails when it drifts.
 
 ## Key Patterns
 
@@ -81,3 +88,5 @@ scripts/
 - **Cascade deletes**: Canvas deletion removes all children
 - **Batch positioning**: Single PATCH for multi-snippet moves
 - **Ownership verification**: All CRUD checks Canvas.owner_id
+- **Typed responses**: response models keep the historical wire shape (`tests/test_response_shapes.py`); grids are emitted exactly as stored
+- **Server-side merge**: `POST /api/canvases/{id}/merge` replaces 2+ snippets in one transaction ([merge_blocks.md](./features/merge_blocks.md))

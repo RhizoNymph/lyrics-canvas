@@ -5,13 +5,13 @@ from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.api.canvases import _group_response
 from app.models.user import User
-from app.schemas.group import GroupCreate, GroupUpdate
+from app.schemas.group import GroupCreate, GroupResponse, GroupUpdate
 from app.services import group_service
 
 router = APIRouter(tags=["groups"])
 
 
-@router.post("/api/canvases/{canvas_id}/groups", status_code=201)
+@router.post("/api/canvases/{canvas_id}/groups", response_model=GroupResponse, status_code=201)
 async def create_group(
     canvas_id: str,
     req: GroupCreate,
@@ -24,7 +24,7 @@ async def create_group(
     return _group_response(group)
 
 
-@router.put("/api/groups/{group_id}")
+@router.put("/api/groups/{group_id}", response_model=GroupResponse)
 async def update_group(
     group_id: str,
     req: GroupUpdate,

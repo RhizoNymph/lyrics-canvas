@@ -1,5 +1,9 @@
 from pydantic import BaseModel
 
+from app.schemas.group import GroupResponse
+from app.schemas.snippet import SnippetResponse
+from app.schemas.tag import TagResponse
+
 
 class CanvasCreate(BaseModel):
     title: str = "Untitled Canvas"
@@ -21,10 +25,15 @@ class CanvasResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    model_config = {"from_attributes": True}
+    # Responses always carry every field, so defaulted fields are required in the output schema.
+    model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}
 
 
 class CanvasDetailResponse(CanvasResponse):
-    snippets: list = []
-    groups: list = []
-    tags: list = []
+    snippets: list[SnippetResponse] = []
+    groups: list[GroupResponse] = []
+    tags: list[TagResponse] = []
+
+
+class ShareResponse(BaseModel):
+    share_token: str

@@ -1,13 +1,32 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer
 
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
+from app.schemas.tag import TagResponse
 
 
-class GridCellModel(BaseModel):
+class FaithfulModel(BaseModel):
+    """A permissive model that serializes only the keys it was given (plus extras).
+
+    Grids are stored and returned verbatim: a rest cell ``{"rest": true}`` must not grow
+    ``"syllable": null`` etc. on the way out, so unset optional fields are never emitted.
+    """
+
+    # Validation and serialization schemas are identical (no field is guaranteed on output),
+    # so pin one mode and the OpenAPI document gets a single component per grid model.
+    model_config = ConfigDict(extra="allow", json_schema_mode_override="validation")
+
+    # No return annotation on purpose: an annotated return type would replace the model's
+    # serialization JSON schema with that type's.
+    @model_serializer(mode="wrap")
+    def _set_fields_only(self, handler: SerializerFunctionWrapHandler):
+        data = handler(self)
+        keep = self.model_fields_set | set(self.model_extra or {})
+        return {key: value for key, value in data.items() if key in keep}
+
+
+class GridCellModel(FaithfulModel):
     """One beat of a grid line. Extra keys are kept so client-side annotations survive."""
-
-    model_config = ConfigDict(extra="allow")
 
     syllable: str | None = None
     stress: int | None = None
@@ -15,18 +34,14 @@ class GridCellModel(BaseModel):
     rest: bool | None = None
 
 
-class GridLineModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
+class GridLineModel(FaithfulModel):
     cells: list[GridCellModel]
     syllable_count: int = 0
     raw_text: str = ""
 
 
-class GridDataModel(BaseModel):
-    """A client-supplied beat grid: ``{"lines": [{"cells": [...]}, ...]}``."""
-
-    model_config = ConfigDict(extra="allow")
+class GridDataModel(FaithfulModel):
+    """A beat grid: ``{"lines": [{"cells": [...]}, ...]}``."""
 
     lines: list[GridLineModel]
 
@@ -50,7 +65,7 @@ class SnippetUpdate(BaseModel):
     snippet_type: SnippetType | None = None
     grid_mode: GridMode | None = None
     beats_per_line: int | None = None
-    grid_data: dict | None = None
+    grid_data: GridDataModel | None = None
     raw_text: str | None = None
     position_x: float | None = None
     position_y: float | None = None
@@ -64,13 +79,17 @@ class BatchPositionUpdate(BaseModel):
     updates: list[dict]  # [{"id": "...", "position_x": ..., "position_y": ...}]
 
 
+class BatchPositionResult(BaseModel):
+    updated: int
+
+
 class SnippetResponse(BaseModel):
     id: str
     canvas_id: str
     snippet_type: SnippetType
     grid_mode: GridMode
     beats_per_line: int | None = None
-    grid_data: dict | None = None
+    grid_data: GridDataModel | None = None
     raw_text: str
     position_x: float
     position_y: float
@@ -78,10 +97,11 @@ class SnippetResponse(BaseModel):
     height: float
     z_index: int
     group_id: str | None = None
-    tags: list = []
+    tags: list[TagResponse] = []
     phonetics: SnippetPhonetics | None = None
     derived_from: DerivedFromModel | None = None
     created_at: str
     updated_at: str
 
-    model_config = {"from_attributes": True}
+    # Responses always carry every field, so defaulted fields are required in the output schema.
+    model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}
