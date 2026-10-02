@@ -5,6 +5,7 @@
 
     <!-- Cleartext is allowed only because the dev backend is plain HTTP on the LAN. -->
     <application
+        android:name=".LyricsApp"
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="true">
