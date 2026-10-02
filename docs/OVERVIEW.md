@@ -219,4 +219,14 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  android_app:
+    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete) and the rhyme sheet with materialize (docs/android/canvas.md).
+    entry_points:
+      - android/app/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/MainActivity.kt
+      - android/core/model/
+      - android/core/logic/
+      - android/core/data/
+    depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
+    doc: docs/features/android_app.md
 ```
