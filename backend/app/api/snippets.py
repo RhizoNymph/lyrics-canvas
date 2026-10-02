@@ -8,7 +8,7 @@ from app.api.deps import get_current_user
 from app.api.canvases import _snippet_response
 from app.models.user import User
 from app.schemas.phonetics import SnippetPhonetics
-from app.schemas.snippet import SnippetCreate, SnippetUpdate, BatchPositionUpdate
+from app.schemas.snippet import BatchPositionResult, BatchPositionUpdate, SnippetCreate, SnippetResponse, SnippetUpdate
 from app.services import snippet_service
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.phonetics_service import compute_snippet_phonetics
@@ -29,17 +29,18 @@ def _compute_size(grid_data: dict) -> tuple[float, float]:
 
     Width = (max_cells + 1) * CELL_WIDTH + padding  ("+1" leaves room for one more syllable)
     Height = num_lines * CELL_HEIGHT + header + padding
+    Floats, as the columns store them, so a fresh snippet serializes like a reloaded one.
     """
     lines = grid_data.get("lines", [])
     if not lines:
-        return (MIN_WIDTH, MIN_HEIGHT)
+        return (float(MIN_WIDTH), float(MIN_HEIGHT))
     max_cells = max((len(line.get("cells", [])) for line in lines), default=0)
     width = max((max_cells + 1) * CELL_WIDTH + PADDING * 2 + 20, MIN_WIDTH)  # +20 for syllable count column
     height = max(len(lines) * CELL_HEIGHT + HEADER_HEIGHT + PADDING * 2, MIN_HEIGHT)
-    return (width, height)
+    return (float(width), float(height))
 
 
-@router.post("/api/canvases/{canvas_id}/snippets", status_code=201)
+@router.post("/api/canvases/{canvas_id}/snippets", response_model=SnippetResponse, status_code=201)
 async def create_snippet(
     canvas_id: str,
     req: SnippetCreate,
@@ -72,7 +73,7 @@ async def create_snippet(
     return _snippet_response(snippet)
 
 
-@router.put("/api/snippets/{snippet_id}")
+@router.put("/api/snippets/{snippet_id}", response_model=SnippetResponse)
 async def update_snippet(
     snippet_id: str,
     req: SnippetUpdate,
@@ -113,11 +114,11 @@ async def delete_snippet(
         raise HTTPException(status_code=404, detail="Snippet not found")
 
 
-@router.patch("/api/snippets/batch-position")
+@router.patch("/api/snippets/batch-position", response_model=BatchPositionResult)
 async def batch_position(
     req: BatchPositionUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     count = await snippet_service.batch_update_positions(db, req.updates, str(user.id))
-    return {"updated": count}
+    return BatchPositionResult(updated=count)

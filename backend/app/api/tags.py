@@ -5,13 +5,13 @@ from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.api.canvases import _tag_response
 from app.models.user import User
-from app.schemas.tag import TagCreate, TagUpdate
+from app.schemas.tag import TagCreate, TagLinkResponse, TagResponse, TagUpdate
 from app.services import tag_service
 
 router = APIRouter(tags=["tags"])
 
 
-@router.post("/api/canvases/{canvas_id}/tags", status_code=201)
+@router.post("/api/canvases/{canvas_id}/tags", response_model=TagResponse, status_code=201)
 async def create_tag(
     canvas_id: str,
     req: TagCreate,
@@ -24,7 +24,7 @@ async def create_tag(
     return _tag_response(tag)
 
 
-@router.put("/api/tags/{tag_id}")
+@router.put("/api/tags/{tag_id}", response_model=TagResponse)
 async def update_tag(
     tag_id: str,
     req: TagUpdate,
@@ -47,7 +47,7 @@ async def delete_tag(
         raise HTTPException(status_code=404, detail="Tag not found")
 
 
-@router.post("/api/snippets/{snippet_id}/tags")
+@router.post("/api/snippets/{snippet_id}/tags", response_model=TagLinkResponse)
 async def add_tag(
     snippet_id: str,
     tag_id: str,
@@ -56,7 +56,7 @@ async def add_tag(
 ):
     if not await tag_service.add_tag_to_snippet(db, snippet_id, tag_id, str(user.id)):
         raise HTTPException(status_code=404, detail="Not found")
-    return {"ok": True}
+    return TagLinkResponse(ok=True)
 
 
 @router.delete("/api/snippets/{snippet_id}/tags/{tag_id}", status_code=204)

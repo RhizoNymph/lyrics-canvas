@@ -22,4 +22,5 @@ class GroupResponse(BaseModel):
     snippet_ids: list[str] = []
     created_at: str
 
-    model_config = {"from_attributes": True}
+    # Responses always carry every field, so defaulted fields are required in the output schema.
+    model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}

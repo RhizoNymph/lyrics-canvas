@@ -25,10 +25,9 @@ from app.services.rhyme_suggest_service import CanvasNotFoundError, SnippetNotFo
 router = APIRouter(tags=["nlp"])
 
 
-@router.post("/api/nlp/syllabify")
+@router.post("/api/nlp/syllabify", response_model=SyllabifyResponse)
 async def syllabify(req: SyllabifyRequest):
-    result = syllabify_text(req.text)
-    return result
+    return SyllabifyResponse.model_validate(syllabify_text(req.text))
 
 
 @router.get("/api/canvases/{canvas_id}/search")
