@@ -87,14 +87,23 @@ row sits above the IME (`imePadding`), and the grid scrolls the active row into 
 ## Data / control flow
 
 ```
-Login -> ApiClient(token) -> CanvasListViewModel -> CanvasViewModel(StateFlow<CanvasUiState>)
-  canvas gestures -> CanvasViewModel (viewport, selection, moves) -> batch-position on drag end
-  selection -> RhymeViewModel: anchors(selection, ranges, excluded) + typed text + controls
-             -> debounce(150ms) + mapLatest -> rhyme-suggest -> rows
-  Materialize -> materializePosition() -> POST snippet (derived_from) -> CanvasViewModel inserts
-  Merge -> POST merge -> replace originals with merged snippet, select it
-  Tap card -> GridEditorViewModel(EditorRowsState port) -> PUT snippet (raw_text + grid_data)
+TokenStore.tokens -> SessionViewModel (SignedOut | SignedIn) -> AppNavHost (login <-> canvas list)
+Login -> AuthViewModel -> AuthRepository (stores token) -> SignedIn -> CanvasListViewModel
+Open canvas -> CanvasViewModel(StateFlow<CanvasUiState>) + RhymeViewModel(port = CanvasViewModel)
+  pointer events -> reduceGesture (pure) -> CanvasGestureAction
+    -> CanvasViewModel: panBy / transform (viewport, debounced saveViewport + flush on ON_STOP),
+       onTap (open editor | toggle selection), onLongPress (select, start move),
+       moveCardBy (local), endMove (one batch-position, revert on failure)
+  selection (RhymeCanvasPort.rhymeView) + sheet controls -> planRhymeQuery
+    -> distinctUntilChanged -> debounce(150ms, first at once) -> mapLatest -> rhyme-suggest -> rows
+  Materialize -> materializePosition() -> POST snippet (derived_from) -> port.insertMaterialized
+  Merge -> MergeRequest.of -> POST merge -> replace originals with merged snippet, select it
+  Tap card -> EditorRoute -> GridEditorRoute(snippet) -> onSaved -> CanvasViewModel.replaceSnippet
+any 401 -> ApiClient clears TokenStore -> SignedOut -> login
 ```
+
+Screens, ViewModels, gestures, rendering and the rhyme sheet in detail:
+[docs/android/canvas.md](../android/canvas.md).
 
 ## Invariants
 
@@ -129,7 +138,7 @@ Outside the sandbox a plain `./gradlew assembleDebug test` works with the normal
 
 ## Files
 
-Paths are under `android/`. `:app` is still the scaffold (`MainActivity.kt`); B1/B2 fill it in.
+Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/nymph/lyrics/app/`; the B1 files are described in full in [docs/android/canvas.md](../android/canvas.md#files).
 
 | Module | Package | File | Role / key exports |
 |---|---|---|---|
@@ -157,6 +166,19 @@ Paths are under `android/`. `:app` is still the scaffold (`MainActivity.kt`); B1
 | | `dev.nymph.lyrics.logic.canvas` | `Viewport.kt` | `Point`, `ViewSize`, `MIN_ZOOM`/`MAX_ZOOM`, `clampZoom`, `Viewport` (`worldToScreen`, `screenToWorld`, `zoomAbout`, `scaleAbout`, `panBy`, `toState`, `Viewport.from(ViewportState?)`), `viewportCenter` |
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
 | | | `MergeError.kt` | sealed `MergeError` (`TooFewSnippets`, `NotFound`, `Invalid`, `Server`, `Network`, `Unknown`), `toMergeError` |
+| `:app` | `…app` | `LyricsApp.kt`, `MainActivity.kt` | Application holding the `AppContainer`; activity hosting `LyricsTheme { AppNavHost }` |
+| | `…app.di` | `AppContainer.kt`, `DataStoreTokenStore.kt`, `ProcessScope.kt` | Manual dependency graph; DataStore `TokenStore`; process-lifetime scope for saves that outlive a screen |
+| | `…app.nav` | `Routes.kt`, `AppNavHost.kt` | Type-safe routes (`AuthRoute`, `CanvasListRoute`, `CanvasRoute`, `EditorRoute`); session-driven navigation; editor destination sharing the canvas ViewModel |
+| | `…app.session` | `SessionViewModel.kt` | `SessionState`, `SessionViewModel` (token store -> signed in / out, `signOut`) |
+| | `…app.auth` | `AuthViewModel.kt`, `AuthScreen.kt` | Email / password login and register |
+| | `…app.canvaslist` | `CanvasListViewModel.kt`, `CanvasListScreen.kt` | List, create, open canvases |
+| | `…app.canvas` | `CanvasUiState.kt`, `CanvasViewModel.kt`, `CanvasScreen.kt`, `CanvasTopBars.kt`, `SnippetCanvas.kt` | Canvas state (`Selection`, `CanvasUiState`, `CanvasEvent`), ViewModel (camera, selection, moves, merge, delete, create, `RhymeCanvasPort`), screen with adaptive rhyme pane / sheet, contextual top bar, Compose `Canvas` drawing |
+| | `…app.canvas.render` | `CardLayout.kt`, `Culling.kt`, `CardRenderer.kt` | Pure card geometry (web `gridDraw` / `SnippetCard`), culling and background grid; `DrawScope.drawCard` |
+| | `…app.canvas.gesture` | `GestureReducer.kt`, `CanvasGestures.kt` | Pure touch state machine (`reduceGesture`); pointer-input modifier feeding it |
+| | `…app.rhyme` | `RhymeCanvasPort.kt`, `RhymeUiState.kt`, `AnchorChips.kt`, `RhymeViewModel.kt` | Canvas port for the sheet; sheet state; pure chip model; query pipeline, controls, materialize |
+| | `…app.rhyme.ui` | `RhymePanel.kt`, `QueryControls.kt`, `AnchorChipsView.kt`, `CandidateRow.kt`, `SyllableStrip.kt`, `AlignmentTable.kt` | Sheet content (web `components/rhyme/*`) |
+| | `…app.ui` | `UserMessages.kt`, `theme/Palette.kt`, `theme/LyricsTheme.kt` | `ApiError.userMessage()`, hex colour parsing; web palette; dark Material 3 theme |
+| | `…app.editor` | `GridEditorRoute.kt` | Editor entry point (B2) |
 | `:core:data` | `dev.nymph.lyrics.data` | `ApiClient.kt` | `ApiClient(baseUrl: HttpUrl, tokenStore, okHttpClient, ioDispatcher)`, `ApiClient.create(String, ...)`, `HttpMethod`; `get`, `send`, `delete` return `ApiResult` |
 | | | `TokenStore.kt` | `TokenStore` (`tokens: Flow<String?>`, suspend `token`/`save`/`clear`), `InMemoryTokenStore` |
 | | `dev.nymph.lyrics.data.repository` | `AuthRepository.kt` | `AuthRepository` / `HttpAuthRepository` (`login`, `register` store the token then load `me`; `me`; `logout`) |
@@ -264,4 +286,26 @@ Deviations from the contract above, and the reasons.
 14. **The OpenAPI snapshot test is not in this branch:** `docs/api/openapi.json` arrives with
     `feat/typed-api`. Until then the model tests pin field names against the pydantic models and
     route code directly (`RequestEncodingTest`, `ResponseDecodingTest`).
-
+15. **Canvas screen coordinates are dp.** The core `Viewport`'s "screen" space is dp on Android (pointer
+    pixels are divided by the density before they reach the ViewModel; drawing multiplies back), so a
+    saved `viewport_state` means the same on any density and close to the web's CSS pixels.
+16. **The viewport is persisted** (`saveViewport` 1 s after the last pan / zoom and on `ON_STOP`, in a
+    process-lifetime scope). The web client loads `viewport_state` but never saves it.
+17. **A card move commits only that card**, once on release and only if it moved (the web's
+    `commitPositions` sends every snippet). A long-press-drag moves the pressed card only, even when
+    other cards are selected. A failed commit puts the card back.
+18. **No per-card resize on Android** (the web's corner handle); cards are drawn at scale 1.
+19. **Rhyme re-query keys:** the plan depends on the selected snippets' content, not only their ids, so
+    editing a selected snippet re-queries; a debounced plan that repeats the last completed query is not
+    re-sent (the IME search action always sends). Camera-only canvas changes are not mirrored into the
+    sheet state; materialize reads the camera when it runs.
+20. **New snippet:** the FAB creates a freestyle snippet whose top-left is the viewport centre (the web
+    creates at the double-click point).
+21. **Delete** asks for confirmation, deletes the selected snippets in parallel, and keeps (still
+    selected) any the server failed to delete.
+22. **Editor result:** `onSaved` replaces the snippet and closes the editor; `onClose` closes it. Popping
+    only happens while the editor is on top, so `onSaved` followed by `onClose` closes once.
+23. **On compact width the rhyme sheet is modal**, so the selection cannot change while it is open; the
+    ≥ 840 dp side pane leaves the canvas interactive.
+24. **Level of detail:** card text is not drawn below a 4 dp cell font (zoom < ~0.31) and background grid
+    lines closer than 8 dp are skipped.
