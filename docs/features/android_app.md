@@ -349,3 +349,26 @@ E6. **Rows are a scrolling `Column`, not a `LazyColumn`**: row bounds for drag-t
 E7. **A syllabify failure is shown** in the hint line ("local estimates"); the web only logs it.
 E8. **One ViewModel per editor visit** (`viewModel` key = snippet id + a `rememberSaveable` UUID), so it
     survives rotation but never leaks a previous visit's unsaved state into a reopened editor.
+
+## Device verification (2026-10-01, emulator, live backend)
+
+Run on an Android 16 (API 36) x86_64 emulator against the Docker stack at `10.0.2.2:8000`.
+
+| Flow | Result |
+|---|---|
+| Login, token persisted, canvas list | Works |
+| Canvas load, card rendering (header, beat grid, stress, counts) | Works |
+| One-finger pan | Works |
+| Long-press selection mode, contextual bar (count, Merge ⇣ ⇢, Delete, Rhymes, ✕) | Works |
+| Rhyme sheet: anchor chip from selection, controls, live results, paging | Works |
+| Materialize: snippet created beside the anchor with `derived_from` | Works |
+| Editor: open from card, rows and cells, row menu, move line down, Discard | Works |
+
+Not exercised on the device: pinch zoom, card drag, merge, delete, word-range picking, chunk drag,
+rest insert/remove, typing with live syllabify, Save, the wide-screen side pane.
+
+Known issues found on the device:
+
+- The auth screen's tab row dims the selected tab ("Sign in") and highlights the other one.
+- A cold start of the debug build under heavy host load hits a startup ANR during dex verification
+  (not app code); "Wait" recovers. A release build or a less loaded host avoids it.
