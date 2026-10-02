@@ -203,4 +203,13 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  android_app:
+    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine.
+    entry_points:
+      - android/app/
+      - android/core/model/
+      - android/core/logic/
+      - android/core/data/
+    depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
+    doc: docs/features/android_app.md
 ```
