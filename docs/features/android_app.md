@@ -164,6 +164,24 @@ Paths are under `android/`. `:app` is still the scaffold (`MainActivity.kt`); B1
 | | | `SnippetRepository.kt` | `SnippetRepository` / `HttpSnippetRepository` (`create`, `update`, `delete`, `batchPosition`, `merge`) |
 | | | `NlpRepository.kt` | `NlpRepository` / `HttpNlpRepository` (`syllabify`, `rhymeSuggest`) |
 
+### Files: `:app` grid editor (`dev.nymph.lyrics.app.editor`)
+
+Paths under `app/src/main/kotlin/dev/nymph/lyrics/app/editor/`. Details, flows and gestures:
+`docs/android/editor.md`.
+
+| File | Role / key exports |
+|---|---|
+| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier)` (the canvas/editor seam); one ViewModel per visit; `onSaved` once on `SaveStatus.Saved` |
+| `GridEditorViewModel.kt` | `GridEditorViewModel(snippet, nlp, snippets)` (`StateFlow<EditorUiState>`, implements `GridEditorActions`), `SYLLABIFY_DEBOUNCE_MS`, `saveRequest`, `selectionIsAllRests` |
+| `GridEditorActions.kt` | `GridEditorActions`: the screen's intents (type, rows, selection, chunk ops, reorder, save) |
+| `EditorUiState.kt` | `EditorUiState` (core `EditorRowsState` + selection, extend mode, snippet type, save status, syllabify error; derived `rowLines`), sealed `SaveStatus` |
+| `CellSelection.kt` | `CellSelection` (never empty; `of` / `cell`), `SelectionEdge`, `tapSelection`, `resizeSelection`, `indexAfterReorder` |
+| `DragGeometry.kt` | Pure gesture geometry: `CellMetrics`, `cellIndexAt`, `cellIndexClamped`, `dropGapAt` (core `gapFromX`), `handleAt`, `edgeAutoScrollDelta`, `RowSpan`, `reorderTargetIndex` |
+| `ui/GridEditorScreen.kt`, `ui/EditorTopBar.kt`, `ui/EditorRow.kt`, `ui/CellStrip.kt`, `ui/RowToolbar.kt`, `ui/ActiveLineField.kt`, `ui/EditorDimens.kt` | Compose screen: top bar, reorderable rows, cell strip gestures (tap, handles, long-press chunk drag, drop indicator, edge auto-scroll), chunk toolbar, active-row field above the IME |
+
+Tests (`app/src/test/.../editor/`): `GridEditorViewModelTest` (fake repositories), `CellSelectionTest`,
+`DragGeometryTest`.
+
 ### Core data / control flow
 
 ```
@@ -265,3 +283,24 @@ Deviations from the contract above, and the reasons.
     `feat/typed-api`. Until then the model tests pin field names against the pydantic models and
     route code directly (`RequestEncodingTest`, `ResponseDecodingTest`).
 
+### Decisions: grid editor (B2)
+
+E1. **Back saves** (after clearing the selection, then closing the active row's field), as the web
+    editor's Escape / click-outside does; Discard in the top bar is the only way to leave without
+    saving.
+E2. **Long-press on an unselected cell selects it and starts the drag** at once; a long-press on a
+    selected cell drags the whole selection. Extending works with both the selection handles and an
+    "Extend" chip in the row toolbar (tap-to-extend mode, the web's shift-click).
+E3. **Cells have one fixed width (56 dp)** and the drop gap comes from the first cell's measured bounds
+    plus the core `gapFromX`, instead of per-cell bounds: the core helper assumes uniform cells and the
+    web uses a fixed `CELL_WIDTH` too. Long syllables ellipsize.
+E4. **A chunk move or nudge that lands where it started is a no-op** (same state, row not marked
+    arranged); the web marks the row arranged on a clamped edge nudge.
+E5. **A selection that no longer fits its row is dropped** (e.g. a syllabify result with fewer cells
+    for a selected but unarranged row); the web keeps a stale selection.
+E6. **Rows are a scrolling `Column`, not a `LazyColumn`**: row bounds for drag-to-reorder come from
+    `onGloballyPositioned` of every row, and snippets have tens of lines at most. There is no vertical
+    auto-scroll while dragging a row; ▲ / ▼ in the row menu cover long moves.
+E7. **A syllabify failure is shown** in the hint line ("local estimates"); the web only logs it.
+E8. **One ViewModel per editor visit** (`viewModel` key = snippet id + a `rememberSaveable` UUID), so it
+    survives rotation but never leaks a previous visit's unsaved state into a reopened editor.
