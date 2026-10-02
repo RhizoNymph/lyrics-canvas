@@ -17,6 +17,9 @@ data class RhymeCanvasView(
 ) {
     /** The selected snippets that exist; the part of the canvas a query depends on. */
     val selectedSnippets: Map<SnippetId, Snippet> get() = snippets.filterKeys { it in selectedIds }
+
+    /** This view with a fixed camera, for comparing everything but the camera. */
+    fun withoutCamera(): RhymeCanvasView = copy(viewport = Viewport.IDENTITY, viewSize = ViewSize(0.0, 0.0))
 }
 
 /**

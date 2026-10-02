@@ -329,6 +329,23 @@ class RhymeViewModelTest {
     }
 
     @Test
+    fun `materialize uses the camera at the time it runs`() = runTest(main.dispatcher) {
+        nlp.handler = { ApiResult.Success(response(candidate("hat"))) }
+        val port = FakeCanvasPort(listOf(cat), emptySet())
+        val vm = openVm(port)
+        vm.setTypedText("door")
+        vm.searchNow()
+        runCurrent()
+        port.view.value = port.view.value!!.copy(viewport = dev.nymph.lyrics.logic.canvas.Viewport(-100.0, 0.0, 2.0))
+        runCurrent()
+        vm.materialize("hat")
+        runCurrent()
+        // Centre (200, 400) screen -> world (200 / 2 + 100, 400 / 2).
+        val body = snippets.created.single()
+        assertEquals(200.0 to 200.0, body.positionX to body.positionY)
+    }
+
+    @Test
     fun `materialize failure keeps the row and reports a materialize error`() = runTest(main.dispatcher) {
         nlp.handler = { ApiResult.Success(response(candidate("hat"))) }
         snippets.createResult = { ApiResult.Failure(ApiError.Server(500, "db down")) }

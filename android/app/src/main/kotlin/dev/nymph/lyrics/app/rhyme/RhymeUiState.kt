@@ -56,7 +56,7 @@ data class RhymeUiState(
     val expandedRow: String? = null,
     /** Candidates whose materialize request is in flight. */
     val materializing: Set<String> = emptySet(),
-    /** The canvas as last seen (selection, snippets, camera). */
+    /** The canvas as last seen: selection and snippets are current, the camera may be stale (read it from the port). */
     val canvas: RhymeCanvasView? = null,
 ) {
     val controls: RhymeControls get() = RhymeControls(typedText, params, excluded, ranges)

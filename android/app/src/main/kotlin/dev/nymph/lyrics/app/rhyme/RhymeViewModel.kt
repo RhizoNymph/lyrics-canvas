@@ -91,7 +91,10 @@ class RhymeViewModel(
 
     init {
         viewModelScope.launch {
-            port.rhymeView.collect { view -> session.update { it.copy(canvas = view) } }
+            // Camera-only changes (every pan frame) are not mirrored; materialize reads the camera when it runs.
+            port.rhymeView
+                .distinctUntilChanged { a, b -> a?.withoutCamera() == b?.withoutCamera() }
+                .collect { view -> session.update { it.copy(canvas = view) } }
         }
     }
 
@@ -279,7 +282,8 @@ class RhymeViewModel(
         val candidate = s.candidates.firstOrNull { it.id == id } ?: return
         if (id in s.materializing) return
         val anchorSnips = anchorSnippets(view.selectedIds, view.snippets, s.excluded)
-        val at = materializePosition(anchorSnips.map { it.toAnchorRect() }, s.materializeCounts, view.viewport, view.viewSize)
+        val camera = port.currentRhymeView() ?: view
+        val at = materializePosition(anchorSnips.map { it.toAnchorRect() }, s.materializeCounts, camera.viewport, camera.viewSize)
         val body = materializeRequest(candidate, s.anchors, s.params.k, at)
         session.update { it.copy(materializing = it.materializing + id) }
         viewModelScope.launch {
