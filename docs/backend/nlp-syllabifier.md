@@ -76,5 +76,5 @@ syllabify_text(text):
 ```
 POST /api/nlp/syllabify  (no auth required)
 Body: { "text": "hello world" }
-Response: { "lines": [...] }
+Response: SyllabifyResponse { "lines": [GridLineModel, ...] }   (cells carry only the keys the syllabifier set)
 ```

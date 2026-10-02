@@ -39,8 +39,8 @@ Deleting a group sets `group_id = None` on all contained snippets (unassign). Do
 
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
-| POST | `/api/canvases/{id}/groups` | Bearer | Create group | 201/404 |
-| PUT | `/api/groups/{id}` | Bearer | Update group | 200/404 |
+| POST | `/api/canvases/{id}/groups` | Bearer | Create group (`GroupResponse`) | 201/404 |
+| PUT | `/api/groups/{id}` | Bearer | Update group (`GroupResponse`) | 200/404 |
 | DELETE | `/api/groups/{id}` | Bearer | Delete group | 204/404 |
 
 ---
@@ -88,10 +88,10 @@ Managed via the `snippet_tags` junction table with CASCADE deletes:
 
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
-| POST | `/api/canvases/{id}/tags` | Bearer | Create tag | 201/404 |
-| PUT | `/api/tags/{id}` | Bearer | Update tag (name/color) | 200/404 |
+| POST | `/api/canvases/{id}/tags` | Bearer | Create tag (`TagResponse`) | 201/404 |
+| PUT | `/api/tags/{id}` | Bearer | Update tag (name/color) (`TagResponse`) | 200/404 |
 | DELETE | `/api/tags/{id}` | Bearer | Delete tag | 204/404 |
-| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Add tag to snippet | 200/404 |
+| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Add tag to snippet (`TagLinkResponse` `{"ok": true}`) | 200/404 |
 | DELETE | `/api/snippets/{id}/tags/{tag_id}` | Bearer | Remove tag from snippet | 204 |
 
 Note: `add_tag_to_snippet` uses a query parameter for `tag_id` rather than a request body.

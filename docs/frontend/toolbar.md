@@ -50,9 +50,8 @@ canvasStore.mergeSelected('vertical' | 'horizontal')
 ```
 
 `canMerge = selectedSnippetIds.size >= 2`; otherwise the buttons are `disabled` with a dimmed style. When
-`canvasStore.mergeError` is non-null a status span follows the buttons: red "Merge failed: ..." for an
-error-level failure (nothing changed), amber "Merged with a problem: ..." for a warning (the merged
-snippet exists but a tag or delete request failed). Clicking it calls `clearMergeError()`.
+`canvasStore.mergeError` is non-null a red status span follows the buttons: "Merge failed: ..." (the
+server merge is one transaction, so a failure changed nothing). Clicking it calls `clearMergeError()`.
 
 ### Store Dependencies
 
