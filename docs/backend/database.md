@@ -86,7 +86,8 @@ Relationships: `owner`, `snippets`, `groups`, `tags` (all cascade: all, delete-o
 | `phonetics` | JSONB | null | `SnippetPhonetics` (`app/schemas/phonetics.py`): per-line words/syllables, stress, rhyme keys, overrides, dialect digest |
 | `derived_from` | JSONB | null | `DerivedFromModel`: provenance of a snippet promoted from a rhyme candidate |
 | `created_at` | DateTime(tz) | now() | |
-| `updated_at` | DateTime(tz) | now() | Auto-updates |
+| `updated_at` | DateTime(tz) | now() | Auto-updates on every write, moves and resizes included |
+| `content_updated_at` | DateTime(tz), NOT NULL | now() | Last content edit (text, type, grid); bumped only by `snippet_service.update_snippet`, never by layout or tags. See [snippet_content_timestamp](../features/snippet_content_timestamp.md) |
 
 Relationships: `canvas`, `group`, `tags` (N:M via snippet_tags), `embedding` (1:1, cascade)
 
@@ -165,6 +166,13 @@ uv run python -m scripts.backfill_phonetics --report phonetics_report.csv [--dia
 It fills `phonetics` for every snippet where it is NULL (idempotent), keeps existing grid
 stress as overrides, and writes one CSV row per disagreement
 (`snippet_id, line, word, grid_stress, engine_stress`).
+
+**File:** `alembic/versions/003_snippet_content_updated_at.py`
+
+Adds `snippets.content_updated_at` (timestamptz, server default `now()`), backfills it with
+`COALESCE(updated_at, created_at, now())`, then makes it NOT NULL. Downgrade drops it. Startup
+`create_all` does not add columns to an existing table, so an existing database needs
+`alembic upgrade head` before the backend runs this code.
 
 ### Running Migrations
 
