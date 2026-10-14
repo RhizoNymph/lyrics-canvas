@@ -52,6 +52,7 @@ def captured(monkeypatch) -> dict:
             derived_from=kwargs.get("derived_from"),
             created_at="now",
             updated_at="now",
+            content_updated_at="now",
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)

@@ -12,6 +12,7 @@ from app.services.phonetics_service import compute_snippet_phonetics
 
 CREATED = datetime(2026, 9, 30, 12, 0, 0, 123456, tzinfo=timezone.utc)
 UPDATED = datetime(2026, 9, 30, 12, 5, 0, tzinfo=timezone.utc)
+CONTENT_UPDATED = datetime(2026, 9, 30, 12, 2, 30, 500, tzinfo=timezone.utc)
 
 
 def fake_tag(name: str, canvas_id: uuid.UUID, color: str = "#6366f1") -> SimpleNamespace:
@@ -39,6 +40,7 @@ def fake_snippet(canvas_id: uuid.UUID, text: str, **overrides) -> SimpleNamespac
         derived_from=None,
         created_at=CREATED,
         updated_at=UPDATED,
+        content_updated_at=CONTENT_UPDATED,
     )
     fields.update(overrides)
     return SimpleNamespace(**fields)

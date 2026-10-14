@@ -53,6 +53,7 @@ def _snippet_response(s) -> SnippetResponse:
         derived_from=DerivedFromModel.model_validate(s.derived_from) if s.derived_from is not None else None,
         created_at=str(s.created_at),
         updated_at=str(s.updated_at),
+        content_updated_at=str(s.content_updated_at),
     )
 
 

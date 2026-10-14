@@ -46,6 +46,11 @@ class Snippet(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # Last content edit (text, type, grid). Unlike updated_at, moves, resizes and tags leave it alone;
+    # snippet_service.update_snippet bumps it. See docs/features/snippet_content_timestamp.md.
+    content_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     canvas = relationship("Canvas", back_populates="snippets")
     group = relationship("Group", back_populates="snippets")
