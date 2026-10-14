@@ -220,7 +220,7 @@ Features Index:
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
   android_app:
-    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete) and the rhyme sheet with materialize (docs/android/canvas.md).
+    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete, list mode) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:
       - android/app/
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/MainActivity.kt
@@ -229,4 +229,12 @@ Features Index:
       - android/core/data/
     depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
     doc: docs/features/android_app.md
+  list_mode:
+    description: A canvas-screen toggle that swaps the spatial canvas for a scrolling list of the canvas's snippets, last content edit (content_updated_at) first, rendered as the same cards; tap opens the editor, long-press selects, and merge / delete work from the list. Android - top-bar List / Canvas toggle, LazyColumn, mode kept in the canvas ViewModel's SavedStateHandle, no tag filter yet.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/list/ListOrder.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/list/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setMode, onListLongPress)
+    depends_on: [android_app, merge_blocks, snippet_crud]
+    doc: docs/features/list_mode.md
 ```

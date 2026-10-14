@@ -94,6 +94,8 @@ Open canvas -> CanvasViewModel(StateFlow<CanvasUiState>) + RhymeViewModel(port =
     -> CanvasViewModel: panBy / transform (viewport, debounced saveViewport + flush on ON_STOP),
        onTap (open editor | toggle selection), onLongPress (select, start move),
        moveCardBy (local), endMove (one batch-position, revert on failure)
+  top bar List / Canvas -> setMode (SavedStateHandle) -> SnippetList rows = ListOrder.arrange(snippets)
+       (order captured on show / reload / editor save; row tap = onTap, long-press = onListLongPress)
   selection (RhymeCanvasPort.rhymeView) + sheet controls -> planRhymeQuery
     -> distinctUntilChanged -> debounce(150ms, first at once) -> mapLatest -> rhyme-suggest -> rows
   Materialize -> materializePosition() -> POST snippet (derived_from) -> port.insertMaterialized
@@ -147,7 +149,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `LyricsJson.kt` | `LyricsJson` (`ignoreUnknownKeys`, `explicitNulls = false`, `encodeDefaults`) |
 | | | `Auth.kt` | `LoginRequest`, `RegisterRequest`, `TokenResponse`, `User` |
 | | | `Canvas.kt` | `Canvas`, `CanvasDetail` (+ `toCanvas()`), `ViewportState`, `CanvasCreateRequest`, `CanvasUpdateRequest`, `Tag`, `Group` |
-| | | `Snippet.kt` | `Snippet` (phonetics as `JsonElement?` passthrough), `SnippetType`, `GridMode`, `Provenance`, `DerivedFrom`, `SnippetCreateRequest`, `SnippetUpdateRequest`, `PositionUpdate`, `BatchPositionRequest`, `BatchPositionResponse` |
+| | | `Snippet.kt` | `Snippet` (phonetics as `JsonElement?` passthrough; `contentUpdatedAt` = `content_updated_at`), `SnippetType`, `GridMode`, `Provenance`, `DerivedFrom`, `SnippetCreateRequest`, `SnippetUpdateRequest`, `PositionUpdate`, `BatchPositionRequest`, `BatchPositionResponse` |
 | | | `Merge.kt` | `MergeMode`, `MergeRequest` (only via `MergeRequest.of`, null for < 2 distinct ids), `MergeResponse` |
 | | | `Nlp.kt` | `SyllabifyRequest` |
 | | | `Rhyme.kt` | `RhymeLimits` (`PAGE_SIZE`, `MAX_LIMIT`, `STRESS_PATTERN`), `RhymeK` (int-serialised enum), `SourceName`, sealed `AnchorRef` = `SnippetAnchorRef` / `TextAnchorRef` (discriminator `kind`), `AnchorRange`, `Slot`, `ScoreWeights`, `DialectRule(Kind)`, `DialectMap`, `RhymeSuggestRequest`, `RhymeSyllable`, `RhymeUnitFields`, `RhymeUnit`, `RhymeCandidate`, `SyllableAlignment`, `RhymeSuggestResponse` |
@@ -166,13 +168,15 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `dev.nymph.lyrics.logic.canvas` | `Viewport.kt` | `Point`, `ViewSize`, `MIN_ZOOM`/`MAX_ZOOM`, `clampZoom`, `Viewport` (`worldToScreen`, `screenToWorld`, `zoomAbout`, `scaleAbout`, `panBy`, `toState`, `Viewport.from(ViewportState?)`), `viewportCenter` |
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
 | | | `MergeError.kt` | sealed `MergeError` (`TooFewSnippets`, `NotFound`, `Invalid`, `Server`, `Network`, `Unknown`), `toMergeError` |
+| | `dev.nymph.lyrics.logic.list` | `ListOrder.kt` | List-mode order: `parseServerTimestamp`, `sortForList` (`content_updated_at` desc, `created_at` desc, id), `ListOrder` (`of`, `arrange`) — see [list_mode.md](list_mode.md) |
 | `:app` | `…app` | `LyricsApp.kt`, `MainActivity.kt` | Application holding the `AppContainer`; activity hosting `LyricsTheme { AppNavHost }` |
 | | `…app.di` | `AppContainer.kt`, `DataStoreTokenStore.kt`, `ProcessScope.kt` | Manual dependency graph; DataStore `TokenStore`; process-lifetime scope for saves that outlive a screen |
 | | `…app.nav` | `Routes.kt`, `AppNavHost.kt` | Type-safe routes (`AuthRoute`, `CanvasListRoute`, `CanvasRoute`, `EditorRoute`); session-driven navigation; editor destination sharing the canvas ViewModel |
 | | `…app.session` | `SessionViewModel.kt` | `SessionState`, `SessionViewModel` (token store -> signed in / out, `signOut`) |
 | | `…app.auth` | `AuthViewModel.kt`, `AuthScreen.kt` | Email / password login and register |
 | | `…app.canvaslist` | `CanvasListViewModel.kt`, `CanvasListScreen.kt` | List, create, open canvases |
-| | `…app.canvas` | `CanvasUiState.kt`, `CanvasViewModel.kt`, `CanvasScreen.kt`, `CanvasTopBars.kt`, `SnippetCanvas.kt` | Canvas state (`Selection`, `CanvasUiState`, `CanvasEvent`), ViewModel (camera, selection, moves, merge, delete, create, `RhymeCanvasPort`), screen with adaptive rhyme pane / sheet, contextual top bar, Compose `Canvas` drawing |
+| | `…app.canvas` | `CanvasUiState.kt`, `CanvasViewModel.kt`, `CanvasScreen.kt`, `CanvasTopBars.kt`, `SnippetCanvas.kt` | Canvas state (`Selection`, `CanvasMode`, `CanvasUiState`, `CanvasEvent`), ViewModel (camera, selection, moves, merge, delete, create, list mode, `RhymeCanvasPort`), screen with adaptive rhyme pane / sheet, contextual top bar, Compose `Canvas` drawing |
+| | `…app.canvas.list` | `ListCardSize.kt`, `SnippetList.kt` | List mode: pure row-card sizing; the `LazyColumn` of canvas cards |
 | | `…app.canvas.render` | `CardLayout.kt`, `Culling.kt`, `CardRenderer.kt` | Pure card geometry (web `gridDraw` / `SnippetCard`), culling and background grid; `DrawScope.drawCard` |
 | | `…app.canvas.gesture` | `GestureReducer.kt`, `CanvasGestures.kt` | Pure touch state machine (`reduceGesture`); pointer-input modifier feeding it |
 | | `…app.rhyme` | `RhymeCanvasPort.kt`, `RhymeUiState.kt`, `AnchorChips.kt`, `RhymeViewModel.kt` | Canvas port for the sheet; sheet state; pure chip model; query pipeline, controls, materialize |
@@ -363,6 +367,7 @@ Run on an Android 16 (API 36) x86_64 emulator against the Docker stack at `10.0.
 | Rhyme sheet: anchor chip from selection, controls, live results, paging | Works |
 | Materialize: snippet created beside the anchor with `derived_from` | Works |
 | Editor: open from card, rows and cells, row menu, move line down, Discard | Works |
+| List mode (toggle, last-edited order, row tap / long-press, merge / delete from the list) | Not yet device-verified (added after this run; JVM-tested only) |
 
 Not exercised on the device: pinch zoom, card drag, merge, delete, word-range picking, chunk drag,
 rest insert/remove, typing with live syllabify, Save, the wide-screen side pane.
