@@ -141,6 +141,7 @@ interface Snippet {
   tags: Tag[];
   created_at: string;
   updated_at: string;
+  content_updated_at: string; // bumped on text/type/grid changes only; list-mode sort key
 }
 
 interface Group {

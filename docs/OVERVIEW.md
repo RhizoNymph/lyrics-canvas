@@ -64,6 +64,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Edit**: Double-click a snippet to open the text/type editor
 - **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer; see [list_mode.md](./features/list_mode.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -219,6 +220,19 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  list_mode:
+    description: Toggle on the canvas page that swaps the Pixi canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). It follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage.
+    entry_points:
+      - frontend/src/components/list/ (ListView, ListRow, GridPreview, useFrozenOrder)
+      - frontend/src/lib/listMode/ (sortForList, applyFrozenOrder, listClick, view-mode persistence)
+      - frontend/src/lib/canvas/visibility.ts (isSnippetVisible, shared with CanvasViewport)
+      - frontend/src/stores/uiStore.ts (viewMode, setViewMode, toggleViewMode, closeEditor)
+      - frontend/src/stores/canvasStore.ts (setSelection)
+      - frontend/src/components/canvas/InlineGridEditor.tsx (EditorPlacement 'inline')
+      - frontend/src/components/toolbar/Toolbar.tsx (List / Canvas toggle)
+      - frontend/src/components/pages/CanvasPage.tsx (view switch, Ctrl/Cmd+Shift+L)
+    depends_on: [merge_blocks, grid_rearrange, canvas_rendering, snippet_crud]
+    doc: docs/features/list_mode.md
   android_app:
     description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:
