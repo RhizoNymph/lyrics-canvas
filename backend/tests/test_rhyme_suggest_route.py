@@ -124,6 +124,7 @@ def test_create_snippet_computes_phonetics_and_keeps_derived_from(client: TestCl
             derived_from=kwargs["derived_from"],
             created_at="now",
             updated_at="now",
+            content_updated_at="now",
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)
@@ -205,6 +206,7 @@ def test_create_snippet_passes_enum_types_to_service(client: TestClient, monkeyp
             derived_from=None,
             created_at="now",
             updated_at="now",
+            content_updated_at="now",
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)

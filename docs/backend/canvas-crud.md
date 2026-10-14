@@ -32,7 +32,7 @@ async def fork_canvas(db, canvas_id, new_owner_id) -> Canvas | None
 
 ### Forking
 
-`fork_canvas`: Clones a public canvas. Copies all snippets but NOT groups or tags. New title: `"{original.title} (fork)"`.
+`fork_canvas`: Clones a public canvas. Copies all snippets but NOT groups or tags. New title: `"{original.title} (fork)"`. Copies keep the source snippet's `content_updated_at` (forking does not edit the words).
 
 ## Canvas Schemas
 
@@ -110,7 +110,7 @@ Snippet creation, updates, and batch positioning are handled in the canvases rou
 | `SnippetUpdate` | All fields optional; `grid_data: GridDataModel | None` (a malformed grid is a 422) |
 | `BatchPositionUpdate` | `updates: [{id, position_x, position_y}]` |
 | `BatchPositionResult` | `updated: int` |
-| `SnippetResponse` | All model fields; `grid_data: GridDataModel | None`, `tags: list[TagResponse]`, `phonetics: SnippetPhonetics | None`, `derived_from: DerivedFromModel | None`, timestamps as strings |
+| `SnippetResponse` | All model fields; `grid_data: GridDataModel | None`, `tags: list[TagResponse]`, `phonetics: SnippetPhonetics | None`, `derived_from: DerivedFromModel | None`, timestamps (`created_at`, `updated_at`, `content_updated_at`) as strings |
 | `MergeRequest` / `MergeResponse` | see [Merge](#merge) |
 
 ### Grid on Create
@@ -137,12 +137,23 @@ height = lines * 22 + 52              (min: 80)
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
 | POST | `/api/canvases/{id}/snippets` | Bearer | Create (syllabifies unless `grid_data` is given; auto-sizes) | 201/422 |
-| PUT | `/api/snippets/{id}` | Bearer | Update (re-syllabifies if text changes) | 200/404 |
+| PUT | `/api/snippets/{id}` | Bearer | Update (re-syllabifies if text changes; bumps `content_updated_at` only for a real content edit) | 200/404 |
 | DELETE | `/api/snippets/{id}` | Bearer | Delete | 204/404 |
 | PATCH | `/api/snippets/batch-position` | Bearer | Batch update positions (`BatchPositionResult`) | 200 |
 | POST | `/api/canvases/{id}/merge` | Bearer | Replace 2+ snippets with one merged snippet (`MergeResponse`) | 200/404/422/500 |
 
 All of them return `SnippetResponse` except DELETE (no body), batch-position and merge.
+
+### Content Edit Time
+
+`SnippetResponse.content_updated_at` (string, same `str(datetime)` format as `updated_at`) is when the
+snippet's content last changed. `updated_at` moves on every write, so clients sort "last edited" by
+`content_updated_at`. Create and merge stamp it via the column's server default. On PUT the route
+passes the content fields the client sent (`raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`,
+`grid_data`; `snippet_service.CONTENT_FIELDS`) as `content_edits`, and `update_snippet` sets it to SQL
+`now()` (equal to the new `updated_at`) only if one of them differs from the stored value
+(`content_edits_differ`). Position, size, z-index, group, batch-position and tag links never touch it.
+Details: [snippet_content_timestamp.md](../features/snippet_content_timestamp.md).
 
 ### Merge
 

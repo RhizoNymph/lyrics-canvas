@@ -1532,6 +1532,10 @@
             "title": "Canvas Id",
             "type": "string"
           },
+          "content_updated_at": {
+            "title": "Content Updated At",
+            "type": "string"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -1642,7 +1646,8 @@
           "phonetics",
           "derived_from",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "content_updated_at"
         ],
         "title": "SnippetResponse",
         "type": "object"

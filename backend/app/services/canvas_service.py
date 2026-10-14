@@ -103,6 +103,8 @@ async def fork_canvas(db: AsyncSession, canvas_id: str, new_owner_id: str) -> Ca
             width=snippet.width,
             height=snippet.height,
             z_index=snippet.z_index,
+            # a fork copies the words, it does not edit them
+            content_updated_at=snippet.content_updated_at,
         )
         db.add(new_snippet)
 

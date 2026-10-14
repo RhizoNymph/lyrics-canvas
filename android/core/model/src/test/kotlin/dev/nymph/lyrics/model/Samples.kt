@@ -31,13 +31,14 @@ object Samples {
         "phonetics":$PHONETICS,
         "derived_from":{"provenance":"dictionary","source_unit_id":"dict:tin","score":0.9,"match_depth":1,"k":2,
           "anchor_unit_id":"note:a:0:0","anchor_text":"hinge"},
-        "created_at":"2026-09-01 10:00:00+00:00","updated_at":"2026-09-02 10:00:00+00:00"}"""
+        "created_at":"2026-09-01 10:00:00+00:00","updated_at":"2026-09-02 10:00:00+00:00",
+        "content_updated_at":"2026-09-01 12:30:00.250000+00:00"}"""
 
     /** A freshly created, empty snippet: no grid lines, no phonetics, no tags or group. */
     const val SNIPPET_BARE = """{"id":"5a1e0000-0000-4000-8000-000000000002","canvas_id":"c0ffee00-0000-4000-8000-000000000001",
         "snippet_type":"freestyle","grid_mode":"auto","beats_per_line":null,"grid_data":{"lines":[]},"raw_text":"",
         "position_x":0,"position_y":0,"width":200,"height":80,"z_index":0,"group_id":null,"tags":[],
-        "phonetics":null,"derived_from":null,"created_at":"2026-09-01","updated_at":"2026-09-01"}"""
+        "phonetics":null,"derived_from":null,"created_at":"2026-09-01","updated_at":"2026-09-01","content_updated_at":"2026-09-01"}"""
 
     const val CANVAS_DETAIL = """{"id":"c0ffee00-0000-4000-8000-000000000001","owner_id":"6f1c0f5e-1111-4000-8000-000000000001",
         "title":"Night drive","is_public":false,"share_token":null,"viewport_state":null,

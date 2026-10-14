@@ -41,11 +41,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.canvas.gesture.CanvasGestureAction
+import dev.nymph.lyrics.app.canvas.list.SnippetList
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.di.ProcessScope
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
@@ -67,7 +69,9 @@ fun canvasViewModel(
     container: AppContainer,
     canvasId: CanvasId,
     owner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current),
-): CanvasViewModel = viewModel(owner) { CanvasViewModel(canvasId, container.canvases, container.snippets, ProcessScope.scope) }
+): CanvasViewModel = viewModel(owner) {
+    CanvasViewModel(canvasId, container.canvases, container.snippets, ProcessScope.scope, savedState = createSavedStateHandle())
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +130,14 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                         onRhymes = rhymeVm::open,
                     )
                 } else {
-                    CanvasTopBar(ready?.title ?: "", rhyme.open, onBack, toggleRhymes)
+                    CanvasTopBar(
+                        title = ready?.title ?: "",
+                        mode = ready?.mode?.kind,
+                        rhymesOpen = rhyme.open,
+                        onBack = onBack,
+                        onSetMode = vm::setMode,
+                        onToggleRhymes = toggleRhymes,
+                    )
                 }
             },
             floatingActionButton = {
@@ -152,12 +163,20 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                             Text(s.message, color = Palette.Error)
                             Button(onClick = vm::reload) { Text("Retry") }
                         }
-                        is CanvasUiState.Ready -> SnippetCanvas(
-                            state = s,
-                            hitTest = vm::hitTest,
-                            onAction = onAction,
-                            onViewSize = vm::setViewSize,
-                        )
+                        is CanvasUiState.Ready -> when (s.mode) {
+                            CanvasMode.Canvas -> SnippetCanvas(
+                                state = s,
+                                hitTest = vm::hitTest,
+                                onAction = onAction,
+                                onViewSize = vm::setViewSize,
+                            )
+                            is CanvasMode.SnippetList -> SnippetList(
+                                rows = s.listRows,
+                                selected = s.selection.ids,
+                                onTap = { id -> vm.onTap(id) },
+                                onLongPress = vm::onListLongPress,
+                            )
+                        }
                     }
                 }
                 if (sidePane && rhyme.open) {

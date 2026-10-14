@@ -10,7 +10,7 @@ object Bodies {
         "grid_data":{"lines":[{"cells":[{"syllable":"tin","stress":1,"word_index":0}],"syllable_count":1,"raw_text":"tin"}]},
         "raw_text":"tin","position_x":340.0,"position_y":100.0,"width":200.0,"height":80.0,"z_index":0,"group_id":null,
         "tags":[],"phonetics":{"dialect_digest":"d","lines":[],"overrides":{}},"derived_from":null,
-        "created_at":"2026-09-01","updated_at":"2026-09-01"}"""
+        "created_at":"2026-09-01","updated_at":"2026-09-01","content_updated_at":"2026-09-01"}"""
     const val CANVAS_DETAIL = """{"id":"c1","owner_id":"u1","title":"Night drive","is_public":false,"share_token":null,
         "viewport_state":null,"created_at":"2026-09-01","updated_at":"2026-09-01","snippets":[$SNIPPET],"groups":[],"tags":[]}"""
     const val RHYME = """{"anchors":[],"candidates":[{"id":"dict:tin","text":"tin","provenance":"dictionary","ephemeral":true,

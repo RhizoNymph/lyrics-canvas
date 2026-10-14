@@ -49,6 +49,8 @@ fun snippet(
     zIndex: Int = 0,
     type: SnippetType = SnippetType.VERSE,
     tags: List<Tag> = emptyList(),
+    createdAt: String = "",
+    contentUpdatedAt: String = "",
 ): Snippet = Snippet(
     id = SnippetId(id),
     canvasId = CANVAS_ID,
@@ -62,8 +64,9 @@ fun snippet(
     height = height,
     zIndex = zIndex,
     tags = tags,
-    createdAt = "",
+    createdAt = createdAt,
     updatedAt = "",
+    contentUpdatedAt = contentUpdatedAt,
 )
 
 fun tag(name: String, color: String = "#ff0000"): Tag = Tag(TagId("t-$name"), CANVAS_ID, name, color)

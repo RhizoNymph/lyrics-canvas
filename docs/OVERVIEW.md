@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging.
+A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering.
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)).
@@ -64,7 +64,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Edit**: Double-click a snippet to open the text/type editor
 - **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
-- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer; see [list_mode.md](./features/list_mode.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -220,8 +220,18 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  snippet_content_timestamp:
+    description: snippets.content_updated_at records when a snippet's content (text, type, grid) last changed, separately from updated_at which also moves on drags and resizes; returned on every SnippetResponse so list views can sort by last edited.
+    entry_points:
+      - backend/app/models/snippet.py (Snippet.content_updated_at)
+      - backend/app/services/snippet_service.py (CONTENT_FIELDS, content_edits_differ, update_snippet)
+      - backend/app/api/snippets.py (PUT /api/snippets/{id} content_edits)
+      - backend/app/api/canvases.py (_snippet_response)
+      - backend/alembic/versions/003_snippet_content_updated_at.py
+    depends_on: [snippet_crud, typed_api]
+    doc: docs/features/snippet_content_timestamp.md
   list_mode:
-    description: Toggle on the canvas page that swaps the Pixi canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). It follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage.
+    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle, no tag filter yet.
     entry_points:
       - frontend/src/components/list/ (ListView, ListRow, GridPreview, useFrozenOrder)
       - frontend/src/lib/listMode/ (sortForList, applyFrozenOrder, listClick, view-mode persistence)
@@ -231,10 +241,13 @@ Features Index:
       - frontend/src/components/canvas/InlineGridEditor.tsx (EditorPlacement 'inline')
       - frontend/src/components/toolbar/Toolbar.tsx (List / Canvas toggle)
       - frontend/src/components/pages/CanvasPage.tsx (view switch, Ctrl/Cmd+Shift+L)
-    depends_on: [merge_blocks, grid_rearrange, canvas_rendering, snippet_crud]
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/list/ListOrder.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/list/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setMode, onListLongPress)
+    depends_on: [snippet_content_timestamp, merge_blocks, grid_rearrange, canvas_rendering, snippet_crud, android_app]
     doc: docs/features/list_mode.md
   android_app:
-    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete) and the rhyme sheet with materialize (docs/android/canvas.md).
+    description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete, list mode) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:
       - android/app/
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/MainActivity.kt

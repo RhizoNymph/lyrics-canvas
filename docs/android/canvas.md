@@ -12,6 +12,8 @@ its own milestone.
 - Canvas screen: web-identical card drawing in a Compose `Canvas`, culling, pan / pinch zoom, tap to
   edit, long-press selection mode, long-press-drag move, contextual bar (Merge ⇣ / ⇢, Delete, Rhymes, ✕),
   FAB new snippet, viewport persistence.
+- List mode: a top-bar toggle that swaps the canvas for a `LazyColumn` of the same cards, last edited
+  first, sharing tap-to-edit and the selection actions (see [list_mode.md](../features/list_mode.md)).
 - Rhyme sheet: every feature of the web rhyme sidebar (see [rhyme-view.md](../frontend/rhyme-view.md)).
 
 ## Non-scope
@@ -50,28 +52,32 @@ server's detail.
 
 ## Canvas ViewModel
 
-`CanvasViewModel(canvasId, canvases, snippets, persistScope, viewportSaveDelayMs = 1000)`
+`CanvasViewModel(canvasId, canvases, snippets, persistScope, viewportSaveDelayMs = 1000, savedState)`
 
 State: `CanvasUiState` = `Loading` | `Failed(message)` | `Ready(canvasId, title, snippets, viewport,
-viewSize, selection, busy, mergeError)`. `Selection` = `Idle` | `Selecting(ids)`; `Selecting` cannot be
-empty (deselecting the last card leaves selection mode). All screen coordinates are dp.
+viewSize, selection, busy, mergeError, mode)`. `Selection` = `Idle` | `Selecting(ids)`; `Selecting` cannot be
+empty (deselecting the last card leaves selection mode). `CanvasMode` = `Canvas` | `SnippetList(order)`
+(the list order captured by `ListOrder.of`); `Ready.listRows` is `order.arrange(snippets)`. The mode's
+kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coordinates are dp.
 
 | Call | Effect |
 |---|---|
-| `reload()` | `GET /api/canvases/{id}`; viewport from `viewport_state` via `Viewport.from` (zoom clamped) |
+| `reload()` | `GET /api/canvases/{id}`; viewport from `viewport_state` via `Viewport.from` (zoom clamped); mode from the saved kind (a list is sorted afresh) |
+| `setMode(kind)` | Saves the kind (also before load); `LIST` captures a new `ListOrder`, `CANVAS` drops it. Selection is kept |
 | `setViewSize(size)` | Canvas element size (dp); used for the viewport centre |
 | `panBy(delta)` | `Viewport.panBy`; schedules a viewport save |
 | `transform(centroid, pan, zoom)` | `viewport.panBy(pan).scaleAbout(centroid, zoom)`: the content follows the fingers, then zooms about the current centroid (clamped 0.1–5×); schedules a save |
 | `flushViewport()` | Save a pending viewport now (called on the screen's `ON_STOP`) |
 | `onTap(hit)` | Idle: a card opens the editor (`CanvasEvent.OpenEditor`). Selecting: a card toggles; empty canvas does nothing |
 | `onLongPress(id)` | Adds the card to the selection (entering selection mode) and records its position as a move origin |
+| `onListLongPress(id)` | List row long-press: adds the row to the selection; records no move origin |
 | `moveCardBy(id, delta)` | Only after `onLongPress(id)`: moves the card by `delta / zoom` world units, locally |
 | `endMove(id)` | If the card moved: one `PATCH /api/snippets/batch-position` with that card; on failure the card returns to its origin and a snackbar shows the error |
 | `exitSelection()` | Back to `Idle` (also clears `mergeError`); the system back gesture does the same |
 | `merge(mode)` | `MergeRequest.of(selected, mode)`; null (fewer than two) => `MergeError.TooFewSnippets`, no request. Success: drop `deleted_ids`, append the merged snippet, select only it. Failure: nothing changes, `mergeError = toMergeError(e)` and a snackbar |
 | `deleteSelected()` | `DELETE` each selected snippet in parallel; removes the ones the server deleted; the rest stay selected; first error to the snackbar (after a confirm dialog in the UI) |
 | `createSnippetAtCenter()` | `POST` a freestyle snippet at `viewportCenter(viewport, viewSize)`, insert it, then `OpenEditor` |
-| `replaceSnippet(s)` | The editor's `onSaved`: replace in place |
+| `replaceSnippet(s)` | The editor's `onSaved`: replace in place; in list mode, capture a new list order |
 | `hitTest(screen)` | Topmost card under a dp point (`hitTestScreen`) |
 
 Viewport persistence: every camera change cancels and restarts a 1 s timer; when it fires, or on
@@ -135,10 +141,12 @@ Strokes are expressed in dp (`1 / zoom` card units).
 
 `CanvasScreen` = `BoxWithConstraints` around a `Scaffold`:
 
-- Top bar: title, back, "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
+- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
   (enabled with ≥ 2 selected and nothing in flight), Delete (confirm dialog), Rhymes, ✕).
 - FAB "New snippet" while not selecting.
-- Body: the canvas, a `Failed` message with Retry, or a progress indicator.
+- Body: the canvas or, in list mode, `SnippetList` (rows are the canvas card resized for the row by
+  `listCardWidth` / `listCardHeight`, tap = `onTap`, long-press = `onListLongPress`); a `Failed`
+  message with Retry; or a progress indicator.
 - Rhyme sheet: with `maxWidth >= 840.dp` a permanent 380 dp side pane right of the canvas (system back
   closes it); otherwise a `ModalBottomSheet` (dismissing it closes the session).
 - Snackbars for `CanvasEvent.Message`; `CanvasEvent.OpenEditor` navigates.
@@ -216,11 +224,13 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `session/SessionViewModel.kt` | `SessionState` (`Unknown`, `SignedOut`, `SignedIn`), `SessionViewModel` (`state`, `signOut`) |
 | `auth/AuthViewModel.kt`, `auth/AuthScreen.kt` | `AuthMode`, `AuthFieldError`, `AuthUiState`, `AuthViewModel` (`setMode`, `setEmail`, `setPassword`, `setDisplayName`, `submit`); the form |
 | `canvaslist/CanvasListViewModel.kt`, `canvaslist/CanvasListScreen.kt` | `CanvasListUiState`, `CanvasListEvent` (`Open`, `Message`), `CanvasListViewModel` (`refresh`, `create`); the list |
-| `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasUiState` (`Loading`, `Failed`, `Ready`), `CanvasEvent` (`OpenEditor`, `Message`) |
-| `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS` |
+| `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`) |
+| `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS`, `CANVAS_MODE_KEY` |
 | `canvas/CanvasScreen.kt` | `CanvasScreen`, `canvasViewModel(container, canvasId, owner)` |
 | `canvas/CanvasTopBars.kt` | `CanvasTopBar`, `SelectionTopBar` |
 | `canvas/SnippetCanvas.kt` | `SnippetCanvas` (draw loop, layout cache, size reporting, gestures) |
+| `canvas/list/ListCardSize.kt` | `ListCardMetrics`, `ListCardWidth`, `listCardNeededWidth`, `listCardWidth`, `listCardHeight`, `listCard` (pure) |
+| `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`; rows drawn with `cardLayout` + `drawCard`) |
 | `canvas/render/CardLayout.kt` | `CardMetrics`, `CellTextKind`, `CellText`, `CountText`, `TagPill`, `GridFrame`, `CardLayout`, `placeCellText`, `cardLayout`, `textVisible` (pure) |
 | `canvas/render/Culling.kt` | `intersects`, `visibleCards`, `BackgroundGrid`, `backgroundGridLines` (pure) |
 | `canvas/render/CardRenderer.kt` | `CardTextStyles`, `DrawScope.drawCard` |
@@ -240,7 +250,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `ui/theme/Palette.kt`, `ui/theme/LyricsTheme.kt` | Web palette, snippet-type and provenance colours, alignment colour; dark Material 3 scheme |
 
 Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, fake repositories in
-`fakes/`): `CanvasViewModelTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
+`fakes/`): `CanvasViewModelTest`, `CanvasViewModelListModeTest`, `ListCardSizeTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
 `CanvasListViewModelTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
 `MainDispatcherExtension` installs a `StandardTestDispatcher` as `Dispatchers.Main`.
 
@@ -249,6 +259,8 @@ Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, 
 - Nothing from the rhyme sheet is drawn until the server confirms the materialized snippet.
 - A card move sends at most one batch-position request, on release, and only if the card moved.
 - `Selection.Selecting` is never empty; selection-mode UI shows exactly while it is `Selecting`.
+- List mode and the canvas share one `Selection`; list rows only reorder when a new `ListOrder` is
+  captured (list shown, reload, editor save).
 - A merge that fails leaves snippets and selection unchanged.
 - At most one rhyme query result is applied per plan; an older in-flight query never overwrites a newer one
   (`mapLatest` cancels it, and with it the HTTP call).

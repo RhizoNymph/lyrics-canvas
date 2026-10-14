@@ -18,13 +18,26 @@ import dev.nymph.lyrics.model.MergeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CanvasTopBar(title: String, rhymesOpen: Boolean, onBack: () -> Unit, onToggleRhymes: () -> Unit) {
+fun CanvasTopBar(
+    title: String,
+    mode: CanvasModeKind?,
+    rhymesOpen: Boolean,
+    onBack: () -> Unit,
+    onSetMode: (CanvasModeKind) -> Unit,
+    onToggleRhymes: () -> Unit,
+) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         },
         actions = {
+            // Only once loaded: the label names the mode the button switches to.
+            when (mode) {
+                CanvasModeKind.CANVAS -> TextButton(onClick = { onSetMode(CanvasModeKind.LIST) }) { Text("List") }
+                CanvasModeKind.LIST -> TextButton(onClick = { onSetMode(CanvasModeKind.CANVAS) }) { Text("Canvas") }
+                null -> Unit
+            }
             TextButton(onClick = onToggleRhymes) { Text(if (rhymesOpen) "Hide rhymes" else "Rhymes") }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Sidebar),
