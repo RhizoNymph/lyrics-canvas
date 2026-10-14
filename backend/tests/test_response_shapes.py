@@ -59,6 +59,7 @@ def legacy_snippet(s) -> dict:
         "derived_from": s.derived_from,
         "created_at": str(s.created_at),
         "updated_at": str(s.updated_at),
+        "content_updated_at": str(s.content_updated_at),
     }
 
 

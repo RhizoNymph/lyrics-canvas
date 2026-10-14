@@ -216,5 +216,5 @@ def test_response_snippet_has_the_snippet_wire_shape(client, make_store):
     assert list(body["snippet"]) == [
         "id", "canvas_id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text",
         "position_x", "position_y", "width", "height", "z_index", "group_id", "tags", "phonetics",
-        "derived_from", "created_at", "updated_at",
+        "derived_from", "created_at", "updated_at", "content_updated_at",
     ]

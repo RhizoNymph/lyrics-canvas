@@ -81,6 +81,8 @@ async def update_snippet(
     db: AsyncSession = Depends(get_db),
 ):
     data = req.model_dump(exclude_none=True)
+    # What the client sent decides content_updated_at; the grid and phonetics derived below do not.
+    content_edits = {key: value for key, value in data.items() if key in snippet_service.CONTENT_FIELDS}
     # Re-syllabify if raw_text changed and no explicit grid_data
     if "raw_text" in data and "grid_data" not in data:
         data["grid_data"] = syllabify_text(data["raw_text"])
@@ -98,7 +100,7 @@ async def update_snippet(
         width, height = _compute_size(data["grid_data"])
         data["width"] = width
         data["height"] = height
-    snippet = await snippet_service.update_snippet(db, snippet_id, str(user.id), **data)
+    snippet = await snippet_service.update_snippet(db, snippet_id, str(user.id), content_edits=content_edits, **data)
     if not snippet:
         raise HTTPException(status_code=404, detail="Snippet not found")
     return _snippet_response(snippet)

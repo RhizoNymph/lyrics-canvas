@@ -102,6 +102,8 @@ class SnippetResponse(BaseModel):
     derived_from: DerivedFromModel | None = None
     created_at: str
     updated_at: str
+    # Last content edit (text, type, grid); moves, resizes and tags do not change it.
+    content_updated_at: str
 
     # Responses always carry every field, so defaulted fields are required in the output schema.
     model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}

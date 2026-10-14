@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging.
+A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering.
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)).
@@ -219,6 +219,16 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  snippet_content_timestamp:
+    description: snippets.content_updated_at records when a snippet's content (text, type, grid) last changed, separately from updated_at which also moves on drags and resizes; returned on every SnippetResponse so list views can sort by last edited.
+    entry_points:
+      - backend/app/models/snippet.py (Snippet.content_updated_at)
+      - backend/app/services/snippet_service.py (CONTENT_FIELDS, content_edits_differ, update_snippet)
+      - backend/app/api/snippets.py (PUT /api/snippets/{id} content_edits)
+      - backend/app/api/canvases.py (_snippet_response)
+      - backend/alembic/versions/003_snippet_content_updated_at.py
+    depends_on: [snippet_crud, typed_api]
+    doc: docs/features/snippet_content_timestamp.md
   android_app:
     description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:

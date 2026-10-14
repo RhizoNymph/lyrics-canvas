@@ -2,7 +2,7 @@ import logging
 import uuid
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,7 +48,28 @@ async def get_owned_snippet(db: AsyncSession, snippet_id: str, owner_id: str) ->
     return result.scalar_one_or_none()
 
 
-async def update_snippet(db: AsyncSession, snippet_id: str, owner_id: str, **kwargs) -> Snippet | None:
+# The columns whose change is a content edit and bumps ``content_updated_at``. Layout
+# (position, size, z_index), grouping and derived phonetics are deliberately absent.
+CONTENT_FIELDS: frozenset[str] = frozenset({"raw_text", "snippet_type", "grid_mode", "beats_per_line", "grid_data"})
+
+
+def content_edits_differ(snippet: Snippet, edits: Mapping[str, object]) -> bool:
+    """True when any content field in ``edits`` differs from what ``snippet`` stores.
+
+    Keys outside ``CONTENT_FIELDS`` and ``None`` values (not sent) are ignored.
+    """
+    return any(
+        key in CONTENT_FIELDS and value is not None and getattr(snippet, key) != value
+        for key, value in edits.items()
+    )
+
+
+async def update_snippet(
+    db: AsyncSession, snippet_id: str, owner_id: str, *, content_edits: Mapping[str, object], **kwargs
+) -> Snippet | None:
+    """Apply the non-``None`` ``kwargs``; bump ``content_updated_at`` if ``content_edits`` (the
+    content fields the client sent, not derived values such as a re-syllabified grid) change
+    anything stored."""
     result = await db.execute(
         select(Snippet).join(Canvas).options(selectinload(Snippet.tags))
         .where(Snippet.id == uuid.UUID(snippet_id), Canvas.owner_id == uuid.UUID(owner_id))
@@ -56,9 +77,17 @@ async def update_snippet(db: AsyncSession, snippet_id: str, owner_id: str, **kwa
     snippet = result.scalar_one_or_none()
     if not snippet:
         return None
+    content_changed = content_edits_differ(snippet, content_edits)
     for key, value in kwargs.items():
         if value is not None:
             setattr(snippet, key, value)
+    if content_changed:
+        # SQL now(): the transaction clock, so it equals the updated_at written by the same UPDATE.
+        snippet.content_updated_at = func.now()
+    logger.debug(
+        "snippet.update snippet_id=%s fields=%s content_changed=%s",
+        snippet_id, sorted(k for k, v in kwargs.items() if v is not None), content_changed,
+    )
     await db.commit()
     # Re-fetch with tags loaded
     result2 = await db.execute(
