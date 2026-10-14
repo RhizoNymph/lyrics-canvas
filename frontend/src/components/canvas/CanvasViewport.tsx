@@ -8,6 +8,7 @@ import SnippetContextMenu from './SnippetContextMenu';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useRhymeStore } from '@/stores/rhymeStore';
+import { visibleSnippets } from '@/lib/canvas';
 
 // Module-level flag: SnippetCard sets this in pointerdown so onStageClick
 // knows a snippet was interacted with (Pixi stopPropagation doesn't reach DOM).
@@ -133,11 +134,7 @@ export default function CanvasViewport() {
     }, 50);
   }, [clearSelection]);
 
-  // Filter snippets by active tags
-  const visibleSnippets = Array.from(snippets.values()).filter((s) => {
-    if (activeTagFilters.size === 0) return true;
-    return s.tags.some((t) => activeTagFilters.has(t.id));
-  });
+  const visible = visibleSnippets(snippets, activeTagFilters);
 
   const groupArray = Array.from(groups.values());
 
@@ -162,7 +159,7 @@ export default function CanvasViewport() {
 
           {/* Group bounding boxes (behind snippets) */}
           {groupArray.map((group) => {
-            const groupSnippets = visibleSnippets.filter((s) => s.group_id === group.id);
+            const groupSnippets = visible.filter((s) => s.group_id === group.id);
             if (groupSnippets.length === 0) return null;
             return (
               <GroupContainer
@@ -177,7 +174,7 @@ export default function CanvasViewport() {
           })}
 
           {/* Snippet cards */}
-          {visibleSnippets.map((snippet) => (
+          {visible.map((snippet) => (
             <SnippetCard
               key={snippet.id}
               snippet={snippet}
@@ -190,7 +187,13 @@ export default function CanvasViewport() {
       </Stage>
 
       {/* HTML overlay for inline grid editing */}
-      {editingSnippetId && <InlineGridEditor snippetId={editingSnippetId} viewport={viewport} containerRef={containerRef} />}
+      {editingSnippetId && (
+        <InlineGridEditor
+          key={editingSnippetId}
+          snippetId={editingSnippetId}
+          placement={{ kind: 'canvas', viewport, containerRef }}
+        />
+      )}
 
       {/* HTML overlay for snippet context menu */}
       <SnippetContextMenu />

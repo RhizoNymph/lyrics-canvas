@@ -63,7 +63,7 @@ worldY = (clientY - containerTop) / zoom - viewport.y
 
 ### Tag Filtering
 
-When `activeTagFilters` is non-empty, only snippets whose tags intersect the filter set are rendered. Groups are only rendered when they contain at least one visible snippet.
+When `activeTagFilters` is non-empty, only snippets whose tags intersect the filter set are rendered (`visibleSnippets` from `src/lib/canvas/visibility.ts`, shared with list mode). Groups are only rendered when they contain at least one visible snippet.
 
 ### Store Dependencies
 
@@ -215,14 +215,17 @@ Each row also has `+·` / `−` buttons (shown while that row holds the selectio
 ### Save Behavior
 
 - Click outside the editor or Escape (with nothing selected and no active row) triggers save
-- Saves `{ raw_text: rawTextForSave(state), grid_data, snippet_type }` via `updateSnippet`, then clears
-  `editingSnippetId`. Arranged rows' text is rebuilt from their grid; the backend recomputes phonetics
+- Saves `{ raw_text: rawTextForSave(state), grid_data, snippet_type }` via `updateSnippet`, then
+  `closeEditor(snippetId)` (clears `editingSnippetId` only if no other editor opened meanwhile). Arranged rows' text is rebuilt from their grid; the backend recomputes phonetics
   from the pair (grid stress wins)
 - Click-outside listener is attached with a 100ms delay to avoid catching the opening double-click
 
 ### Layout
 
-Editor width is `max((maxCells * CELL_WIDTH + 2 * PADDING + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s,
+The editor takes `placement: EditorPlacement`. `{ kind: 'canvas', viewport, containerRef }` is the fixed
+overlay described here; `{ kind: 'inline' }` renders in normal flow at scale 1 inside a list-mode row
+(full width, body scrolls sideways when wide; see [list_mode.md](../features/list_mode.md)). The
+editor is keyed by snippet id. For the canvas placement, the editor width is `max((maxCells * CELL_WIDTH + 2 * PADDING + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s,
 snippet.width * s)`, with the geometry from `gridConstants.ts` and `ROW_CONTROLS_WIDTH` from `GridRow.tsx`.
 
 ### Store Dependencies
@@ -230,7 +233,7 @@ snippet.width * s)`, with the geometry from `gridConstants.ts` and `ROW_CONTROLS
 | Store | State/Actions Used |
 |-------|-------------------|
 | canvasStore | `snippets`, `updateSnippet`, `snippetScales` |
-| uiStore | `setEditingSnippet` |
+| uiStore | `closeEditor` |
 
 Click and double-click events call `stopPropagation()` to prevent canvas interactions.
 

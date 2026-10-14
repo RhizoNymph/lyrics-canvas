@@ -124,6 +124,7 @@ Main editing view that orchestrates all canvas editing components.
 | Ctrl+Z / Cmd+Z | `canvasStore.undo()` |
 | Ctrl+Shift+Z / Cmd+Shift+Z | `canvasStore.redo()` |
 | Ctrl+F / Cmd+F | `uiStore.setSearchModalOpen(true)` |
+| Ctrl+Shift+L / Cmd+Shift+L | `uiStore.toggleViewMode()` (canvas / list; ignored while typing or editing) |
 | Delete / Backspace | Delete selected snippets (ignored when focus is in an input, textarea, select, or when a snippet is being edited) |
 
 ### Component Layout
@@ -135,7 +136,7 @@ Main editing view that orchestrates all canvas editing components.
 | TagFilterBar                                      |
 +--------------------------------------+-----------+
 |                                      |           |
-| CanvasViewport                       | Rhyme     |
+| CanvasViewport or ListView (viewMode)| Rhyme     |
 |                                      | Sidebar   |
 |                                      |           |
 +--------------------------------------+           |

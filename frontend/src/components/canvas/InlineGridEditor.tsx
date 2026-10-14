@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { nlpApi } from '@/api/client';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -32,10 +32,21 @@ interface CellSelection {
   end: number; // exclusive
 }
 
+/**
+ * Where the editor sits. `canvas`: a fixed overlay over the snippet's card, scaled with canvas zoom and
+ * the card's scale. `inline`: in normal flow inside a list row, full row width, scale 1.
+ */
+export type EditorPlacement =
+  | {
+      kind: 'canvas';
+      viewport: { x: number; y: number; zoom: number };
+      containerRef: React.RefObject<HTMLDivElement | null>;
+    }
+  | { kind: 'inline' };
+
 interface Props {
   snippetId: string;
-  viewport: { x: number; y: number; zoom: number };
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  placement: EditorPlacement;
 }
 
 function isTextTarget(target: EventTarget | null): boolean {
@@ -43,9 +54,9 @@ function isTextTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
-export default function InlineGridEditor({ snippetId, viewport, containerRef }: Props) {
+export default function InlineGridEditor({ snippetId, placement }: Props) {
   const { snippets, updateSnippet, snippetScales } = useCanvasStore();
-  const { setEditingSnippet } = useUIStore();
+  const { closeEditor } = useUIStore();
   const snippet = snippets.get(snippetId);
   const snippetScale = snippetScales.get(snippetId) || 1;
 
@@ -112,9 +123,9 @@ export default function InlineGridEditor({ snippetId, viewport, containerRef }: 
       });
     } finally {
       isSaving.current = false;
-      setEditingSnippet(null);
+      closeEditor(snippetId);
     }
-  }, [snippetType, snippetId, updateSnippet, setEditingSnippet]);
+  }, [snippetType, snippetId, updateSnippet, closeEditor]);
 
   // Click-outside
   useEffect(() => {
@@ -287,21 +298,30 @@ export default function InlineGridEditor({ snippetId, viewport, containerRef }: 
   };
 
   if (!snippet) return null;
-  const rect = containerRef.current?.getBoundingClientRect();
-  if (!rect) return null;
-
-  const s = viewport.zoom * snippetScale;
-  const left = (snippet.position_x + viewport.x) * viewport.zoom + rect.left;
-  const top = (snippet.position_y + viewport.y) * viewport.zoom + rect.top;
+  let s = 1;
+  let frame: CSSProperties = { position: 'relative', width: '100%', boxSizing: 'border-box' };
+  if (placement.kind === 'canvas') {
+    const { viewport, containerRef } = placement;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    s = viewport.zoom * snippetScale;
+    frame = {
+      position: 'fixed',
+      left: (snippet.position_x + viewport.x) * viewport.zoom + rect.left,
+      top: (snippet.position_y + viewport.y) * viewport.zoom + rect.top,
+      zIndex: 1000,
+    };
+  }
   const color = SNIPPET_TYPE_COLORS[snippetType] || '#6b7280';
 
   const rowLines = lines.map((_, row) => gridLineForRow(rows, row));
   const cellCountPerRow = rowLines.map((line, row) => (line ? line.cells.length : 0) + (row === activeRow ? 1 : 0));
   const maxCells = Math.max(...cellCountPerRow, 4);
-  const editorWidth = Math.max(
-    (maxCells * CELL_WIDTH + PADDING * 2 + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s,
-    snippet.width * s,
-  );
+  const contentWidth = (maxCells * CELL_WIDTH + PADDING * 2 + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s;
+  const sizing: CSSProperties =
+    placement.kind === 'canvas'
+      ? { width: Math.max(contentWidth, snippet.width * s), overflow: 'hidden' }
+      : { overflowX: 'auto' };
 
   return (
     <div
@@ -311,15 +331,11 @@ export default function InlineGridEditor({ snippetId, viewport, containerRef }: 
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       style={{
-        position: 'fixed',
-        left,
-        top,
-        width: editorWidth,
+        ...frame,
+        ...sizing,
         background: '#1c1c38',
         border: '2px solid #6366f1',
         borderRadius: 8,
-        zIndex: 1000,
-        overflow: 'hidden',
         outline: 'none',
       }}
     >
@@ -356,8 +372,8 @@ export default function InlineGridEditor({ snippetId, viewport, containerRef }: 
         </select>
       </div>
 
-      {/* Grid body */}
-      <div style={{ padding: `${PADDING * s}px` }}>
+      {/* Grid body (inline: wide enough for the longest row, scrolls sideways inside the row) */}
+      <div style={{ padding: `${PADDING * s}px`, ...(placement.kind === 'inline' ? { minWidth: contentWidth, boxSizing: 'border-box' } : {}) }}>
         {lines.map((lineText, row) => {
           const gridLine = rowLines[row];
           const isActive = row === activeRow;

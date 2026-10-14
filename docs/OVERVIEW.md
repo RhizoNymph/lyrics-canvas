@@ -64,6 +64,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Edit**: Double-click a snippet to open the text/type editor
 - **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -229,6 +230,22 @@ Features Index:
       - backend/alembic/versions/003_snippet_content_updated_at.py
     depends_on: [snippet_crud, typed_api]
     doc: docs/features/snippet_content_timestamp.md
+  list_mode:
+    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle, no tag filter yet.
+    entry_points:
+      - frontend/src/components/list/ (ListView, ListRow, GridPreview, useFrozenOrder)
+      - frontend/src/lib/listMode/ (sortForList, applyFrozenOrder, listClick, view-mode persistence)
+      - frontend/src/lib/canvas/visibility.ts (isSnippetVisible, shared with CanvasViewport)
+      - frontend/src/stores/uiStore.ts (viewMode, setViewMode, toggleViewMode, closeEditor)
+      - frontend/src/stores/canvasStore.ts (setSelection)
+      - frontend/src/components/canvas/InlineGridEditor.tsx (EditorPlacement 'inline')
+      - frontend/src/components/toolbar/Toolbar.tsx (List / Canvas toggle)
+      - frontend/src/components/pages/CanvasPage.tsx (view switch, Ctrl/Cmd+Shift+L)
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/list/ListOrder.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/list/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setMode, onListLongPress)
+    depends_on: [snippet_content_timestamp, merge_blocks, grid_rearrange, canvas_rendering, snippet_crud, android_app]
+    doc: docs/features/list_mode.md
   android_app:
     description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete, list mode) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:
@@ -239,12 +256,4 @@ Features Index:
       - android/core/data/
     depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
     doc: docs/features/android_app.md
-  list_mode:
-    description: A canvas-screen toggle that swaps the spatial canvas for a scrolling list of the canvas's snippets, last content edit (content_updated_at) first, rendered as the same cards; tap opens the editor, long-press selects, and merge / delete work from the list. Android - top-bar List / Canvas toggle, LazyColumn, mode kept in the canvas ViewModel's SavedStateHandle, no tag filter yet.
-    entry_points:
-      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/list/ListOrder.kt
-      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/list/
-      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setMode, onListLongPress)
-    depends_on: [android_app, merge_blocks, snippet_crud]
-    doc: docs/features/list_mode.md
 ```

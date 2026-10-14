@@ -39,6 +39,7 @@ function snippet(id: string, raw_text: string, stress: string, x = 0, y = 0): Sn
     tags: [],
     created_at: '',
     updated_at: '',
+    content_updated_at: '',
   };
 }
 

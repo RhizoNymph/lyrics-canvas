@@ -46,6 +46,8 @@ export interface Snippet {
   tags: Tag[];
   created_at: string;
   updated_at: string;
+  /** ISO-8601; bumped by the server on content changes (text, type, grid) only, never on moves. */
+  content_updated_at: string;
 }
 
 export interface Group {

@@ -139,6 +139,7 @@ Lightweight store for UI panel visibility and editing state.
 | `similarityPanelOpen` | boolean | false |
 | `searchModalOpen` | boolean | false |
 | `exportDialogOpen` | boolean | false |
+| `viewMode` | `'canvas' \| 'list'` | `loadViewMode(browserStorage())` (localStorage `lyrics-canvas.viewMode`, else `'canvas'`) |
 | `editingSnippetId` | `string \| null` | null |
 | `similarityTargetId` | `string \| null` | null |
 | `contextMenu` | `{ snippetId: string; x: number; y: number } \| null` | null |
@@ -152,6 +153,9 @@ Lightweight store for UI panel visibility and editing state.
 | `setSearchModalOpen(open)` | Set directly |
 | `setExportDialogOpen(open)` | Set directly |
 | `setEditingSnippet(id)` | Set editing state |
+| `closeEditor(id)` | Clear `editingSnippetId` only if it still equals `id` (a slow save cannot close a newer editor) |
+| `setViewMode(mode)` | Persist via `saveViewMode` (never throws), set mode, close editor and context menu ([list_mode.md](../features/list_mode.md)) |
+| `toggleViewMode()` | `canvas` <-> `list` via `setViewMode` |
 | `setSimilarityTarget(id)` | **Also opens similarity panel** |
 | `setContextMenu(menu)` | Set context menu state (snippet ID + screen position) |
 | `closeContextMenu()` | Set contextMenu to null |
