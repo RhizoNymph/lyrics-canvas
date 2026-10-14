@@ -61,6 +61,8 @@ class ResponseDecodingTest {
         assertEquals(8, s.beatsPerLine)
         assertEquals(200.5, s.positionY)
         assertEquals(3, s.zIndex)
+        assertEquals("2026-09-02 10:00:00+00:00", s.updatedAt)
+        assertEquals("2026-09-01 12:30:00.250000+00:00", s.contentUpdatedAt)
         assertEquals(GroupId("9a000000-0000-4000-8000-000000000001"), s.groupId)
         val line = s.gridData!!.lines.single()
         assertEquals(4, line.cells.size)

@@ -37,6 +37,7 @@ fun snippet(rawText: String, grid: GridData? = null, type: SnippetType = Snippet
     zIndex = 0,
     createdAt = "2026-10-01T00:00:00Z",
     updatedAt = "2026-10-01T00:00:00Z",
+    contentUpdatedAt = "2026-10-01T00:00:00Z",
 )
 
 /** A "server" syllabification: one stressed cell per word, so it is distinguishable from the local estimate. */
