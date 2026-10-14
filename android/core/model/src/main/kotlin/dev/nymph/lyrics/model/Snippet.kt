@@ -62,6 +62,8 @@ data class Snippet(
     @SerialName("derived_from") val derivedFrom: DerivedFrom? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
+    /** Last content edit (text, type or grid); unlike [updatedAt], moves and resizes leave it alone. */
+    @SerialName("content_updated_at") val contentUpdatedAt: String,
 )
 
 /**

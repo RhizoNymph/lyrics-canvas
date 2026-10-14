@@ -18,6 +18,8 @@ fun snippet(
     width: Double = 200.0,
     height: Double = 100.0,
     zIndex: Int = 0,
+    createdAt: String = "",
+    contentUpdatedAt: String = "",
 ): Snippet = Snippet(
     id = SnippetId(id),
     canvasId = CanvasId("c1"),
@@ -30,8 +32,9 @@ fun snippet(
     width = width,
     height = height,
     zIndex = zIndex,
-    createdAt = "",
+    createdAt = createdAt,
     updatedAt = "",
+    contentUpdatedAt = contentUpdatedAt,
 )
 
 /** Rest cells render as "·", others as their syllable (the TS tests' `syls`). */

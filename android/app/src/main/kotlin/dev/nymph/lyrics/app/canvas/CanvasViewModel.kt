@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.canvas
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasPort
@@ -14,6 +15,7 @@ import dev.nymph.lyrics.logic.canvas.Viewport
 import dev.nymph.lyrics.logic.canvas.hitTestScreen
 import dev.nymph.lyrics.logic.canvas.toMergeError
 import dev.nymph.lyrics.logic.canvas.viewportCenter
+import dev.nymph.lyrics.logic.list.ListOrder
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.MergeMode
 import dev.nymph.lyrics.model.MergeRequest
@@ -42,13 +44,21 @@ import kotlinx.coroutines.launch
 /** Quiet period after the last pan / zoom before the viewport is saved. */
 const val VIEWPORT_SAVE_DELAY_MS: Long = 1_000
 
+/** [SavedStateHandle] key of the canvas / list mode ([CanvasModeKind.name]). */
+const val CANVAS_MODE_KEY: String = "canvas_mode"
+
 /**
  * The canvas screen: loaded snippets, camera, selection mode, card moves, merge / delete, and the
  * canvas side of the rhyme sheet ([RhymeCanvasPort]). All coordinates from the screen are in dp.
  * Never throws: failures become [CanvasUiState.Failed], [CanvasUiState.Ready.mergeError] or a
  * [CanvasEvent.Message].
  *
+ * List mode shows the same snippets as rows ([CanvasUiState.Ready.listRows]) in a [ListOrder]
+ * captured when the list is shown, reloaded, or an editor save comes back, so rows never move
+ * under the user's finger; selection, merge and delete are shared with the canvas.
+ *
  * @param persistScope outlives this ViewModel, so a viewport save started on leave completes
+ * @param savedState keeps the canvas / list mode across configuration changes and process death
  */
 class CanvasViewModel(
     private val canvasId: CanvasId,
@@ -56,6 +66,7 @@ class CanvasViewModel(
     private val snippets: SnippetRepository,
     private val persistScope: CoroutineScope,
     private val viewportSaveDelayMs: Long = VIEWPORT_SAVE_DELAY_MS,
+    private val savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel(), RhymeCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
@@ -81,7 +92,14 @@ class CanvasViewModel(
                     val detail = result.value
                     val viewport = Viewport.from(detail.viewportState)
                     lastSavedViewport = viewport
-                    CanvasUiState.Ready(detail.id, detail.title, detail.snippets, viewport, ViewSize(0.0, 0.0))
+                    CanvasUiState.Ready(
+                        canvasId = detail.id,
+                        title = detail.title,
+                        snippets = detail.snippets,
+                        viewport = viewport,
+                        viewSize = ViewSize(0.0, 0.0),
+                        mode = modeFor(savedModeKind(), detail.snippets),
+                    )
                 }
                 is ApiResult.Failure -> CanvasUiState.Failed(result.error.userMessage())
             }
@@ -96,6 +114,26 @@ class CanvasViewModel(
 
     private fun message(text: String) {
         _events.trySend(CanvasEvent.Message(text))
+    }
+
+    // ---- Canvas / list mode ----
+
+    private fun savedModeKind(): CanvasModeKind = CanvasModeKind.parse(savedState.get<String>(CANVAS_MODE_KEY))
+
+    private fun modeFor(kind: CanvasModeKind, snippets: List<Snippet>): CanvasMode = when (kind) {
+        CanvasModeKind.CANVAS -> CanvasMode.Canvas
+        CanvasModeKind.LIST -> CanvasMode.SnippetList(ListOrder.of(snippets))
+    }
+
+    /** Show the canvas or the list; showing the list sorts it afresh. Remembered before the canvas loads too. */
+    fun setMode(kind: CanvasModeKind) {
+        savedState[CANVAS_MODE_KEY] = kind.name
+        updateReady { if (it.mode.kind == kind) it else it.copy(mode = modeFor(kind, it.snippets)) }
+    }
+
+    /** Capture a new list order from the current snippets (no-op on the canvas). */
+    private fun resortList() = updateReady { ready ->
+        if (ready.mode is CanvasMode.SnippetList) ready.copy(mode = CanvasMode.SnippetList(ListOrder.of(ready.snippets))) else ready
     }
 
     fun snippet(id: SnippetId): Snippet? = ready()?.byId?.get(id)
@@ -168,8 +206,16 @@ class CanvasViewModel(
     fun onLongPress(id: SnippetId) {
         val snippet = snippet(id) ?: return
         moveOrigins[id] = Point(snippet.positionX, snippet.positionY)
-        updateReady { it.copy(selection = Selection.of(it.selection.ids + id)) }
+        select(id)
     }
+
+    /** Long press on a list row: select it (entering selection mode); rows do not move. */
+    fun onListLongPress(id: SnippetId) {
+        if (snippet(id) == null) return
+        select(id)
+    }
+
+    private fun select(id: SnippetId) = updateReady { it.copy(selection = Selection.of(it.selection.ids + id)) }
 
     fun moveCardBy(id: SnippetId, screenDelta: Point) {
         if (id !in moveOrigins) return
@@ -276,9 +322,10 @@ class CanvasViewModel(
         }
     }
 
-    /** The editor saved [snippet]: replace the old copy in place. */
-    fun replaceSnippet(snippet: Snippet) = updateReady { ready ->
-        ready.copy(snippets = ready.snippets.map { if (it.id == snippet.id) snippet else it })
+    /** The editor saved [snippet]: replace the old copy in place; back in the list, sort it afresh. */
+    fun replaceSnippet(snippet: Snippet) {
+        updateReady { ready -> ready.copy(snippets = ready.snippets.map { if (it.id == snippet.id) snippet else it }) }
+        resortList()
     }
 
     private fun insert(snippet: Snippet) = updateReady { ready ->
