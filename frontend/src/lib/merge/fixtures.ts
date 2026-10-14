@@ -42,6 +42,7 @@ export function snippet(id: string, text: string, overrides: SnippetOverrides = 
     tags: [],
     created_at: '',
     updated_at: '',
+    content_updated_at: '',
     ...overrides,
   };
 }

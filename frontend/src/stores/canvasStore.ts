@@ -64,6 +64,8 @@ interface CanvasState {
   // Selection
   selectSnippet: (id: string, multi?: boolean) => void;
   clearSelection: () => void;
+  /** Replace the selection (ids not on this canvas are dropped). Used by list mode. */
+  setSelection: (ids: ReadonlySet<string>) => void;
 
   // Scaling
   setSnippetScale: (id: string, scale: number) => void;
@@ -244,6 +246,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedSnippetIds: new Set() }),
+
+  setSelection: (ids) => {
+    const { snippets } = get();
+    set({ selectedSnippetIds: new Set([...ids].filter((id) => snippets.has(id))) });
+  },
 
   setSnippetScale: (id, scale) => {
     const next = new Map(get().snippetScales);

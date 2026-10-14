@@ -7,7 +7,8 @@ export default function Toolbar() {
     canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
     selectedSnippetIds, mergeSelected, mergeError, clearMergeError,
   } = useCanvasStore();
-  const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, rhymeSidebarOpen } = useUIStore();
+  const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, rhymeSidebarOpen, viewMode, toggleViewMode } = useUIStore();
+  const listMode = viewMode === 'list';
   const canMerge = selectedSnippetIds.size >= 2;
 
   const handleTSNE = async () => {
@@ -72,6 +73,18 @@ export default function Toolbar() {
         {canvasTitle || 'Lyrics Canvas'}
       </span>
 
+      <button
+        onClick={toggleViewMode}
+        style={listMode ? activeBtnStyle : btnStyle}
+        aria-pressed={listMode}
+        title={listMode ? 'Show the canvas (Ctrl+Shift+L)' : 'Show snippets as a list, last edited first (Ctrl+Shift+L)'}
+      >
+        {listMode ? 'Canvas' : 'List'}
+      </button>
+
+      <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
+
+      {!listMode && (
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={handleZoomOut} style={btnStyle} title="Zoom Out">−</button>
         <button onClick={handleZoomReset} style={btnStyle} title="Reset Zoom">
@@ -79,8 +92,9 @@ export default function Toolbar() {
         </button>
         <button onClick={handleZoomIn} style={btnStyle} title="Zoom In">+</button>
       </div>
+      )}
 
-      <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
+      {!listMode && <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />}
 
       <button onClick={undo} style={btnStyle} title="Undo (Ctrl+Z)">Undo</button>
       <button onClick={redo} style={btnStyle} title="Redo (Ctrl+Shift+Z)">Redo</button>
@@ -97,9 +111,11 @@ export default function Toolbar() {
       >
         Rhymes
       </button>
-      <button onClick={handleTSNE} style={tsneMode ? activeBtnStyle : btnStyle}>
-        {tsneMode ? 'Exit t-SNE' : 't-SNE'}
-      </button>
+      {!listMode && (
+        <button onClick={handleTSNE} style={tsneMode ? activeBtnStyle : btnStyle}>
+          {tsneMode ? 'Exit t-SNE' : 't-SNE'}
+        </button>
+      )}
 
       <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
 

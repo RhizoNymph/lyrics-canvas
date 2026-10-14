@@ -6,6 +6,8 @@ import { TextStyle } from 'pixi.js';
 import type { Graphics as PixiGraphics } from 'pixi.js';
 import type { GridCell, GridLine } from '@/types';
 import { CELL_WIDTH, CELL_HEIGHT } from './gridConstants';
+import { cellLabel, cellTextKind, GRID_TEXT_COLORS } from './gridCellText';
+import type { CellTextKind } from './gridCellText';
 
 export { CELL_WIDTH, CELL_HEIGHT, PADDING, HEADER_HEIGHT } from './gridConstants';
 
@@ -52,7 +54,7 @@ export function drawBeatGrid(g: PixiGraphics, lines: ReadonlyArray<GridLine>, fr
   }
 }
 
-export type CellTextKind = 'rest' | 'stressed' | 'normal';
+export type { CellTextKind };
 
 export interface CellTextPlacement {
   text: string;
@@ -68,9 +70,8 @@ export function placeCellText(cell: GridCell, row: number, col: number, frame: P
   const cellH = CELL_HEIGHT * s;
   const x = left + col * cellW + 4 * s;
   const y = top + row * cellH + 3 * s;
-  if (cell.rest) return { text: '·', x: x + cellW * 0.35, y, kind: 'rest' };
-  const stressed = cell.stress !== undefined && cell.stress > 0;
-  return { text: cell.syllable || '', x, y, kind: stressed ? 'stressed' : 'normal' };
+  const kind = cellTextKind(cell);
+  return { text: cellLabel(cell), x: kind === 'rest' ? x + cellW * 0.35 : x, y, kind };
 }
 
 export interface GridTextStyles {
@@ -82,10 +83,10 @@ export interface GridTextStyles {
 
 export function createGridTextStyles(s: number): GridTextStyles {
   return {
-    cell: new TextStyle({ fontSize: 13 * s, fill: '#d0d0e8', fontFamily: 'monospace' }),
-    stressed: new TextStyle({ fontSize: 13 * s, fill: '#ffffff', fontWeight: 'bold', fontFamily: 'monospace' }),
-    rest: new TextStyle({ fontSize: 13 * s, fill: '#555577', fontFamily: 'monospace' }),
-    count: new TextStyle({ fontSize: 10 * s, fill: '#7a7a9a', fontFamily: 'monospace' }),
+    cell: new TextStyle({ fontSize: 13 * s, fill: GRID_TEXT_COLORS.normal, fontFamily: 'monospace' }),
+    stressed: new TextStyle({ fontSize: 13 * s, fill: GRID_TEXT_COLORS.stressed, fontWeight: 'bold', fontFamily: 'monospace' }),
+    rest: new TextStyle({ fontSize: 13 * s, fill: GRID_TEXT_COLORS.rest, fontFamily: 'monospace' }),
+    count: new TextStyle({ fontSize: 10 * s, fill: GRID_TEXT_COLORS.count, fontFamily: 'monospace' }),
   };
 }
 
