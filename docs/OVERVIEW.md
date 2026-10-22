@@ -75,6 +75,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [FRONTEND.md](./FRONTEND.md) | Frontend index with links to granular module docs |
 | [BACKEND.md](./BACKEND.md) | Backend index with links to granular module docs |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
+| [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -127,6 +128,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | Rhymes | pronouncing (CMU dict), g2p-en, wordfreq | Phonetic engine: pronunciation, near-rhyme scoring, rhyme index |
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
+| Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
 
 ## Data Model (Simplified)
 
@@ -256,4 +258,19 @@ Features Index:
       - android/core/data/
     depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
     doc: docs/features/android_app.md
+  helm_deployment:
+    description: Helm chart that deploys the web stack to Kubernetes - backend Deployment (Alembic migrations in a retrying init container, /api/health probes, HF model cache volume), nginx frontend Deployment (SPA + /api reverse proxy), bundled PostgreSQL + pgvector StatefulSet or externalDatabase, optional Ingress with per-host TLS and derived CORS origins, JWT key and DB password generated once and kept across upgrades, JSON-schema validated values, render-and-assert test suite; plus the production frontend image (frontend/Dockerfile.prod).
+    entry_points:
+      - deploy/helm/lyrics-canvas/Chart.yaml
+      - deploy/helm/lyrics-canvas/values.yaml
+      - deploy/helm/lyrics-canvas/values.schema.json
+      - deploy/helm/lyrics-canvas/templates/_helpers.tpl
+      - deploy/helm/lyrics-canvas/templates/backend/deployment.yaml
+      - deploy/helm/lyrics-canvas/templates/postgres/statefulset.yaml
+      - deploy/helm/lyrics-canvas/templates/ingress.yaml
+      - deploy/helm/tests/test_chart.py
+      - frontend/Dockerfile.prod
+      - frontend/nginx/default.conf.template
+    depends_on: []
+    doc: docs/features/helm_deployment.md
 ```

@@ -1,0 +1,20 @@
+{{- with .Values.backend.modelCache.persistence }}
+{{- if and .enabled (not .existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "lyrics-canvas.fullname" $ }}-model-cache
+  labels:
+    {{- include "lyrics-canvas.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  accessModes:
+    {{- toYaml .accessModes | nindent 4 }}
+  {{- if .storageClass }}
+  storageClassName: {{ .storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .size | quote }}
+{{- end }}
+{{- end }}

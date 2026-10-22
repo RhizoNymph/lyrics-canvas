@@ -1,0 +1,74 @@
+{{- $f := .Values.frontend }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lyrics-canvas.frontend.fullname" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ $f.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "lyrics-canvas.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "lyrics-canvas.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+        {{- with $f.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $f.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "lyrics-canvas.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "lyrics-canvas.serviceAccountName" . }}
+      {{- with $f.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: {{ include "lyrics-canvas.image" (dict "image" $f.image "default" .Chart.AppVersion) }}
+          imagePullPolicy: {{ $f.image.pullPolicy }}
+          {{- with $f.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $f.containerPort }}
+              protocol: TCP
+          env:
+            - name: BACKEND_URL
+              value: {{ include "lyrics-canvas.backend.url" . | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          {{- with $f.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with $f.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $f.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $f.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

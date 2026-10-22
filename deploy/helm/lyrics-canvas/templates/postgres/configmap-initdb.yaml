@@ -1,0 +1,13 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lyrics-canvas.postgres.fullname" . }}-initdb
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+data:
+  # Mirrors initdb/01-init.sql; runs once when the data directory is empty.
+  01-init.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+{{- end }}

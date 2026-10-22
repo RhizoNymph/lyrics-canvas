@@ -1,0 +1,4 @@
+postgres:
+  enabled: false
+externalDatabase:
+  url: postgresql+asyncpg://app:s3cret@db.internal:5432/lyrics

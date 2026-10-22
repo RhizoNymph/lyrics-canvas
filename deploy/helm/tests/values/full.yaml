@@ -1,0 +1,86 @@
+global:
+  imagePullSecrets:
+    - name: regcred
+
+serviceAccount:
+  create: false
+  name: custom-sa
+
+backend:
+  image:
+    repository: registry.local/lc-backend
+    tag: v9
+    pullPolicy: Always
+  replicaCount: 2
+  googleClientId: 123.apps.googleusercontent.com
+  corsOrigins:
+    - https://app.example.com
+    - https://alt.example.com
+  accessTokenExpireMinutes: 60
+  extraEnv:
+    - name: LOG_LEVEL
+      value: debug
+    - name: FROM_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: other
+          key: thing
+  modelCache:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: fast
+      accessModes:
+        - ReadWriteMany
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 4Gi
+  podAnnotations:
+    team: lyrics
+  podLabels:
+    tier: api
+  podSecurityContext:
+    fsGroup: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+  nodeSelector:
+    pool: cpu
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: lyrics
+      effect: NoSchedule
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: backend
+
+frontend:
+  image:
+    repository: registry.local/lc-frontend
+    tag: v9
+  replicaCount: 3
+  service:
+    type: LoadBalancer
+
+postgres:
+  image:
+    tag: pg16-trixie
+  auth:
+    username: songs
+    database: songsdb
+  persistence:
+    size: 50Gi
+    storageClass: ssd
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi

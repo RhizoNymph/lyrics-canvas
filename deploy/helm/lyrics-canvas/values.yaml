@@ -1,0 +1,180 @@
+# Default values for lyrics-canvas.
+#
+# Both application images must be built from this repository and pushed to a
+# registry the cluster can pull from (see deploy/helm/lyrics-canvas/README.md):
+#   backend:  docker build -t <repo>/lyrics-canvas-backend:<tag> backend
+#   frontend: docker build -f frontend/Dockerfile.prod -t <repo>/lyrics-canvas-frontend:<tag> frontend
+
+global:
+  # Pull secrets applied to every pod, e.g. [{name: regcred}].
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Name of the service account; defaults to the release fullname when created,
+  # or "default" when create=false and unset.
+  name: ""
+  annotations: {}
+
+backend:
+  image:
+    repository: ghcr.io/rhizonymph/lyrics-canvas-backend
+    # Defaults to .Chart.AppVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8000
+
+  # JWT signing key. Leave empty to generate one on first install; it is read
+  # back from the existing Secret on upgrades so tokens survive.
+  secretKey: ""
+  # Use a pre-existing Secret for the signing key instead of a chart-managed one.
+  existingSecret: ""
+  existingSecretKey: secret-key
+
+  # Allowed browser origins. Empty = derived from ingress.hosts (https when the
+  # host appears under ingress.tls, http otherwise); "[]" when ingress is off,
+  # which is fine because the frontend proxies /api same-origin.
+  corsOrigins: []
+  # Google OAuth client id for "Sign in with Google" (empty disables it).
+  googleClientId: ""
+  accessTokenExpireMinutes: 10080
+  # Additional container env entries (Kubernetes EnvVar objects).
+  extraEnv: []
+
+  # Alembic migrations run in an init container before each backend pod starts.
+  # The container retries until the database accepts connections.
+  migrations:
+    enabled: true
+    attempts: 30
+    delaySeconds: 5
+
+  # Seconds to wait for the API to answer /api/health before the pod is
+  # restarted (torch import on first boot is slow on small nodes).
+  startupTimeoutSeconds: 180
+
+  # sentence-transformers downloads all-MiniLM-L6-v2 on first use into HF_HOME.
+  # Without persistence it is re-downloaded whenever the pod is recreated.
+  modelCache:
+    persistence:
+      enabled: false
+      size: 2Gi
+      storageClass: ""
+      # ReadWriteMany is needed when replicaCount > 1 and pods land on
+      # different nodes.
+      accessModes:
+        - ReadWriteOnce
+      existingClaim: ""
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 3Gi
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+frontend:
+  image:
+    repository: ghcr.io/rhizonymph/lyrics-canvas-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+  # nginx-unprivileged listens on 8080.
+  containerPort: 8080
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+postgres:
+  # Run PostgreSQL + pgvector inside the release. Set false and fill
+  # externalDatabase to use a managed database (it must have the vector
+  # extension available: CREATE EXTENSION vector).
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  auth:
+    username: lyrics
+    database: lyrics_canvas
+    # Leave empty to generate a password on first install (kept on upgrades).
+    # Avoid characters that need URL-encoding; the value is placed verbatim
+    # in DATABASE_URL.
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: password
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+externalDatabase:
+  # SQLAlchemy async URL, e.g. postgresql+asyncpg://user:pass@host:5432/db.
+  # Stored in the chart-managed backend Secret.
+  url: ""
+  # Or reference a Secret that already holds the URL.
+  existingSecret: ""
+  existingSecretKey: database-url
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - lyrics-canvas.local
+  # Standard Ingress TLS entries: [{secretName: ..., hosts: [...]}].
+  tls: []
+  # Send /api straight to the backend Service; otherwise every request goes to
+  # the frontend, whose nginx proxies /api itself.
+  routeApiToBackend: true
