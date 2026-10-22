@@ -1,0 +1,132 @@
+name: Android release
+
+# Builds the Android APK and attaches it to a GitHub Release.
+#
+# Triggers
+#   - push of a tag v<versionName>          -> release build, GitHub Release created/updated
+#   - workflow_dispatch                     -> build only, APK kept as a workflow artifact
+#
+# Configuration
+#   variable ANDROID_API_BASE_URL           backend URL baked into the APK (required unless
+#                                           the dispatch input api_base_url is given)
+#   secrets  ANDROID_KEYSTORE_BASE64        base64 of the release keystore (optional)
+#            ANDROID_KEYSTORE_PASSWORD
+#            ANDROID_KEY_ALIAS
+#            ANDROID_KEY_PASSWORD           without them the APK is debug-signed
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Backend base URL to bake in (overrides the ANDROID_API_BASE_URL variable)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Resolve version and backend URL
+        id: meta
+        env:
+          INPUT_URL: ${{ inputs.api_base_url }}
+          VAR_URL: ${{ vars.ANDROID_API_BASE_URL }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            version="0.0.0-${GITHUB_SHA::7}"
+          fi
+          url="${INPUT_URL:-$VAR_URL}"
+          if [[ -z "$url" ]]; then
+            echo "::error::Set the repository variable ANDROID_API_BASE_URL (or the api_base_url input) to the backend URL the app should use." >&2
+            exit 1
+          fi
+          if [[ ! "$url" =~ ^https?:// ]]; then
+            echo "::error::ANDROID_API_BASE_URL must start with http:// or https://, got '$url'" >&2
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "code=$GITHUB_RUN_NUMBER"
+            echo "url=$url"
+            echo "apk=lyrics-canvas-$version.apk"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release keystore
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -n "$KEYSTORE_BASE64" ]]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "mode=keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret; the APK will be signed with the debug key."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4.4.1
+        with:
+          cache-read-only: ${{ github.ref_type != 'tag' && github.ref_name != 'main' }}
+
+      - name: Test and build release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon test :app:assembleRelease \
+            -PversionName="${{ steps.meta.outputs.version }}" \
+            -PversionCode="${{ steps.meta.outputs.code }}" \
+            -PapiBaseUrl="${{ steps.meta.outputs.url }}"
+
+      - name: Verify APK
+        run: |
+          mv app/build/outputs/apk/release/app-release.apk "${{ steps.meta.outputs.apk }}"
+          scripts/verify_release_apk.sh "${{ steps.meta.outputs.apk }}" \
+            "${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.code }}" \
+            "${{ steps.signing.outputs.mode }}" --api-base-url "${{ steps.meta.outputs.url }}"
+          sha256sum "${{ steps.meta.outputs.apk }}" > "${{ steps.meta.outputs.apk }}.sha256"
+          cat "${{ steps.meta.outputs.apk }}.sha256"
+
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: ${{ steps.meta.outputs.apk }}
+          path: |
+            android/${{ steps.meta.outputs.apk }}
+            android/${{ steps.meta.outputs.apk }}.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2.3.2
+        with:
+          files: |
+            android/${{ steps.meta.outputs.apk }}
+            android/${{ steps.meta.outputs.apk }}.sha256
+          generate_release_notes: true
+          body: |
+            Android APK `${{ steps.meta.outputs.apk }}` (versionCode ${{ steps.meta.outputs.code }}).
+
+            - Backend: `${{ steps.meta.outputs.url }}`
+            - Signing: ${{ steps.signing.outputs.mode == 'keystore' && 'release keystore' || 'debug key (install over a previous debug build only)' }}
