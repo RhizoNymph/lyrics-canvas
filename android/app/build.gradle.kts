@@ -4,6 +4,43 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Release metadata. CI passes -PversionName (from the tag) and -PversionCode (monotonic run
+// number); local builds fall back to the development values.
+val releaseVersionName: String =
+    (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "0.1.0"
+val releaseVersionCode: Int =
+    (project.findProperty("versionCode") as String?)?.takeIf { it.isNotBlank() }?.let {
+        it.toIntOrNull() ?: throw GradleException("-PversionCode must be a positive integer, got '$it'")
+    } ?: 1
+
+/** How the release build type is signed. Decided once from the environment, never half-configured. */
+sealed interface ReleaseSigning {
+    /** Keystore supplied through ANDROID_KEYSTORE_FILE / _PASSWORD, ANDROID_KEY_ALIAS / _PASSWORD. */
+    data class Keystore(val file: File, val storePassword: String, val keyAlias: String, val keyPassword: String) : ReleaseSigning
+    /** No keystore in the environment: sign with the debug key so the APK is still installable. */
+    data object DebugKey : ReleaseSigning
+}
+
+fun releaseSigningFromEnv(): ReleaseSigning {
+    val names = listOf("ANDROID_KEYSTORE_FILE", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD")
+    val values = names.associateWith { System.getenv(it)?.takeIf(String::isNotBlank) }
+    val missing = values.filterValues { it == null }.keys
+    if (missing.size == names.size) return ReleaseSigning.DebugKey
+    if (missing.isNotEmpty()) {
+        throw GradleException("release signing is partially configured; missing ${missing.joinToString()}")
+    }
+    val file = file(values.getValue("ANDROID_KEYSTORE_FILE")!!)
+    if (!file.isFile) throw GradleException("ANDROID_KEYSTORE_FILE does not exist: $file")
+    return ReleaseSigning.Keystore(
+        file = file,
+        storePassword = values.getValue("ANDROID_KEYSTORE_PASSWORD")!!,
+        keyAlias = values.getValue("ANDROID_KEY_ALIAS")!!,
+        keyPassword = values.getValue("ANDROID_KEY_PASSWORD")!!,
+    )
+}
+
+val releaseSigning: ReleaseSigning = releaseSigningFromEnv()
+
 android {
     namespace = "dev.nymph.lyrics.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -12,16 +49,33 @@ android {
         applicationId = "dev.nymph.lyrics"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         // Backend base URL. The emulator reaches the host's localhost at 10.0.2.2;
         // override per build with -PapiBaseUrl=http://<lan-ip>:8000 for a phone.
         val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8000"
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
+    signingConfigs {
+        if (releaseSigning is ReleaseSigning.Keystore) {
+            create("release") {
+                storeFile = releaseSigning.file
+                storePassword = releaseSigning.storePassword
+                keyAlias = releaseSigning.keyAlias
+                keyPassword = releaseSigning.keyPassword
+            }
+        }
+    }
+
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            signingConfig = when (releaseSigning) {
+                is ReleaseSigning.Keystore -> signingConfigs.getByName("release")
+                ReleaseSigning.DebugKey -> signingConfigs.getByName("debug")
+            }
+        }
     }
 
     compileOptions {
@@ -38,6 +92,16 @@ android {
 }
 
 kotlin { jvmToolchain(21) }
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.path == ":app:assembleRelease" || it.path == ":app:packageRelease" }) {
+        val signer = when (val s = releaseSigning) {
+            is ReleaseSigning.Keystore -> "keystore ${s.file.name} (alias ${s.keyAlias})"
+            ReleaseSigning.DebugKey -> "debug key (no ANDROID_KEYSTORE_* in the environment)"
+        }
+        logger.lifecycle("release APK: versionName=$releaseVersionName versionCode=$releaseVersionCode signing=$signer")
+    }
+}
 
 dependencies {
     implementation(project(":core:model"))

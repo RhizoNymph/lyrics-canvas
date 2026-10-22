@@ -75,6 +75,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [FRONTEND.md](./FRONTEND.md) | Frontend index with links to granular module docs |
 | [BACKEND.md](./BACKEND.md) | Backend index with links to granular module docs |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
+| [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -273,4 +274,12 @@ Features Index:
       - frontend/nginx/default.conf.template
     depends_on: []
     doc: docs/features/helm_deployment.md
+  android_release:
+    description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
+    entry_points:
+      - .github/workflows/android-release.yml
+      - android/app/build.gradle.kts (ReleaseSigning, releaseSigningFromEnv)
+      - android/scripts/verify_release_apk.sh
+    depends_on: [android_app]
+    doc: docs/features/android_release.md
 ```

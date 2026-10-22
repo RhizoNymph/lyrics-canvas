@@ -129,6 +129,10 @@ cd android && ./gradlew --offline assembleDebug test
 
 Outside the sandbox a plain `./gradlew assembleDebug test` works with the normal Gradle home.
 
+Release APKs are produced by the tag-triggered workflow described in
+[android_release.md](./android_release.md); the same Gradle properties (`-PversionName`, `-PversionCode`,
+`-PapiBaseUrl`) and `ANDROID_KEYSTORE_*` environment variables drive a local release build.
+
 ## Milestones
 
 | # | Milestone | Branch |
