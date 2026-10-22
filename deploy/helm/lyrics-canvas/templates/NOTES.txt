@@ -1,0 +1,33 @@
+Lyrics Canvas {{ .Chart.AppVersion }} is being deployed as release {{ .Release.Name }}.
+
+{{- if .Values.ingress.enabled }}
+
+Open the app at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ . }}/
+{{- end }}
+{{- else }}
+
+No Ingress is enabled. Reach the frontend with a port-forward (it proxies /api to the backend):
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "lyrics-canvas.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+Check the rollout:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "lyrics-canvas.backend.fullname" . }}
+  helm -n {{ .Release.Namespace }} test {{ .Release.Name }}
+
+{{- if and .Values.postgres.enabled (not .Values.postgres.auth.password) (not .Values.postgres.auth.existingSecret) }}
+
+The PostgreSQL password was generated and kept in Secret {{ include "lyrics-canvas.postgres.fullname" . }} (key "password").
+{{- end }}
+{{- if and (not .Values.backend.secretKey) (not .Values.backend.existingSecret) }}
+The JWT signing key was generated and kept in Secret {{ include "lyrics-canvas.backend.fullname" . }} (key "secret-key").
+{{- end }}
+{{- if not .Values.backend.modelCache.persistence.enabled }}
+
+The sentence-transformers model is downloaded on first use and is lost when a backend pod is recreated.
+Set backend.modelCache.persistence.enabled=true to keep it.
+{{- end }}

@@ -1,0 +1,142 @@
+{{- $b := .Values.backend }}
+{{- $image := include "lyrics-canvas.image" (dict "image" $b.image "default" .Chart.AppVersion) }}
+{{- $startupPeriod := 5 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lyrics-canvas.backend.fullname" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ $b.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "lyrics-canvas.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "lyrics-canvas.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+        {{- with $b.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/backend/secret.yaml") . | sha256sum }}
+        {{- with $b.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "lyrics-canvas.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "lyrics-canvas.serviceAccountName" . }}
+      {{- with $b.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $b.migrations.enabled }}
+      initContainers:
+        - name: migrate
+          image: {{ $image }}
+          imagePullPolicy: {{ $b.image.pullPolicy }}
+          {{- with $b.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              attempt=1
+              until uv run alembic upgrade head; do
+                if [ "$attempt" -ge {{ int $b.migrations.attempts }} ]; then
+                  echo "alembic upgrade failed after $attempt attempts" >&2
+                  exit 1
+                fi
+                attempt=$((attempt + 1))
+                echo "database not ready or migration failed; retry $attempt in {{ int $b.migrations.delaySeconds }}s"
+                sleep {{ int $b.migrations.delaySeconds }}
+              done
+          env:
+            {{- include "lyrics-canvas.backend.databaseEnv" . | nindent 12 }}
+          {{- with $b.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ $image }}
+          imagePullPolicy: {{ $b.image.pullPolicy }}
+          {{- with $b.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lyrics-canvas.backend.secretName" . }}
+                  key: {{ $b.existingSecretKey }}
+            {{- include "lyrics-canvas.backend.databaseEnv" . | nindent 12 }}
+            - name: CORS_ORIGINS
+              value: {{ include "lyrics-canvas.backend.corsOrigins" . | quote }}
+            - name: ACCESS_TOKEN_EXPIRE_MINUTES
+              value: {{ $b.accessTokenExpireMinutes | quote }}
+            {{- with $b.googleClientId }}
+            - name: GOOGLE_CLIENT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            - name: HF_HOME
+              value: /cache/huggingface
+            {{- with $b.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: {{ $startupPeriod }}
+            failureThreshold: {{ div (add (int $b.startupTimeoutSeconds) (sub $startupPeriod 1)) $startupPeriod }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: model-cache
+              mountPath: /cache
+          {{- with $b.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: model-cache
+          {{- if $b.modelCache.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-model-cache" (include "lyrics-canvas.fullname" .)) $b.modelCache.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with $b.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $b.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $b.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

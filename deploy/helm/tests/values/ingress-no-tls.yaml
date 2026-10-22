@@ -1,0 +1,4 @@
+ingress:
+  hosts:
+    - lyrics.example.com
+  tls: []

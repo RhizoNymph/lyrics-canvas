@@ -1,0 +1,17 @@
+apiVersion: v2
+name: lyrics-canvas
+description: Lyrics Canvas - infinite-canvas lyric workspace (React SPA, FastAPI API, PostgreSQL + pgvector)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/RhizoNymph/lyrics-canvas
+sources:
+  - https://github.com/RhizoNymph/lyrics-canvas
+keywords:
+  - lyrics
+  - fastapi
+  - react
+  - pgvector
+maintainers:
+  - name: RhizoNymph

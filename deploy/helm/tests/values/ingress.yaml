@@ -1,0 +1,13 @@
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - lyrics.example.com
+    - www.lyrics.example.com
+  tls:
+    - secretName: lyrics-tls
+      hosts:
+        - lyrics.example.com
+        - www.lyrics.example.com

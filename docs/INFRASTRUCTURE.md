@@ -110,6 +110,23 @@ docker-compose up
 - Use proper PostgreSQL credentials
 - Set `CORS_ORIGINS` to production domain
 - Remove `--reload` from uvicorn command
-- Build frontend for production (`npm run build`) and serve via nginx or CDN
+- Build frontend for production with `frontend/Dockerfile.prod` (Vite build served by nginx-unprivileged, `/api` proxied to `$BACKEND_URL`)
 - Add SSL/TLS termination (reverse proxy)
 - Consider connection pooling (PgBouncer) for high load
+
+## 7. Kubernetes (Helm)
+
+`deploy/helm/lyrics-canvas` deploys the same three services to a cluster:
+
+| Component | Kind | Notes |
+|-----------|------|-------|
+| backend | Deployment | `ghcr.io/rhizonymph/lyrics-canvas-backend`; init container runs `alembic upgrade head` with retries; probes on `/api/health`; `HF_HOME` on an emptyDir or PVC |
+| frontend | Deployment | `ghcr.io/rhizonymph/lyrics-canvas-frontend` built from `frontend/Dockerfile.prod`; nginx on 8080 proxies `/api` to the backend Service |
+| postgres | StatefulSet | `pgvector/pgvector:pg16`, PVC, initdb ConfigMap with `CREATE EXTENSION vector`; or `postgres.enabled=false` + `externalDatabase.url` |
+| ingress | Ingress | optional; `/api` to backend, `/` to frontend, TLS from values; CORS origins derived from the hosts |
+
+Secrets (JWT key, DB password) are generated on first install and re-read on
+upgrade. Install, image build and configuration details are in
+[deploy/helm/lyrics-canvas/README.md](../deploy/helm/lyrics-canvas/README.md);
+the design is documented in [features/helm_deployment.md](./features/helm_deployment.md).
+Chart tests: `python3 deploy/helm/tests/test_chart.py`.
