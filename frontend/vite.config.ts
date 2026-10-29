@@ -16,6 +16,12 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // Cluster alerts (nginx in production). The dev backend has no such route and answers 404,
+      // which the banner treats as "feature absent" and stays quiet.
+      '/_status': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 });
