@@ -206,6 +206,76 @@
         "affinity": { "type": "object" }
       }
     },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "schedule": { "type": "string", "pattern": "^(@(yearly|annually|monthly|weekly|daily|midnight|hourly)|\\S+( +\\S+){4})$" },
+        "timeZone": { "type": "string" },
+        "retain": { "type": "integer", "minimum": 1 },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "runAsGroup": { "type": "integer", "minimum": 1 },
+        "destination": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["hostPath", "persistentVolumeClaim"] },
+            "hostPath": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "path": { "type": "string", "pattern": "^(/.*)?$" } }
+            },
+            "persistentVolumeClaim": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "existingClaim": { "type": "string" },
+                "size": { "$ref": "#/definitions/quantity" },
+                "storageClass": { "type": "string" },
+                "accessModes": { "$ref": "#/definitions/accessModes" }
+              }
+            }
+          }
+        },
+        "startingDeadlineSeconds": { "type": "integer", "minimum": 10 },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resources" },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "nodeSelector": { "$ref": "#/definitions/stringMap" },
+        "tolerations": { "type": "array", "items": { "type": "object" } },
+        "affinity": { "type": "object" }
+      },
+      "if": {
+        "required": ["enabled", "destination"],
+        "properties": {
+          "enabled": { "const": true },
+          "destination": { "properties": { "type": { "const": "hostPath" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "destination": {
+            "required": ["hostPath"],
+            "properties": { "hostPath": { "required": ["path"], "properties": { "path": { "minLength": 1 } } } }
+          }
+        }
+      }
+    },
     "externalDatabase": {
       "type": "object",
       "additionalProperties": false,

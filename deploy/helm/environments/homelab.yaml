@@ -42,6 +42,23 @@ frontend:
 postgres:
   affinity: *homelabNodes
 
+# Nightly pg_dump to node1's disk (the NAS is out). The directory must exist on
+# node1, owned by nymph (1000:1000); dumps are created as that user so the
+# laptop pull (deploy/homelab/backup) can read them over ssh.
+backup:
+  enabled: true
+  schedule: "15 3 * * *"
+  timeZone: America/Los_Angeles
+  retain: 14
+  runAsUser: 1000
+  runAsGroup: 1000
+  destination:
+    type: hostPath
+    hostPath:
+      path: /home/nymph/backups/lyrics-canvas
+  nodeSelector:
+    kubernetes.io/hostname: node1
+
 # kube-prometheus-stack (release kps, namespace monitoring) loads every
 # PrometheusRule in the cluster. Alert routing lives in its Alertmanager config.
 monitoring:

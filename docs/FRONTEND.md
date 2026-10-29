@@ -17,6 +17,7 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 | [Rhyme Sidebar](./frontend/rhyme-view.md) | Engine-backed rhyme search list with materialize-to-canvas | `rhymeStore`, `RhymeSidebar`, `QueryControls`, `CandidateList`, `CandidateRow`, `lib/rhyme/*` |
 | [State Management](./frontend/state-management.md) | Zustand stores for auth, canvas data, UI state, rhyme sidebar | `authStore`, `canvasStore`, `uiStore`, `rhymeStore` |
 | [List Mode](./features/list_mode.md) | Canvas page list view: last-edited order, tag filter, in-place editor, shared selection | `ListView`, `ListRow`, `GridPreview`, `lib/listMode/*`, `lib/canvas/visibility` |
+| [Health Banner](./features/health_banner.md) | Backend health monitor, cluster alerts poller, status banner | `useStatusMonitoring`, `statusStore`, `StatusBanner`, `lib/health/*`, `lib/alerts/*`, `lib/statusBanner/*` |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces, constants | `client.ts`, `types/index.ts` |
 
 ## Architecture Summary
@@ -27,9 +28,14 @@ src/
   App.tsx                           Router + ProtectedRoute
   types/index.ts                    Shared interfaces and constants
   types/rhyme.ts                    Rhyme-suggest API contract types + RhymeError
-  api/client.ts                     Axios instance + endpoint modules
+  api/client.ts                     Axios instance + endpoint modules (+ health interceptor)
+  api/status.ts                     /api/health probe + /_status/alerts fetch (separate instance)
   hooks/
     useRhymeQuery.ts                Debounced rhyme re-query while the sidebar is open
+    useStatusMonitoring.ts          Runs the health monitor + alerts poller (app root)
+  lib/health/                       Health state machine, classification, monitor, client channel
+  lib/alerts/                       Alert payload validation, fetch result folding, poller
+  lib/statusBanner/                 Health + alerts -> ordered, dismissible banner items
   lib/canvas/
     visibility.ts                   Tag-filter visibility shared by canvas and list
   lib/listMode/
@@ -49,6 +55,7 @@ src/
     canvasStore.ts                  Canvas data + undo/redo + t-SNE
     uiStore.ts                      Panel visibility + editing state + view mode
     rhymeStore.ts                   Rhyme sidebar session, query, materialize
+    statusStore.ts                  Backend health, cluster alerts, dismissed banner keys
   components/
     canvas/
       CanvasViewport.tsx            Pixi Stage orchestrator
@@ -60,6 +67,9 @@ src/
       InlineGridEditor.tsx          Inline beat grid editor (canvas overlay or in a list row)
       InfiniteGrid.tsx              Background grid
       GroupContainer.tsx            Group bounding boxes
+    status/
+      StatusBanner.tsx              Store-connected health/alerts banner
+      StatusBannerView.tsx          Presentational banner cards
     list/
       ListView.tsx                  List mode: ordered, filtered rows; clicks; context menu
       ListRow.tsx                   Row: header, tags, GridPreview or the inline editor

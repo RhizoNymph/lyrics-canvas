@@ -62,9 +62,10 @@ upgrades; anything set explicitly goes in `<name>.secret.yaml` beside it,
 which is gitignored, passed as a second `-f`.
 
 `homelab.yaml` is the home microk8s cluster: images from the
-`localhost:32000` registry addon, all workloads on node0/node1, and the
-frontend on NodePort 32443, and the alert rules enabled for the cluster's
-kube-prometheus-stack.
+`localhost:32000` registry addon, all workloads on node0/node1, the
+frontend on NodePort 32443, the nightly backup CronJob writing to
+`/home/nymph/backups/lyrics-canvas` on node1 (see [Backups](#backups)), and
+the alert rules enabled for the cluster's kube-prometheus-stack.
 
 ```bash
 microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
@@ -84,6 +85,7 @@ microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
 | `backend.resources` | 1Gi/3Gi memory | torch + the embedding model need the headroom. |
 | `postgres.enabled` | `true` | Bundled single-replica pgvector StatefulSet with an 8Gi PVC. |
 | `postgres.auth.password` | generated | Kept across upgrades like the signing key. Or `postgres.auth.existingSecret`. |
+| `backup.enabled` | `false` | Nightly `pg_dump` CronJob `<fullname>-backup`; see [Backups](#backups). |
 | `externalDatabase.url` | `""` | `postgresql+asyncpg://...` for a managed database when `postgres.enabled=false`. The database must allow `CREATE EXTENSION vector`. Or `externalDatabase.existingSecret`. |
 | `ingress.routeApiToBackend` | `true` | Adds a `/api` path straight to the backend Service. |
 | `global.imagePullSecrets` | `[]` | Applied to every pod. |
@@ -126,13 +128,43 @@ Notification routing is configured in Alertmanager, not in this chart. Details:
   egress to reach it unless the cache PVC is already warm.
 - The backend image bakes NLTK data for g2p_en at build time, so no network is
   needed for rhyme features.
-- The bundled PostgreSQL is one replica with no backups; use `externalDatabase`
-  for anything you care about.
+- The bundled PostgreSQL is one replica. Enable `backup` for nightly dumps,
+  or use `externalDatabase` with the provider's backups.
+
+## Backups
+
+`backup.enabled=true` adds a CronJob `<fullname>-backup` that runs
+`pg_dump --format=custom` against the bundled PostgreSQL (it refuses to
+render with `postgres.enabled=false`). Each run writes
+`lyrics_canvas-<UTC timestamp>.dump` under a hidden temp name, checks it with
+`pg_restore --list`, renames it into place and keeps the newest
+`backup.retain` (14) dumps. The password comes from the postgres Secret via
+`secretKeyRef`; the image defaults to `postgres.image`.
+
+| Value | Default | Notes |
+|-------|---------|-------|
+| `backup.schedule` / `timeZone` | `15 3 * * *` / `""` | Cron or `@daily`-style macro; `timeZone` (IANA, Kubernetes 1.27+) defaults to the controller's zone. |
+| `backup.retain` | `14` | Dumps kept in the destination. |
+| `backup.destination.type` | `hostPath` | Or `persistentVolumeClaim`. |
+| `backup.destination.hostPath.path` | `""` | Required for hostPath. Must already exist on the node (`type: Directory`) and be writable by `runAsUser`; pin the pod with `backup.nodeSelector`/`affinity`. |
+| `backup.destination.persistentVolumeClaim.*` | 10Gi, RWO | `existingClaim`, or a chart claim `<fullname>-backup` kept on uninstall. |
+| `backup.runAsUser` / `runAsGroup` | `999` | Owner of the dump files (mode 600). |
+| `backup.image.*` | `postgres.image` | Override only if a different `pg_dump` is needed (at least the server's major version). |
+| `backup.backoffLimit`, `activeDeadlineSeconds`, `startingDeadlineSeconds` | `2`, `3600`, `3600` | Job retries and time limits. `concurrencyPolicy` is always `Forbid`. |
+| `backup.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | `3` / `3` | |
+| `backup.resources`, `nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `podLabels` | | As for the other workloads. |
+
+Run one now with
+`kubectl -n <ns> create job --from=cronjob/<fullname>-backup <name>`.
+The homelab laptop pulls node1's dumps with a systemd user timer from
+`deploy/homelab/backup/install.sh`. The restore procedure is in
+`docs/features/postgres_backup.md`.
 
 ## Tests
 
 ```bash
 python3 deploy/helm/tests/test_chart.py      # needs helm and PyYAML
+python3 deploy/homelab/backup/tests/test_backup_pull.py   # needs bash and rsync
 ```
 
 With `promtool` on PATH (or `PROMTOOL` set to a command), the suite also runs

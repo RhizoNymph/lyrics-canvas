@@ -9,10 +9,12 @@ from __future__ import annotations
 import atexit
 import base64
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -915,6 +917,456 @@ class PrometheusRulePromtoolTest(unittest.TestCase):
     def test_unit_tests(self) -> None:
         result = self.run_promtool("test", "rules", "rules_test.yaml")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+BACKUP = "lc-lyrics-canvas-backup"
+DUMP_GLOB = "lyrics_canvas-[0-9]*T[0-9]*Z.dump"
+
+
+def backup_pod(docs: dict) -> dict:
+    return docs[("CronJob", BACKUP)]["spec"]["jobTemplate"]["spec"]["template"]
+
+
+def backup_script(docs: dict) -> list[str]:
+    """The backup container's full argv (command + args)."""
+    c = container(backup_pod(docs), "backup")
+    return c["command"] + c.get("args", [])
+
+
+class BackupDisabledTest(unittest.TestCase):
+    def test_nothing_rendered_by_default(self) -> None:
+        docs = render()
+        self.assertNotIn("CronJob", {kind for kind, _ in docs})
+        self.assertFalse([key for key in docs if "backup" in key[1]], "backup resources rendered while disabled")
+
+    def test_disabled_with_external_database_renders(self) -> None:
+        docs = render("external-db.yaml")
+        self.assertNotIn(("CronJob", BACKUP), docs)
+
+
+class BackupHostPathTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("backup-hostpath.yaml")
+        cls.cron = cls.docs[("CronJob", BACKUP)]
+        cls.pod = backup_pod(cls.docs)
+        cls.c = container(cls.pod, "backup")
+
+    def test_cronjob_identity(self) -> None:
+        self.assertEqual(self.cron["apiVersion"], "batch/v1")
+        self.assertEqual(self.cron["metadata"]["name"], "lc-lyrics-canvas-backup")
+        self.assertEqual(self.cron["metadata"]["labels"]["app.kubernetes.io/component"], "backup")
+        self.assertEqual(self.pod["metadata"]["labels"]["app.kubernetes.io/component"], "backup")
+        self.assertEqual(self.pod["metadata"]["labels"]["tier"], "backup")
+        self.assertEqual(self.pod["metadata"]["annotations"]["backup"], "nightly")
+
+    def test_schedule_and_job_policy(self) -> None:
+        spec = self.cron["spec"]
+        self.assertEqual(spec["schedule"], "45 2 * * *")
+        self.assertEqual(spec["timeZone"], "Europe/Berlin")
+        self.assertEqual(spec["concurrencyPolicy"], "Forbid")
+        self.assertEqual(spec["startingDeadlineSeconds"], 600)
+        self.assertEqual(spec["successfulJobsHistoryLimit"], 2)
+        self.assertEqual(spec["failedJobsHistoryLimit"], 6)
+        job = spec["jobTemplate"]["spec"]
+        self.assertEqual(job["backoffLimit"], 4)
+        self.assertEqual(job["activeDeadlineSeconds"], 900)
+        self.assertEqual(self.pod["spec"]["restartPolicy"], "Never")
+
+    def test_uses_postgres_image(self) -> None:
+        self.assertEqual(self.c["image"], "pgvector/pgvector:pg16")
+        self.assertEqual(self.c["imagePullPolicy"], "IfNotPresent")
+        docs = render("backup-hostpath.yaml", postgres__image__tag="pg16-trixie")
+        self.assertEqual(container(backup_pod(docs), "backup")["image"], "pgvector/pgvector:pg16-trixie")
+
+    def test_image_override(self) -> None:
+        docs = render(
+            "backup-hostpath.yaml",
+            backup__image__repository="registry.local/pg",
+            backup__image__tag="pg17",
+            backup__image__pullPolicy="Never",
+        )
+        c = container(backup_pod(docs), "backup")
+        self.assertEqual(c["image"], "registry.local/pg:pg17")
+        self.assertEqual(c["imagePullPolicy"], "Never")
+
+    def test_connection_env_and_password_secret(self) -> None:
+        env = env_map(self.c)
+        self.assertEqual(env["PGHOST"]["value"], "lc-lyrics-canvas-postgres")
+        self.assertEqual(env["PGPORT"]["value"], "5432")
+        self.assertEqual(env["PGUSER"]["value"], "lyrics")
+        self.assertEqual(env["PGDATABASE"]["value"], "lyrics_canvas")
+        self.assertEqual(
+            env["PGPASSWORD"]["valueFrom"]["secretKeyRef"],
+            {"name": "lc-lyrics-canvas-postgres", "key": "password"},
+        )
+        self.assertNotIn("value", env["PGPASSWORD"])
+        self.assertEqual(env["BACKUP_RETAIN"]["value"], "5")
+        self.assertEqual(env["BACKUP_DIR"]["value"], "/backups")
+
+    def test_password_secret_matches_backend(self) -> None:
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
+        backend = env_map(container(dep["spec"]["template"], "backend"))
+        self.assertEqual(
+            env_map(self.c)["PGPASSWORD"]["valueFrom"],
+            backend["POSTGRES_PASSWORD"]["valueFrom"],
+        )
+
+    def test_existing_postgres_secret(self) -> None:
+        docs = render("postgres-existing-secret.yaml", "backup-hostpath.yaml")
+        ref = env_map(container(backup_pod(docs), "backup"))["PGPASSWORD"]["valueFrom"]["secretKeyRef"]
+        self.assertEqual(ref, {"name": "pg-creds", "key": "pg-password"})
+
+    def test_explicit_password_never_inlined(self) -> None:
+        docs = render("backup-hostpath.yaml", postgres__auth__password="pw-not-in-cronjob-123")
+        self.assertNotIn("pw-not-in-cronjob-123", yaml.safe_dump(docs[("CronJob", BACKUP)]))
+
+    def test_custom_auth_and_port(self) -> None:
+        docs = render("full.yaml", "backup-hostpath.yaml", postgres__service__port="6543")
+        env = env_map(container(backup_pod(docs), "backup"))
+        self.assertEqual(env["PGUSER"]["value"], "songs")
+        self.assertEqual(env["PGDATABASE"]["value"], "songsdb")
+        self.assertEqual(env["PGPORT"]["value"], "6543")
+        self.assertEqual(backup_pod(docs)["spec"]["imagePullSecrets"], [{"name": "regcred"}])
+
+    def test_runs_pg_dump_custom_format(self) -> None:
+        argv = backup_script(self.docs)
+        self.assertEqual(argv[:2], ["/bin/sh", "-c"])
+        script = argv[2]
+        self.assertTrue(script.lstrip().startswith("set -eu"), script[:40])
+        self.assertIn("pg_dump --format=custom", script)
+
+    def test_hostpath_volume(self) -> None:
+        volumes = {v["name"]: v for v in self.pod["spec"]["volumes"]}
+        self.assertEqual(volumes["backups"]["hostPath"], {"path": "/srv/backups/lyrics", "type": "Directory"})
+        self.assertIn("emptyDir", volumes["tmp"])
+        mounts = {m["name"]: m for m in self.c["volumeMounts"]}
+        self.assertEqual(mounts["backups"]["mountPath"], "/backups")
+        self.assertEqual(mounts["tmp"]["mountPath"], "/tmp")
+        self.assertNotIn(("PersistentVolumeClaim", BACKUP), self.docs)
+
+    def test_scheduling(self) -> None:
+        spec = self.pod["spec"]
+        self.assertEqual(spec["nodeSelector"], {"kubernetes.io/hostname": "store1"})
+        self.assertEqual(spec["tolerations"][0]["key"], "storage")
+        self.assertIn("nodeAffinity", spec["affinity"])
+        self.assertEqual(spec["serviceAccountName"], "lc-lyrics-canvas")
+
+    def test_security_context(self) -> None:
+        psc = self.pod["spec"]["securityContext"]
+        self.assertEqual(psc["runAsUser"], 1000)
+        self.assertEqual(psc["runAsGroup"], 1001)
+        self.assertEqual(psc["fsGroup"], 1001)
+        self.assertTrue(psc["runAsNonRoot"])
+        csc = self.c["securityContext"]
+        self.assertFalse(csc["allowPrivilegeEscalation"])
+        self.assertTrue(csc["readOnlyRootFilesystem"])
+        self.assertEqual(csc["capabilities"]["drop"], ["ALL"])
+
+    def test_resources(self) -> None:
+        self.assertEqual(self.c["resources"]["requests"]["memory"], "32Mi")
+        self.assertEqual(self.c["resources"]["limits"]["memory"], "256Mi")
+
+    def test_time_zone_omitted_when_empty(self) -> None:
+        docs = render("backup-hostpath.yaml", backup__timeZone="")
+        self.assertNotIn("timeZone", docs[("CronJob", BACKUP)]["spec"])
+
+    def test_defaults(self) -> None:
+        docs = render(backup__enabled="true", backup__destination__hostPath__path="/b")
+        spec = docs[("CronJob", BACKUP)]["spec"]
+        self.assertEqual(spec["concurrencyPolicy"], "Forbid")
+        self.assertEqual(spec["schedule"], "15 3 * * *")
+        pod = backup_pod(docs)
+        self.assertEqual(env_map(container(pod, "backup"))["BACKUP_RETAIN"]["value"], "14")
+        self.assertEqual(pod["spec"]["securityContext"]["runAsUser"], 999)
+        self.assertNotIn("nodeSelector", pod["spec"])
+
+    def test_fullname_override(self) -> None:
+        docs = render("backup-hostpath.yaml", fullnameOverride="songs")
+        pod = docs[("CronJob", "songs-backup")]["spec"]["jobTemplate"]["spec"]["template"]
+        self.assertEqual(env_map(container(pod, "backup"))["PGHOST"]["value"], "songs-postgres")
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "backup-hostpath.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class BackupPvcTest(unittest.TestCase):
+    def test_chart_managed_claim(self) -> None:
+        docs = render("backup-pvc.yaml")
+        pvc = docs[("PersistentVolumeClaim", BACKUP)]
+        self.assertEqual(pvc["spec"]["resources"]["requests"]["storage"], "3Gi")
+        self.assertEqual(pvc["spec"]["storageClassName"], "slow")
+        self.assertEqual(pvc["spec"]["accessModes"], ["ReadWriteOnce"])
+        self.assertEqual(pvc["metadata"]["annotations"]["helm.sh/resource-policy"], "keep")
+        volumes = {v["name"]: v for v in backup_pod(docs)["spec"]["volumes"]}
+        self.assertEqual(volumes["backups"]["persistentVolumeClaim"], {"claimName": BACKUP})
+        self.assertNotIn("hostPath", volumes["backups"])
+
+    def test_existing_claim(self) -> None:
+        docs = render("backup-pvc.yaml", backup__destination__persistentVolumeClaim__existingClaim="old-dumps")
+        self.assertNotIn(("PersistentVolumeClaim", BACKUP), docs)
+        volumes = {v["name"]: v for v in backup_pod(docs)["spec"]["volumes"]}
+        self.assertEqual(volumes["backups"]["persistentVolumeClaim"], {"claimName": "old-dumps"})
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "backup-pvc.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class BackupValidationTest(unittest.TestCase):
+    def assert_rejected(self, *sets: str, values: tuple[str, ...] = (), message: str = "") -> None:
+        args = ["template", RELEASE, str(CHART)]
+        for name in values:
+            args += ["-f", str(VALUES / name)]
+        for s in sets:
+            args += ["--set", s]
+        result = helm(*args)
+        self.assertNotEqual(result.returncode, 0, "expected rejection for " + ", ".join(sets))
+        if message:
+            self.assertIn(message, result.stderr)
+
+    def test_external_database_not_supported(self) -> None:
+        self.assert_rejected(
+            "backup.enabled=true",
+            "backup.destination.hostPath.path=/b",
+            values=("external-db.yaml",),
+            message="backup.enabled requires postgres.enabled",
+        )
+
+    def test_enabled_hostpath_requires_absolute_path(self) -> None:
+        self.assert_rejected("backup.enabled=true")
+        self.assert_rejected("backup.enabled=true", "backup.destination.hostPath.path=relative/dir")
+
+    def test_rejects_bad_values(self) -> None:
+        base = ("backup.enabled=true", "backup.destination.hostPath.path=/b")
+        self.assert_rejected(*base, "backup.retain=0")
+        self.assert_rejected(*base, "backup.retain=many")
+        self.assert_rejected(*base, "backup.destination.type=nfs")
+        self.assert_rejected(*base, "backup.schedule=nightly")
+        self.assert_rejected(*base, "backup.schedule=")
+        self.assert_rejected(*base, "backup.runAsUser=0")
+        self.assert_rejected(*base, "backup.runAsGroup=-1")
+        self.assert_rejected(*base, "backup.backoffLimit=-1")
+        self.assert_rejected(*base, "backup.image.pullPolicy=Sometimes")
+        self.assert_rejected(
+            "backup.enabled=true",
+            "backup.destination.type=persistentVolumeClaim",
+            "backup.destination.persistentVolumeClaim.size=lots",
+        )
+
+    def test_rejects_unknown_keys(self) -> None:
+        self.assert_rejected("backup.retention=3")
+        self.assert_rejected("backup.destination.nfs.server=nas")
+        self.assert_rejected("backup.destination.hostPath.type=DirectoryOrCreate")
+
+    def test_accepts_schedule_macro(self) -> None:
+        docs = render(backup__enabled="true", backup__destination__hostPath__path="/b", backup__schedule="@daily")
+        self.assertEqual(docs[("CronJob", BACKUP)]["spec"]["schedule"], "@daily")
+
+
+DUMP_NAME = re.compile(r"^lyrics_canvas-\d{8}T\d{6}Z\.dump$")
+
+FAKE_PG_DUMP = """#!/bin/sh
+# Test double: writes a fake archive to --file=..., records what the directory
+# looked like mid-dump, and fails when FAKE_PG_DUMP_FAIL is set.
+for arg; do
+  case "$arg" in --file=*) out="${arg#--file=}" ;; esac
+done
+[ -n "${out:-}" ] || { echo "no --file" >&2; exit 2; }
+printf 'PGDMP fake archive\\n' > "$out"
+ls -A "$(dirname "$out")" > "$FAKE_LOG_DIR/during-dump.txt"
+printf '%s\\n' "$*" > "$FAKE_LOG_DIR/pg_dump-args.txt"
+env | grep '^PG' | sort > "$FAKE_LOG_DIR/pg_dump-env.txt"
+[ -z "${FAKE_PG_DUMP_FAIL:-}" ] || exit 1
+"""
+
+FAKE_PG_RESTORE = """#!/bin/sh
+# Test double: `pg_restore --list FILE` succeeds when FILE looks like our fake archive.
+[ "$1" = "--list" ] || exit 2
+[ -z "${FAKE_PG_RESTORE_FAIL:-}" ] || exit 1
+head -c 5 "$2" | grep -q PGDMP
+"""
+
+
+class BackupScriptTest(unittest.TestCase):
+    """Runs the rendered container command against a temp directory with
+    pg_dump/pg_restore test doubles first on PATH."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.argv = backup_script(render("backup-hostpath.yaml"))
+        cls.env_defaults = {
+            e["name"]: e["value"]
+            for e in container(backup_pod(render("backup-hostpath.yaml")), "backup")["env"]
+            if "value" in e
+        }
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="lc-backup-test-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.dir = self.tmp / "backups"
+        self.dir.mkdir()
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.logs = self.tmp / "logs"
+        self.logs.mkdir()
+        for name, body in (("pg_dump", FAKE_PG_DUMP), ("pg_restore", FAKE_PG_RESTORE)):
+            path = self.bin / name
+            path.write_text(body)
+            path.chmod(0o755)
+
+    def run_backup(self, **env: str) -> subprocess.CompletedProcess[str]:
+        full_env = {
+            **self.env_defaults,
+            "PATH": f"{self.bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+            "BACKUP_DIR": str(self.dir),
+            "PGPASSWORD": "from-secret",
+            "FAKE_LOG_DIR": str(self.logs),
+            **env,
+        }
+        return subprocess.run(self.argv, env=full_env, capture_output=True, text=True, check=False)
+
+    def dumps(self) -> list[str]:
+        return sorted(p.name for p in self.dir.iterdir() if DUMP_NAME.match(p.name))
+
+    def seed(self, count: int) -> list[str]:
+        names = [f"lyrics_canvas-2020{1 + i // 28:02d}{1 + i % 28:02d}T031500Z.dump" for i in range(count)]
+        for name in names:
+            (self.dir / name).write_text("old")
+        return names
+
+    def test_writes_one_dump_atomically(self) -> None:
+        result = self.run_backup()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.dumps()), 1)
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), self.dumps(), "temp file left behind")
+        self.assertTrue((self.dir / self.dumps()[0]).read_text().startswith("PGDMP"))
+        # While pg_dump was writing, only a hidden temp name existed.
+        during = (self.logs / "during-dump.txt").read_text().split()
+        self.assertEqual(len(during), 1, during)
+        self.assertTrue(during[0].startswith("."), during)
+        self.assertFalse(DUMP_NAME.match(during[0]))
+        self.assertIn("level=info", result.stdout)
+
+    def test_dump_is_owner_only(self) -> None:
+        self.assertEqual(self.run_backup().returncode, 0)
+        mode = (self.dir / self.dumps()[0]).stat().st_mode & 0o777
+        self.assertEqual(mode, 0o600)
+
+    def test_pg_dump_args_and_env(self) -> None:
+        self.assertEqual(self.run_backup().returncode, 0)
+        args = (self.logs / "pg_dump-args.txt").read_text()
+        self.assertIn("--format=custom", args)
+        self.assertIn("--no-password", args)
+        env = (self.logs / "pg_dump-env.txt").read_text().splitlines()
+        self.assertIn("PGHOST=lc-lyrics-canvas-postgres", env)
+        self.assertIn("PGPASSWORD=from-secret", env)
+
+    def test_prunes_to_retain_newest(self) -> None:
+        old = self.seed(7)
+        (self.dir / "notes.txt").write_text("keep me")
+        (self.dir / "lyrics_canvas-manual.dump").write_text("keep me")
+        result = self.run_backup()  # retain=5 in the fixture
+        self.assertEqual(result.returncode, 0, result.stderr)
+        dumps = self.dumps()
+        self.assertEqual(len(dumps), 5)
+        self.assertEqual(dumps[:4], old[-4:])
+        self.assertNotIn(old[0], dumps)
+        self.assertTrue((self.dir / "notes.txt").exists())
+        self.assertTrue((self.dir / "lyrics_canvas-manual.dump").exists())
+
+    def test_retain_from_env(self) -> None:
+        self.seed(3)
+        self.assertEqual(self.run_backup(BACKUP_RETAIN="1").returncode, 0)
+        dumps = self.dumps()
+        self.assertEqual(len(dumps), 1)
+        self.assertFalse(dumps[0].startswith("lyrics_canvas-2020"))
+
+    def test_under_retain_keeps_everything(self) -> None:
+        old = self.seed(2)
+        self.assertEqual(self.run_backup().returncode, 0)
+        self.assertEqual(self.dumps()[:2], old)
+        self.assertEqual(len(self.dumps()), 3)
+
+    def test_pg_dump_failure_fails_and_keeps_old(self) -> None:
+        old = self.seed(7)
+        result = self.run_backup(FAKE_PG_DUMP_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.dumps(), old, "failed run must not add or prune dumps")
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), old, "partial file left behind")
+        self.assertIn("level=error", result.stderr)
+
+    def test_unreadable_archive_fails(self) -> None:
+        result = self.run_backup(FAKE_PG_RESTORE_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_missing_directory_fails(self) -> None:
+        result = self.run_backup(BACKUP_DIR=str(self.tmp / "nope"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("level=error", result.stderr)
+
+    def test_invalid_retain_fails(self) -> None:
+        for bad in ("0", "abc", ""):
+            result = self.run_backup(BACKUP_RETAIN=bad)
+            self.assertNotEqual(result.returncode, 0, bad)
+            self.assertEqual(list(self.dir.iterdir()), [], bad)
+
+    def test_missing_password_fails(self) -> None:
+        env = {k: v for k, v in self.env_defaults.items()}
+        result = subprocess.run(
+            self.argv,
+            env={**env, "PATH": f"{self.bin}:/usr/bin:/bin", "BACKUP_DIR": str(self.dir), "FAKE_LOG_DIR": str(self.logs)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_stale_partials_removed_fresh_kept(self) -> None:
+        stale = self.dir / ".lyrics_canvas-20200101T000000Z.dump.partial"
+        fresh = self.dir / ".lyrics_canvas-20991231T000000Z.dump.partial"
+        stale.write_text("x")
+        fresh.write_text("x")
+        two_days_ago = time.time() - 2 * 86400
+        os.utime(stale, (two_days_ago, two_days_ago))
+        self.assertEqual(self.run_backup().returncode, 0)
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists())
+
+    def test_shellcheck(self) -> None:
+        shellcheck = shutil.which("shellcheck")
+        if shellcheck is None:
+            self.skipTest("shellcheck not installed")
+        script = self.tmp / "backup.sh"
+        script.write_text("#!/bin/sh\n" + self.argv[2])
+        result = subprocess.run([shellcheck, "-s", "sh", str(script)], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+
+class HomelabBackupTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(str(ENVIRONMENTS / "homelab.yaml"))
+
+    def test_backup_runs_on_node1_hostpath(self) -> None:
+        cron = self.docs[("CronJob", BACKUP)]
+        self.assertEqual(cron["spec"]["concurrencyPolicy"], "Forbid")
+        self.assertEqual(cron["spec"]["timeZone"], "America/Los_Angeles")
+        pod = backup_pod(self.docs)
+        self.assertEqual(pod["spec"]["nodeSelector"], {"kubernetes.io/hostname": "node1"})
+        volumes = {v["name"]: v for v in pod["spec"]["volumes"]}
+        self.assertEqual(
+            volumes["backups"]["hostPath"],
+            {"path": "/home/nymph/backups/lyrics-canvas", "type": "Directory"},
+        )
+        psc = pod["spec"]["securityContext"]
+        self.assertEqual((psc["runAsUser"], psc["runAsGroup"]), (1000, 1000))
+        self.assertEqual(env_map(container(pod, "backup"))["BACKUP_RETAIN"]["value"], "14")
+        self.assertEqual(container(pod, "backup")["image"], "pgvector/pgvector:pg16")
+        self.assertNotIn(("PersistentVolumeClaim", BACKUP), self.docs)
 
 
 if __name__ == "__main__":
