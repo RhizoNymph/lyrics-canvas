@@ -37,6 +37,9 @@ frontend:
     type: NodePort
     # The app is reached at http://node0:32443.
     nodePort: 32443
+  # kube-prometheus-stack's Alertmanager; feeds the in-app outage banner.
+  clusterAlerts:
+    alertmanagerUrl: http://kps-alertmanager.monitoring.svc:9093
   affinity: *homelabNodes
 
 postgres:

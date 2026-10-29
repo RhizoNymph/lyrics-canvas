@@ -63,7 +63,8 @@ which is gitignored, passed as a second `-f`.
 
 `homelab.yaml` is the home microk8s cluster: images from the
 `localhost:32000` registry addon, all workloads on node0/node1, and the
-frontend on NodePort 32443.
+frontend on NodePort 32443, with `/_status/alerts` reading kube-prometheus-stack's
+Alertmanager (`kps-alertmanager.monitoring.svc:9093`).
 
 ```bash
 microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
@@ -76,6 +77,7 @@ microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
 |-------|---------|-------|
 | `backend.secretKey` | generated | JWT signing key. Generated once and re-read from the live Secret on upgrade. Or set `backend.existingSecret` / `existingSecretKey`. |
 | `frontend.service.nodePort` | unset | Fixed port (30000-32767), used only when `frontend.service.type=NodePort`. |
+| `frontend.clusterAlerts.alertmanagerUrl` | `""` | `http(s)://host[:port]` of an Alertmanager the frontend pod can reach. Enables `GET /_status/alerts` (this namespace's firing alerts, served by nginx even while the backend is down); empty answers `[]`. `namespace` (default: release namespace) and `resolver` (default: the pod's resolv.conf nameservers) are optional. See `docs/features/cluster_alerts_endpoint.md`. |
 | `backend.corsOrigins` | derived | Defaults to one origin per `ingress.hosts` entry (https when covered by `ingress.tls`). |
 | `backend.googleClientId` | `""` | Enables Google sign-in verification on the API. |
 | `backend.migrations.enabled` | `true` | Init container runs Alembic before each backend pod starts, retrying until the database is reachable. |
