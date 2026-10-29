@@ -52,11 +52,30 @@ kubectl -n lyrics port-forward svc/lyrics-lyrics-canvas-frontend 8080:80
 
 Run `helm test lyrics` to hit both health endpoints from inside the cluster.
 
+## Environments
+
+Per-cluster values live in `deploy/helm/environments/<name>.yaml` and are
+committed. They must not contain credentials: `backend.secretKey`,
+`postgres.auth.password` and `externalDatabase.url` stay empty there (the
+chart test suite fails otherwise). Generated credentials are kept across
+upgrades; anything set explicitly goes in `<name>.secret.yaml` beside it,
+which is gitignored, passed as a second `-f`.
+
+`homelab.yaml` is the home microk8s cluster: images from the
+`localhost:32000` registry addon, all workloads on node0/node1, and the
+frontend on NodePort 32443.
+
+```bash
+microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
+  -n lyrics-canvas --create-namespace -f deploy/helm/environments/homelab.yaml
+```
+
 ## Configuration highlights
 
 | Value | Default | Notes |
 |-------|---------|-------|
 | `backend.secretKey` | generated | JWT signing key. Generated once and re-read from the live Secret on upgrade. Or set `backend.existingSecret` / `existingSecretKey`. |
+| `frontend.service.nodePort` | unset | Fixed port (30000-32767), used only when `frontend.service.type=NodePort`. |
 | `backend.corsOrigins` | derived | Defaults to one origin per `ingress.hosts` entry (https when covered by `ingress.tls`). |
 | `backend.googleClientId` | `""` | Enables Google sign-in verification on the API. |
 | `backend.migrations.enabled` | `true` | Init container runs Alembic before each backend pod starts, retrying until the database is reachable. |

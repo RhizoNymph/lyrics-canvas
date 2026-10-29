@@ -15,3 +15,6 @@ spec:
       port: {{ .Values.frontend.service.port }}
       targetPort: http
       protocol: TCP
+      {{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.nodePort }}
+      nodePort: {{ .Values.frontend.service.nodePort }}
+      {{- end }}

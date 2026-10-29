@@ -1,0 +1,43 @@
+# Home microk8s cluster (node0/node1/node2). Workloads stay on node0 and node1.
+# Images are built on node0 and pushed to the microk8s registry addon.
+#
+# Credentials are generated in-cluster on first install and kept on upgrade.
+# To set any explicitly, put them in homelab.secret.yaml (gitignored) and pass
+# it after this file:
+#   microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
+#     -n lyrics-canvas -f deploy/helm/environments/homelab.yaml \
+#     [-f deploy/helm/environments/homelab.secret.yaml]
+
+backend:
+  image:
+    repository: localhost:32000/lyrics-canvas-backend
+    tag: dev
+    pullPolicy: IfNotPresent
+  modelCache:
+    persistence:
+      enabled: true
+      size: 2Gi
+  affinity: &homelabNodes
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - node0
+                  - node1
+
+frontend:
+  image:
+    repository: localhost:32000/lyrics-canvas-frontend
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    # The app is reached at http://node0:32443.
+    nodePort: 32443
+  affinity: *homelabNodes
+
+postgres:
+  affinity: *homelabNodes

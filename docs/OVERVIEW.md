@@ -260,7 +260,7 @@ Features Index:
     depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
     doc: docs/features/android_app.md
   helm_deployment:
-    description: Helm chart that deploys the web stack to Kubernetes - backend Deployment (Alembic migrations in a retrying init container, /api/health probes, HF model cache volume), nginx frontend Deployment (SPA + /api reverse proxy), bundled PostgreSQL + pgvector StatefulSet or externalDatabase, optional Ingress with per-host TLS and derived CORS origins, JWT key and DB password generated once and kept across upgrades, JSON-schema validated values, render-and-assert test suite; plus the production frontend image (frontend/Dockerfile.prod).
+    description: Helm chart that deploys the web stack to Kubernetes - backend Deployment (Alembic migrations in a retrying init container, /api/health probes, HF model cache volume), nginx frontend Deployment (SPA + /api reverse proxy), bundled PostgreSQL + pgvector StatefulSet or externalDatabase, optional Ingress with per-host TLS and derived CORS origins, JWT key and DB password generated once and kept across upgrades, JSON-schema validated values, committed per-cluster values files without credentials (deploy/helm/environments, *.secret.yaml gitignored), render-and-assert test suite; plus the production frontend image (frontend/Dockerfile.prod).
     entry_points:
       - deploy/helm/lyrics-canvas/Chart.yaml
       - deploy/helm/lyrics-canvas/values.yaml
@@ -269,6 +269,7 @@ Features Index:
       - deploy/helm/lyrics-canvas/templates/backend/deployment.yaml
       - deploy/helm/lyrics-canvas/templates/postgres/statefulset.yaml
       - deploy/helm/lyrics-canvas/templates/ingress.yaml
+      - deploy/helm/environments/homelab.yaml
       - deploy/helm/tests/test_chart.py
       - frontend/Dockerfile.prod
       - frontend/nginx/default.conf.template

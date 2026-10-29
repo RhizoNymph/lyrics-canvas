@@ -131,7 +131,11 @@
         "service": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "type": { "$ref": "#/definitions/serviceType" }, "port": { "$ref": "#/definitions/port" } }
+          "properties": {
+            "type": { "$ref": "#/definitions/serviceType" },
+            "port": { "$ref": "#/definitions/port" },
+            "nodePort": { "type": ["integer", "null"], "minimum": 30000, "maximum": 32767 }
+          }
         },
         "containerPort": { "$ref": "#/definitions/port" },
         "resources": { "$ref": "#/definitions/resources" },

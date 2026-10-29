@@ -141,6 +141,15 @@ class DefaultRenderTest(unittest.TestCase):
         self.assertEqual(env["HF_HOME"]["value"], "/cache/huggingface")
         self.assertNotIn("GOOGLE_CLIENT_ID", env)
 
+    def test_backend_containers_never_resync_uv(self) -> None:
+        # Pods restart without network access; `uv run` must use the image's venv.
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
+        for c in (
+            container(dep["spec"]["template"], "backend"),
+            container(dep["spec"]["template"], "migrate", init=True),
+        ):
+            self.assertEqual(env_map(c)["UV_NO_SYNC"]["value"], "1", c["name"])
+
     def test_backend_probes_hit_health(self) -> None:
         dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
         c = container(dep["spec"]["template"], "backend")
@@ -461,6 +470,16 @@ class MigrationsTest(unittest.TestCase):
         self.assertIn("sleep 3", script)
 
 
+class FrontendNodePortTest(unittest.TestCase):
+    def test_omitted_by_default(self) -> None:
+        svc = render(frontend__service__type="NodePort")[("Service", "lc-lyrics-canvas-frontend")]
+        self.assertNotIn("nodePort", svc["spec"]["ports"][0])
+
+    def test_ignored_for_cluster_ip(self) -> None:
+        svc = render(frontend__service__nodePort="31000")[("Service", "lc-lyrics-canvas-frontend")]
+        self.assertNotIn("nodePort", svc["spec"]["ports"][0])
+
+
 class PostgresPersistenceTest(unittest.TestCase):
     def test_disabled_uses_emptydir(self) -> None:
         docs = render(postgres__persistence__enabled="false")
@@ -468,6 +487,95 @@ class PostgresPersistenceTest(unittest.TestCase):
         self.assertNotIn("volumeClaimTemplates", sts["spec"])
         volumes = {v["name"]: v for v in sts["spec"]["template"]["spec"]["volumes"]}
         self.assertIn("emptyDir", volumes["data"])
+
+
+ENVIRONMENTS = HERE.parent / "environments"
+REPO_ROOT = HERE.parents[2]
+
+# Values that carry credentials. Committed values files must leave them empty;
+# real values go in a gitignored `<env>.secret.yaml` next to the environment.
+SECRET_PATHS = (
+    ("backend", "secretKey"),
+    ("postgres", "auth", "password"),
+    ("externalDatabase", "url"),
+)
+
+
+def committed_values_files() -> list[Path]:
+    return [CHART / "values.yaml", *sorted(ENVIRONMENTS.glob("*.yaml"))]
+
+
+def lookup_path(values: dict, path: tuple[str, ...]) -> object:
+    node: object = values
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return None
+        node = node[key]
+    return node
+
+
+class HomelabEnvironmentTest(unittest.TestCase):
+    FILE = ENVIRONMENTS / "homelab.yaml"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(str(cls.FILE))
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(self.FILE))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_images_from_cluster_registry(self) -> None:
+        for component in ("backend", "frontend"):
+            dep = self.docs[("Deployment", f"lc-lyrics-canvas-{component}")]
+            c = container(dep["spec"]["template"], component)
+            self.assertEqual(c["image"], f"localhost:32000/lyrics-canvas-{component}:dev")
+
+    def test_workloads_pinned_to_node0_node1(self) -> None:
+        for key in (
+            ("Deployment", "lc-lyrics-canvas-backend"),
+            ("Deployment", "lc-lyrics-canvas-frontend"),
+            ("StatefulSet", "lc-lyrics-canvas-postgres"),
+        ):
+            affinity = self.docs[key]["spec"]["template"]["spec"]["affinity"]
+            terms = affinity["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"][
+                "nodeSelectorTerms"
+            ]
+            self.assertEqual(
+                terms[0]["matchExpressions"][0],
+                {"key": "kubernetes.io/hostname", "operator": "In", "values": ["node0", "node1"]},
+                key,
+            )
+
+    def test_frontend_node_port_and_model_cache(self) -> None:
+        svc = self.docs[("Service", "lc-lyrics-canvas-frontend")]["spec"]
+        self.assertEqual(svc["type"], "NodePort")
+        self.assertEqual(svc["ports"][0]["nodePort"], 32443)
+        self.assertIn(("PersistentVolumeClaim", "lc-lyrics-canvas-model-cache"), self.docs)
+
+
+class CommittedValuesSafetyTest(unittest.TestCase):
+    def test_environments_exist(self) -> None:
+        self.assertTrue(list(ENVIRONMENTS.glob("*.yaml")), "no environment values files found")
+
+    def test_no_credentials_in_committed_values(self) -> None:
+        for path in committed_values_files():
+            values = yaml.safe_load(path.read_text()) or {}
+            for secret in SECRET_PATHS:
+                self.assertIn(
+                    lookup_path(values, secret),
+                    (None, ""),
+                    f"{path.name} sets {'.'.join(secret)}; put it in a .secret.yaml file",
+                )
+
+    def test_secret_overrides_are_gitignored(self) -> None:
+        if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
+            self.skipTest("not in a git checkout")
+        probe = ENVIRONMENTS.relative_to(REPO_ROOT) / "homelab.secret.yaml"
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", str(probe)], cwd=REPO_ROOT, check=False
+        )
+        self.assertEqual(result.returncode, 0, f"{probe} is not gitignored")
 
 
 class SchemaTest(unittest.TestCase):
@@ -483,6 +591,10 @@ class SchemaTest(unittest.TestCase):
         self.assert_rejected("backend.service.type=Bogus")
         self.assert_rejected("ingress.hosts[0]=1")
         self.assert_rejected("postgres.persistence.size=big")
+
+    def test_rejects_node_port_out_of_range(self) -> None:
+        self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=8080")
+        self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=40000")
 
     def test_rejects_unknown_keys(self) -> None:
         self.assert_rejected("backend.replicas=2")
