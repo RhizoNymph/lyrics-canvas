@@ -1,0 +1,18 @@
+# Rendered by deploy/homelab/backup/install.sh; edit the template, not the copy.
+[Unit]
+Description=Pull lyrics-canvas Postgres backups from @SOURCE@
+# Retry forever (see Restart=); a laptop away from home just keeps failing fast.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+Environment="BACKUP_SOURCE=@SOURCE@"
+Environment="BACKUP_DEST=@DEST@"
+Environment="BACKUP_KEEP=@KEEP@"
+ExecStart="@PULL_SCRIPT@"
+# Off the home network or asleep mid-transfer: try again later rather than
+# waiting for tomorrow's timer.
+Restart=on-failure
+RestartSec=30min
+Nice=10
+IOSchedulingClass=idle

@@ -85,6 +85,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
+| [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -283,6 +284,17 @@ Features Index:
       - frontend/nginx/default.conf.template
     depends_on: []
     doc: docs/features/helm_deployment.md
+  postgres_backup:
+    description: Optional nightly CronJob <fullname>-backup (backup.*, default disabled) that pg_dumps the bundled PostgreSQL in custom format to a pre-existing hostPath directory on a pinned node or a PVC, publishing lyrics_canvas-<UTC ts>.dump atomically (hidden temp name, pg_restore --list check, rename) and pruning to the newest backup.retain; password via secretKeyRef only; refuses to render for an external database. Homelab writes to node1:/home/nymph/backups/lyrics-canvas as 1000:1000, and a systemd user timer on the laptop rsyncs those dumps to ~/Backups/lyrics-canvas without --delete.
+    entry_points:
+      - deploy/helm/lyrics-canvas/templates/backup/cronjob.yaml
+      - deploy/helm/lyrics-canvas/templates/backup/_script.tpl
+      - deploy/helm/lyrics-canvas/templates/backup/pvc.yaml
+      - deploy/helm/environments/homelab.yaml (backup)
+      - deploy/homelab/backup/install.sh
+      - deploy/homelab/backup/pull.sh
+    depends_on: [helm_deployment]
+    doc: docs/features/postgres_backup.md
   health_banner:
     description: Web banner for backend health and cluster alerts. A pure state machine (unknown/ok/suspect/failing/recovered) fed by GET /api/health probes (15 s, 3 s to confirm, 5-60 s backoff while down, paused while hidden) and by a pass-through axios interceptor on api/client.ts (502/503/504 down, no response unreachable); two consecutive failures before showing, 5 s "Back online". Polls GET /_status/alerts (Alertmanager v2 list via nginx, sibling feat/status-alerts-endpoint), validated at runtime into typed alerts; 404 or HTML fallback = absent and silent, 5xx = stale. Ordered cards (backend first, then critical, warning, other), role alert/status, dismissible per incident.
     entry_points:
