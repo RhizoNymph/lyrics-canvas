@@ -1,5 +1,8 @@
-# Only ${BACKEND_URL} is substituted by the nginx entrypoint; nginx's own
-# $variables are left alone because they are not exported environment variables.
+# Rendered by the nginx entrypoint's envsubst, which only replaces exported
+# environment variables: BACKEND_URL, plus ALERTS_STATE, ALERTS_UPSTREAM and
+# ALERTS_RESOLVER_ADDRS exported by /docker-entrypoint.d/16-cluster-alerts.envsh.
+# nginx's own $variables are left alone because they are not exported
+# environment variables.
 server {
     listen 8080;
     server_name _;
@@ -11,10 +14,87 @@ server {
     gzip_min_length 1024;
     gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
+    # Only used by /_status/alerts, whose upstream is a variable resolved per
+    # request. A missing or unresolvable Alertmanager therefore never stops
+    # nginx from starting; it only makes that endpoint answer 503.
+    resolver ${ALERTS_RESOLVER_ADDRS} valid=30s ipv6=off;
+    resolver_timeout 2s;
+
     location = /healthz {
         access_log off;
         default_type text/plain;
         return 200 "ok\n";
+    }
+
+    # Reserved for status endpoints; anything not matched exactly below is 404.
+    location ^~ /_status/ {
+        access_log off;
+        return 404;
+    }
+
+    # Firing cluster alerts for this release's namespace, straight from
+    # Alertmanager so it works while the backend is down
+    # (docs/features/cluster_alerts_endpoint.md). Alertmanager is
+    # unauthenticated and its other endpoints expose secrets, so nginx only
+    # ever requests the fixed ALERTS_UPSTREAM URL built at container start:
+    # the client's path, query string, headers and body are never forwarded.
+    location = /_status/alerts {
+        access_log off;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+
+        set $alerts_state "${ALERTS_STATE}";
+        set $alerts_upstream "${ALERTS_UPSTREAM}";
+
+        if ($request_method !~ ^(GET|HEAD)$) {
+            add_header Cache-Control "no-store" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Allow "GET, HEAD" always;
+            return 405 '{"error":"method_not_allowed"}';
+        }
+        if ($alerts_state = disabled) {
+            return 200 '[]';
+        }
+        if ($alerts_state != enabled) {
+            return 503 '{"error":"alertmanager_unavailable"}';
+        }
+
+        proxy_pass $alerts_upstream;
+        proxy_method GET;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Accept "application/json";
+        proxy_set_header Content-Length "";
+        proxy_redirect off;
+        proxy_ssl_server_name on;
+
+        proxy_connect_timeout 2s;
+        proxy_send_timeout 3s;
+        proxy_read_timeout 5s;
+        proxy_next_upstream off;
+
+        # Upstream headers must not steer nginx (X-Accel-Redirect would be an
+        # internal redirect) or override the caching contract.
+        proxy_ignore_headers X-Accel-Redirect X-Accel-Expires X-Accel-Limit-Rate
+                             X-Accel-Buffering X-Accel-Charset Expires Cache-Control
+                             Set-Cookie Vary;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header Expires;
+        proxy_hide_header Set-Cookie;
+
+        # Any non-2xx answer, timeout, refused connection or DNS failure.
+        proxy_intercept_errors on;
+        error_page 300 301 302 303 307 308 400 401 403 404 405 406 408 409 410 413 414
+                   415 422 429 500 501 502 503 504 = @alerts_unavailable;
+    }
+
+    location @alerts_unavailable {
+        access_log off;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 503 '{"error":"alertmanager_unavailable"}';
     }
 
     location /api/ {

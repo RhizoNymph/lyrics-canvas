@@ -1,0 +1,42 @@
+backup:
+  enabled: true
+  schedule: "45 2 * * *"
+  timeZone: Europe/Berlin
+  retain: 5
+  runAsUser: 1000
+  runAsGroup: 1001
+  backoffLimit: 4
+  activeDeadlineSeconds: 900
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 6
+  destination:
+    type: hostPath
+    hostPath:
+      path: /srv/backups/lyrics
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+  podAnnotations:
+    backup: nightly
+  podLabels:
+    tier: backup
+  nodeSelector:
+    kubernetes.io/hostname: store1
+  tolerations:
+    - key: storage
+      operator: Exists
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: disk
+                operator: In
+                values:
+                  - big

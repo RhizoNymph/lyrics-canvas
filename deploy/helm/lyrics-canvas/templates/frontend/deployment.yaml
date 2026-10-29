@@ -46,6 +46,13 @@ spec:
           env:
             - name: BACKEND_URL
               value: {{ include "lyrics-canvas.backend.url" . | quote }}
+            # GET /_status/alerts; see frontend/nginx/entrypoint/16-cluster-alerts.envsh.
+            - name: ALERTMANAGER_URL
+              value: {{ $f.clusterAlerts.alertmanagerUrl | quote }}
+            - name: ALERTS_NAMESPACE
+              value: {{ $f.clusterAlerts.namespace | default .Release.Namespace | quote }}
+            - name: ALERTS_RESOLVER
+              value: {{ $f.clusterAlerts.resolver | quote }}
           livenessProbe:
             httpGet:
               path: /healthz

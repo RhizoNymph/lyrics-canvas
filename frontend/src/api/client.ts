@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { apiHealthChannel } from '@/lib/health/channel';
+import { installHealthInterceptors } from '@/lib/health/interceptors';
 import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 
@@ -25,6 +27,9 @@ api.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+// Report every call's outcome to the health monitor; responses and errors pass through unchanged.
+installHealthInterceptors(api, apiHealthChannel.publish, () => navigator.onLine);
 
 // ---- Auth ----
 export const authApi = {

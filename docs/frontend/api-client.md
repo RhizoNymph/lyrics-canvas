@@ -19,6 +19,14 @@ Axios instance with JWT injection and 401 handling.
 
 **Response**: On 401 Unauthorized, removes token from localStorage and redirects to `/login`.
 
+**Response (health)**: Registered after the 401 interceptor by `installHealthInterceptors`; publishes each
+call's outcome to `apiHealthChannel` (502/503/504 down, no response unreachable, 2xx/4xx ok) and passes the
+response or error through unchanged. See [health_banner.md](../features/health_banner.md).
+
+**Status probes** (`src/api/status.ts`): `probeHealth()` (`GET /api/health`) and `fetchClusterAlerts()`
+(`GET /_status/alerts`, same origin) use their own axios instance: no auth, no 401 redirect, 8 s timeout,
+every status resolves.
+
 ### Endpoint Modules
 
 #### authApi

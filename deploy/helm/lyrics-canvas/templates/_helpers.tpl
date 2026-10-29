@@ -166,3 +166,30 @@ entry.
 {{- define "lyrics-canvas.frontend.url" -}}
 {{- printf "http://%s:%d" (include "lyrics-canvas.frontend.fullname" .) (int .Values.frontend.service.port) }}
 {{- end }}
+
+{{/* Backup CronJob name. Alert rules match CronJobs named `*-backup`; keep it. */}}
+{{- define "lyrics-canvas.backup.fullname" -}}
+{{- printf "%s-backup" (include "lyrics-canvas.fullname" .) | trunc 52 | trimSuffix "-" }}
+{{- end }}
+
+{{/* Backup image: backup.image when a repository is set, else postgres.image. */}}
+{{- define "lyrics-canvas.backup.image" -}}
+{{- if .Values.backup.image.repository }}
+{{- include "lyrics-canvas.image" (dict "image" .Values.backup.image "default" "pg16") }}
+{{- else }}
+{{- include "lyrics-canvas.image" (dict "image" .Values.postgres.image "default" "pg16") }}
+{{- end }}
+{{- end }}
+
+{{- define "lyrics-canvas.backup.imagePullPolicy" -}}
+{{- if .Values.backup.image.repository }}
+{{- .Values.backup.image.pullPolicy }}
+{{- else }}
+{{- .Values.postgres.image.pullPolicy }}
+{{- end }}
+{{- end }}
+
+{{/* Claim backing the backup destination when destination.type=persistentVolumeClaim. */}}
+{{- define "lyrics-canvas.backup.claimName" -}}
+{{- default (include "lyrics-canvas.backup.fullname" .) .Values.backup.destination.persistentVolumeClaim.existingClaim }}
+{{- end }}

@@ -1,6 +1,10 @@
 # Home microk8s cluster (node0/node1/node2). Workloads stay on node0 and node1.
 # Images are built on node0 and pushed to the microk8s registry addon.
 #
+# Deploy with deploy/homelab/deploy.sh, which builds images tagged with the
+# short commit SHA and passes --set {backend,frontend}.image.tag=<sha>. The
+# `dev` tags below are only the fallback for a manual helm run.
+#
 # Credentials are generated in-cluster on first install and kept on upgrade.
 # To set any explicitly, put them in homelab.secret.yaml (gitignored) and pass
 # it after this file:
@@ -35,9 +39,37 @@ frontend:
     pullPolicy: IfNotPresent
   service:
     type: NodePort
-    # The app is reached at http://node0:32443.
+    # The app is reached at http://10.1.1.69:32443 (node0's IP; the node names
+    # are ssh aliases, not DNS names, so use the IP in URLs).
     nodePort: 32443
+  # kube-prometheus-stack's Alertmanager; feeds the in-app outage banner.
+  clusterAlerts:
+    alertmanagerUrl: http://kps-alertmanager.monitoring.svc:9093
   affinity: *homelabNodes
 
 postgres:
   affinity: *homelabNodes
+
+# Nightly pg_dump to node1's disk (the NAS is out). The directory must exist on
+# node1, owned by nymph (1000:1000); dumps are created as that user so the
+# laptop pull (deploy/homelab/backup) can read them over ssh.
+backup:
+  enabled: true
+  schedule: "15 3 * * *"
+  timeZone: America/Los_Angeles
+  retain: 14
+  runAsUser: 1000
+  runAsGroup: 1000
+  destination:
+    type: hostPath
+    hostPath:
+      path: /home/nymph/backups/lyrics-canvas
+  nodeSelector:
+    kubernetes.io/hostname: node1
+
+# kube-prometheus-stack (release kps, namespace monitoring) loads every
+# PrometheusRule in the cluster. Alert routing lives in its Alertmanager config.
+monitoring:
+  prometheusRule:
+    enabled: true
+    kubectlCommand: microk8s kubectl

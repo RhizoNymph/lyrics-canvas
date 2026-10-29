@@ -68,6 +68,14 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
+### Health Banner
+The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
+while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
+server is down (nginx answered 502/503/504) or unreachable (offline, network error), and that changes may
+not be saving; "Back online" shows briefly on recovery. It also polls `GET /_status/alerts` (nginx in front
+of Alertmanager) and lists firing cluster alerts, critical first; a deployment without that endpoint stays
+quiet. Cards are dismissible per incident. See [health_banner.md](./features/health_banner.md).
+
 ## Module Documentation
 
 | Document | Scope |
@@ -78,6 +86,10 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
+| [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
+| [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
+| [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
+| [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -115,7 +127,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 |-------|-----------|---------|
 | Frontend rendering | Pixi.js v7 + `@pixi/react` | GPU-accelerated 2D canvas |
 | Frontend framework | React 18 + TypeScript | Component UI |
-| State management | Zustand | Three stores: auth, canvas, UI |
+| State management | Zustand | Stores: auth, canvas, UI, rhyme, status |
 | Routing | react-router-dom v6 | SPA navigation with protected routes |
 | HTTP client | Axios | JWT-intercepted API calls |
 | Build tool | Vite 5 | HMR dev server, production bundler |
@@ -131,6 +143,8 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
 | Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
+| Alerting | PrometheusRule (prometheus-operator) + kube-state-metrics | Availability and backup alerts for a release; routing in Alertmanager |
+| Homelab deploy | `deploy/homelab/deploy.sh` (bash over ssh) | One-command build, push and helm deploy of HEAD to the home microk8s cluster |
 
 ## Data Model (Simplified)
 
@@ -276,6 +290,57 @@ Features Index:
       - frontend/nginx/default.conf.template
     depends_on: []
     doc: docs/features/helm_deployment.md
+  postgres_backup:
+    description: Optional nightly CronJob <fullname>-backup (backup.*, default disabled) that pg_dumps the bundled PostgreSQL in custom format to a pre-existing hostPath directory on a pinned node or a PVC, publishing lyrics_canvas-<UTC ts>.dump atomically (hidden temp name, pg_restore --list check, rename) and pruning to the newest backup.retain; password via secretKeyRef only; refuses to render for an external database. Homelab writes to node1:/home/nymph/backups/lyrics-canvas as 1000:1000, and a systemd user timer on the laptop rsyncs those dumps to ~/Backups/lyrics-canvas without --delete.
+    entry_points:
+      - deploy/helm/lyrics-canvas/templates/backup/cronjob.yaml
+      - deploy/helm/lyrics-canvas/templates/backup/_script.tpl
+      - deploy/helm/lyrics-canvas/templates/backup/pvc.yaml
+      - deploy/helm/environments/homelab.yaml (backup)
+      - deploy/homelab/backup/install.sh
+      - deploy/homelab/backup/pull.sh
+    depends_on: [helm_deployment]
+    doc: docs/features/postgres_backup.md
+  health_banner:
+    description: Web banner for backend health and cluster alerts. A pure state machine (unknown/ok/suspect/failing/recovered) fed by GET /api/health probes (15 s, 3 s to confirm, 5-60 s backoff while down, paused while hidden) and by a pass-through axios interceptor on api/client.ts (502/503/504 down, no response unreachable); two consecutive failures before showing, 5 s "Back online". Polls GET /_status/alerts (Alertmanager v2 list via nginx, sibling feat/status-alerts-endpoint), validated at runtime into typed alerts; 404 or HTML fallback = absent and silent, 5xx = stale. Ordered cards (backend first, then critical, warning, other), role alert/status, dismissible per incident.
+    entry_points:
+      - frontend/src/hooks/useStatusMonitoring.ts
+      - frontend/src/components/status/StatusBanner.tsx
+      - frontend/src/stores/statusStore.ts
+      - frontend/src/lib/health/
+      - frontend/src/lib/alerts/
+      - frontend/src/lib/statusBanner/
+      - frontend/src/api/status.ts (probeHealth, fetchClusterAlerts)
+      - frontend/src/api/client.ts (installHealthInterceptors)
+    depends_on: [helm_deployment]
+    doc: docs/features/health_banner.md
+  alerting:
+    description: Optional PrometheusRule rendered by the Helm chart (monitoring.prometheusRule.enabled, on in homelab) for kube-prometheus-stack. Alerts scoped to the release namespace and the release's name prefix, using kube-state-metrics series - pod not Ready / stuck in init, container and init container restart loops and CrashLoopBackOff-style waiting reasons, Deployment/StatefulSet unavailable replicas, KSM series absent (monitoring blind), and for CronJobs named *-backup a stale last success and failed Jobs. Tunable for-durations, thresholds and severities, schema-validated; kubectl commands in descriptions. Routing and receivers live in the Alertmanager config, not here. Tested with render assertions and promtool unit tests.
+    entry_points:
+      - deploy/helm/lyrics-canvas/templates/monitoring/prometheusrule.yaml
+      - deploy/helm/lyrics-canvas/values.yaml (monitoring.prometheusRule)
+      - deploy/helm/environments/homelab.yaml
+      - deploy/helm/tests/alerts/rules_test.yaml
+    depends_on: [helm_deployment]
+    doc: docs/features/alerting.md
+  homelab_deploy:
+    description: One-command deploy of the committed tree to the home microk8s cluster - refuses a dirty tree (unless --allow-dirty, which still ships HEAD only), tags images with the 12-char commit SHA, ships git archive HEAD over ssh to a per-run dir under ~ on the build host (removed by an EXIT trap), builds backend and frontend with docker build --network host and pushes to localhost:32000 unless the tag is already in the registry (--rebuild / --skip-build), then helm upgrade --install with -f homelab.yaml and both --set image tags (--atomic for an existing release, never --reuse-values), helm test, and prints the URL (http://10.1.1.69:32443) and revision; --dry-run prints every remote command without ssh; key=value logs and one exit code per failure class.
+    entry_points:
+      - deploy/homelab/deploy.sh
+      - deploy/homelab/tests/test_deploy_script.py
+    depends_on: [helm_deployment]
+    doc: docs/features/homelab_deploy.md
+  cluster_alerts_endpoint:
+    description: Read-only GET /_status/alerts on the frontend origin, answered by the production nginx (not the backend) by proxying to the cluster's Alertmanager with one fixed, server-built URL (active, unsilenced, uninhibited alerts with namespace=<release namespace>), so web and Android clients can show an outage banner while the backend is down. 200 [] when unconfigured, 503 {"error":"alertmanager_unavailable"} on any upstream failure, 405 for non GET/HEAD. Variable proxy_pass with a resolver derived from /etc/resolv.conf at container start, so an unresolvable Alertmanager never stops nginx from starting. Chart value frontend.clusterAlerts.alertmanagerUrl.
+    entry_points:
+      - frontend/nginx/default.conf.template (location = /_status/alerts)
+      - frontend/nginx/entrypoint/16-cluster-alerts.envsh
+      - frontend/Dockerfile.prod
+      - deploy/helm/lyrics-canvas/values.yaml (frontend.clusterAlerts)
+      - deploy/helm/lyrics-canvas/templates/frontend/deployment.yaml
+      - frontend/nginx/tests/test_alerts_endpoint.py
+    depends_on: [helm_deployment]
+    doc: docs/features/cluster_alerts_endpoint.md
   android_release:
     description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
     entry_points:
