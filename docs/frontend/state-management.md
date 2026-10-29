@@ -1,6 +1,6 @@
 # State Management
 
-Four Zustand stores managing authentication, canvas data, UI state, and the rhyme sidebar session.
+Five Zustand stores managing authentication, canvas data, UI state, the rhyme sidebar session, and server status.
 
 ## authStore
 
@@ -185,6 +185,21 @@ Nothing in it is drawn on the canvas; `materialize` is the only path that create
 
 Errors are stored as `RhymeError` (`kind`, `operation: 'query' | 'materialize'`, `status`) and never thrown.
 Full description in [rhyme-view.md](./rhyme-view.md).
+
+---
+
+## statusStore
+
+**File:** `src/stores/statusStore.ts`
+**Hook:** `useStatusStore`
+
+| Field | Type | Written by |
+|-------|------|------------|
+| `health` | `HealthState` | health monitor via `setHealth` |
+| `alerts` | `AlertsState` | alerts poller via `setAlerts` |
+| `dismissed` | `ReadonlySet<string>` | `dismiss(key)`; pruned to the shown keys on every `setHealth`/`setAlerts` |
+
+Started by `useStatusMonitoring()` in `App`. Full description in [health_banner.md](../features/health_banner.md).
 
 ---
 
