@@ -5,6 +5,8 @@ import LoginPage from '@/components/pages/LoginPage';
 import RegisterPage from '@/components/pages/RegisterPage';
 import CanvasListPage from '@/components/pages/CanvasListPage';
 import CanvasPage from '@/components/pages/CanvasPage';
+import StatusBanner from '@/components/status/StatusBanner';
+import { useStatusMonitoring } from '@/hooks/useStatusMonitoring';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuthStore();
@@ -15,6 +17,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { loadUser, token } = useAuthStore();
+  useStatusMonitoring();
 
   useEffect(() => {
     if (token) loadUser();
@@ -43,6 +46,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <StatusBanner />
     </BrowserRouter>
   );
 }

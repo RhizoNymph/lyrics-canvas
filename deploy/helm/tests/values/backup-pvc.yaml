@@ -1,0 +1,9 @@
+backup:
+  enabled: true
+  destination:
+    type: persistentVolumeClaim
+    persistentVolumeClaim:
+      size: 3Gi
+      storageClass: slow
+      accessModes:
+        - ReadWriteOnce

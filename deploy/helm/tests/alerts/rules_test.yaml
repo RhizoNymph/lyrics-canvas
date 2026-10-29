@@ -1,0 +1,289 @@
+# promtool unit tests for templates/monitoring/prometheusrule.yaml.
+#
+# test_chart.py renders the chart (release "lc", namespace "songs", default
+# alert tunables), writes the rule groups to rules.yaml next to a copy of this
+# file with annotations stripped, and runs `promtool test rules`. Input series
+# imitate kube-state-metrics.
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # The outage this exists for: a backend pod stuck in its migrate init
+  # container (Pending, Ready=False, init container restarting).
+  - name: pod stuck in init
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_info{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde"}'
+        values: '1x60'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",condition="true"}'
+        values: '0x60'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",condition="false"}'
+        values: '1x60'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",condition="unknown"}'
+        values: '0x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",phase="Running"}'
+        values: '0x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",phase="Succeeded"}'
+        values: '0x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",phase="Failed"}'
+        values: '0x60'
+      - series: 'kube_pod_init_container_status_restarts_total{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",container="migrate"}'
+        values: '0+1x60'
+      - series: 'kube_pod_init_container_status_waiting_reason{namespace="songs",pod="lc-lyrics-canvas-backend-6d8f-abcde",container="migrate",reason="CrashLoopBackOff"}'
+        values: '1x60'
+      - series: 'kube_deployment_status_replicas_unavailable{namespace="songs",deployment="lc-lyrics-canvas-backend"}'
+        values: '1x60'
+      # Healthy frontend pod with a single restart: no alerts.
+      - series: 'kube_pod_info{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij"}'
+        values: '1x60'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",condition="true"}'
+        values: '1x60'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",condition="false"}'
+        values: '0x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",phase="Running"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",phase="Pending"}'
+        values: '0x60'
+      - series: 'kube_pod_container_status_restarts_total{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",container="frontend"}'
+        values: '0 0 0 1x57'
+      - series: 'kube_deployment_status_replicas_unavailable{namespace="songs",deployment="lc-lyrics-canvas-frontend"}'
+        values: '0x60'
+      # Completed helm test pod: Ready=False but Succeeded, ignored.
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-test-connection",condition="false"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-test-connection",phase="Succeeded"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-test-connection",phase="Pending"}'
+        values: '0x60'
+      # Another app in the namespace and this release's name in another
+      # namespace: both out of scope.
+      - series: 'kube_pod_status_ready{namespace="songs",pod="other-app-7f9c-zzzzz",condition="false"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="other-app-7f9c-zzzzz",phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_init_container_status_restarts_total{namespace="songs",pod="other-app-7f9c-zzzzz",container="init"}'
+        values: '0+1x60'
+      - series: 'kube_deployment_status_replicas_unavailable{namespace="songs",deployment="other-app"}'
+        values: '1x60'
+      - series: 'kube_pod_status_ready{namespace="elsewhere",pod="lc-lyrics-canvas-backend-1111-aaaaa",condition="false"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="elsewhere",pod="lc-lyrics-canvas-backend-1111-aaaaa",phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_container_status_waiting_reason{namespace="elsewhere",pod="lc-lyrics-canvas-backend-1111-aaaaa",container="backend",reason="CrashLoopBackOff"}'
+        values: '1x60'
+      - series: 'kube_statefulset_replicas{namespace="songs",statefulset="lc-lyrics-canvas-postgres"}'
+        values: '1x60'
+      - series: 'kube_statefulset_status_replicas_ready{namespace="songs",statefulset="lc-lyrics-canvas-postgres"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: LyricsCanvasPodNotReady
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: LyricsCanvasPodNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: songs
+              pod: lc-lyrics-canvas-backend-6d8f-abcde
+      - eval_time: 11m
+        alertname: LyricsCanvasContainerRestarting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              pod: lc-lyrics-canvas-backend-6d8f-abcde
+              container: migrate
+      - eval_time: 4m
+        alertname: LyricsCanvasContainerWaiting
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: LyricsCanvasContainerWaiting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              pod: lc-lyrics-canvas-backend-6d8f-abcde
+              container: migrate
+              reason: CrashLoopBackOff
+      - eval_time: 11m
+        alertname: LyricsCanvasDeploymentUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: songs
+              deployment: lc-lyrics-canvas-backend
+      - eval_time: 11m
+        alertname: LyricsCanvasStatefulSetUnavailable
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LyricsCanvasPodMetricsAbsent
+        exp_alerts: []
+
+  # Node lost (Ready=Unknown) and an unschedulable pod (Pending, no Ready
+  # condition yet).
+  - name: pod status unknown or unschedulable
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_info{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij"}'
+        values: '1x30'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",condition="true"}'
+        values: '0x30'
+      - series: 'kube_pod_status_ready{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",condition="unknown"}'
+        values: '1x30'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-frontend-5c7b-fghij",phase="Running"}'
+        values: '1x30'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-postgres-0",phase="Pending"}'
+        values: '1x30'
+      - series: 'kube_pod_status_phase{namespace="songs",pod="lc-lyrics-canvas-postgres-0",phase="Running"}'
+        values: '0x30'
+      - series: 'kube_statefulset_replicas{namespace="songs",statefulset="lc-lyrics-canvas-postgres"}'
+        values: '1x30'
+      - series: 'kube_statefulset_status_replicas_ready{namespace="songs",statefulset="lc-lyrics-canvas-postgres"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: LyricsCanvasPodNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: songs
+              pod: lc-lyrics-canvas-frontend-5c7b-fghij
+          - exp_labels:
+              severity: critical
+              namespace: songs
+              pod: lc-lyrics-canvas-postgres-0
+      - eval_time: 11m
+        alertname: LyricsCanvasStatefulSetUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: songs
+              statefulset: lc-lyrics-canvas-postgres
+
+  # kube-state-metrics not scraped (or the release has no pods): every other
+  # rule would be silently inert.
+  - name: metrics absent
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_info{namespace="elsewhere",pod="lc-lyrics-canvas-backend-1111-aaaaa"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LyricsCanvasPodMetricsAbsent
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LyricsCanvasPodMetricsAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: songs
+      - eval_time: 16m
+        alertname: LyricsCanvasPodNotReady
+        exp_alerts: []
+
+  # Backup CronJobs: last success older than 36h, or never succeeded and
+  # created more than 36h ago.
+  - name: backup stale
+    interval: 1m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="songs",cronjob="lc-lyrics-canvas-backup"}'
+        values: '0x2400'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="songs",cronjob="lc-lyrics-canvas-backup"}'
+        values: '60x2400'
+      - series: 'kube_cronjob_created{namespace="songs",cronjob="archive-backup"}'
+        values: '0x2400'
+      # Succeeds every minute: always fresh.
+      - series: 'kube_cronjob_created{namespace="songs",cronjob="fresh-backup"}'
+        values: '0x2400'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="songs",cronjob="fresh-backup"}'
+        values: '0+60x2400'
+      # Not a backup CronJob, and a backup CronJob in another namespace.
+      - series: 'kube_cronjob_created{namespace="songs",cronjob="lc-lyrics-canvas-cleanup"}'
+        values: '0x2400'
+      - series: 'kube_cronjob_created{namespace="elsewhere",cronjob="lc-lyrics-canvas-backup"}'
+        values: '0x2400'
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: LyricsCanvasBackupStale
+        exp_alerts: []
+      # Over the age at 36h1m (archive) / 36h2m (lc), but staleFor is 15m.
+      - eval_time: 36h10m
+        alertname: LyricsCanvasBackupStale
+        exp_alerts: []
+      - eval_time: 37h
+        alertname: LyricsCanvasBackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              cronjob: lc-lyrics-canvas-backup
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              cronjob: archive-backup
+
+  # Failed backup Jobs, unless the CronJob succeeded after the failed run
+  # started.
+  - name: backup job failed
+    interval: 1m
+    input_series:
+      # Failed after the last success: alert.
+      - series: 'kube_cronjob_status_last_successful_time{namespace="songs",cronjob="lc-lyrics-canvas-backup"}'
+        values: '30x20'
+      - series: 'kube_job_owner{namespace="songs",job_name="lc-lyrics-canvas-backup-29000001",owner_kind="CronJob",owner_name="lc-lyrics-canvas-backup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="songs",job_name="lc-lyrics-canvas-backup-29000001",reason="BackoffLimitExceeded"}'
+        values: '1x20'
+      - series: 'kube_job_status_start_time{namespace="songs",job_name="lc-lyrics-canvas-backup-29000001"}'
+        values: '60x20'
+      # A run that succeeded is not a failure.
+      - series: 'kube_job_owner{namespace="songs",job_name="lc-lyrics-canvas-backup-29000000",owner_kind="CronJob",owner_name="lc-lyrics-canvas-backup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="songs",job_name="lc-lyrics-canvas-backup-29000000"}'
+        values: '0x20'
+      - series: 'kube_job_status_start_time{namespace="songs",job_name="lc-lyrics-canvas-backup-29000000"}'
+        values: '0x20'
+      # Failed, but a later run succeeded: no alert.
+      - series: 'kube_cronjob_status_last_successful_time{namespace="songs",cronjob="nightly-backup"}'
+        values: '120x20'
+      - series: 'kube_job_owner{namespace="songs",job_name="nightly-backup-1",owner_kind="CronJob",owner_name="nightly-backup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="songs",job_name="nightly-backup-1",reason="BackoffLimitExceeded"}'
+        values: '1x20'
+      - series: 'kube_job_status_start_time{namespace="songs",job_name="nightly-backup-1"}'
+        values: '0x20'
+      # Never succeeded: alert.
+      - series: 'kube_job_owner{namespace="songs",job_name="first-backup-1",owner_kind="CronJob",owner_name="first-backup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="songs",job_name="first-backup-1",reason="DeadlineExceeded"}'
+        values: '1x20'
+      - series: 'kube_job_status_start_time{namespace="songs",job_name="first-backup-1"}'
+        values: '0x20'
+      # Not a backup CronJob, and a backup Job in another namespace.
+      - series: 'kube_job_owner{namespace="songs",job_name="lc-lyrics-canvas-cleanup-1",owner_kind="CronJob",owner_name="lc-lyrics-canvas-cleanup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="songs",job_name="lc-lyrics-canvas-cleanup-1"}'
+        values: '1x20'
+      - series: 'kube_job_owner{namespace="elsewhere",job_name="lc-lyrics-canvas-backup-1",owner_kind="CronJob",owner_name="lc-lyrics-canvas-backup",owner_is_controller="true"}'
+        values: '1x20'
+      - series: 'kube_job_status_failed{namespace="elsewhere",job_name="lc-lyrics-canvas-backup-1"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LyricsCanvasBackupJobFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              cronjob: lc-lyrics-canvas-backup
+              job_name: lc-lyrics-canvas-backup-29000001
+          - exp_labels:
+              severity: warning
+              namespace: songs
+              cronjob: first-backup
+              job_name: first-backup-1
