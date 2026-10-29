@@ -181,3 +181,64 @@ ingress:
   # Send /api straight to the backend Service; otherwise every request goes to
   # the frontend, whose nginx proxies /api itself.
   routeApiToBackend: true
+
+monitoring:
+  # Alerting rules for a prometheus-operator stack such as kube-prometheus-stack.
+  # Needs the monitoring.coreos.com/v1 PrometheusRule CRD, a Prometheus whose
+  # ruleSelector / ruleNamespaceSelector match this release's namespace and
+  # labels, and kube-state-metrics scraped by that Prometheus (every expression
+  # reads kube_* series). Where alerts are delivered is configured in
+  # Alertmanager, not here.
+  prometheusRule:
+    enabled: false
+    # Extra labels on the PrometheusRule, e.g. to match a ruleSelector.
+    labels: {}
+    # Command prefix used in the "to investigate, run ..." alert descriptions.
+    kubectlCommand: kubectl
+
+    # A pod of this release has not been Ready: stuck in an init container,
+    # failing its readiness probe, unschedulable, or on a lost node.
+    podNotReady:
+      enabled: true
+      for: 10m
+      severity: critical
+    # A container or init container restarted more than `threshold` times
+    # within `window`.
+    containerRestarts:
+      enabled: true
+      threshold: 3
+      window: 1h
+      for: 0m
+      severity: warning
+    # A container or init container is waiting with one of these reasons.
+    containerWaiting:
+      enabled: true
+      for: 5m
+      severity: warning
+      reasons:
+        - CrashLoopBackOff
+        - ImagePullBackOff
+        - ErrImagePull
+        - CreateContainerConfigError
+        - CreateContainerError
+    # A Deployment or StatefulSet of this release has unavailable replicas.
+    workloadUnavailable:
+      enabled: true
+      for: 10m
+      severity: critical
+    # No kube-state-metrics series for this release's pods: the other alerts
+    # cannot fire, so this one says monitoring is blind.
+    metricsAbsent:
+      enabled: true
+      for: 15m
+      severity: warning
+    # Alerts for CronJobs named "*-backup" in the release namespace. Inert when
+    # there is no such CronJob.
+    backup:
+      enabled: true
+      # Alert when the last successful run (or, for a CronJob that never
+      # succeeded, its creation) is older than this.
+      maxAgeHours: 36
+      staleFor: 15m
+      failedFor: 0m
+      severity: warning

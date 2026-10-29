@@ -9,6 +9,7 @@ from __future__ import annotations
 import atexit
 import base64
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -599,6 +600,321 @@ class SchemaTest(unittest.TestCase):
     def test_rejects_unknown_keys(self) -> None:
         self.assert_rejected("backend.replicas=2")
         self.assert_rejected("postgresql.enabled=false")
+
+
+ALERTS_ENABLED = {"monitoring__prometheusRule__enabled": "true"}
+
+POD_ALERTS = {
+    "LyricsCanvasPodNotReady",
+    "LyricsCanvasContainerRestarting",
+    "LyricsCanvasContainerWaiting",
+    "LyricsCanvasPodMetricsAbsent",
+}
+WORKLOAD_ALERTS = {"LyricsCanvasDeploymentUnavailable", "LyricsCanvasStatefulSetUnavailable"}
+BACKUP_ALERTS = {"LyricsCanvasBackupStale", "LyricsCanvasBackupJobFailed"}
+ALL_ALERTS = POD_ALERTS | WORKLOAD_ALERTS | BACKUP_ALERTS
+PROMETHEUS_RULE = ("PrometheusRule", "lc-lyrics-canvas")
+
+
+def alert_rules(docs: dict[tuple[str, str], dict]) -> dict[str, dict]:
+    rule = docs[PROMETHEUS_RULE]
+    found: dict[str, dict] = {}
+    for group in rule["spec"]["groups"]:
+        for r in group["rules"]:
+            assert r["alert"] not in found, f"duplicate alert {r['alert']}"
+            found[r["alert"]] = r
+    return found
+
+
+class PrometheusRuleDefaultsTest(unittest.TestCase):
+    def test_disabled_by_default(self) -> None:
+        kinds = {kind for kind, _ in render()}
+        self.assertNotIn("PrometheusRule", kinds)
+
+    def test_backup_toggle_alone_renders_nothing(self) -> None:
+        docs = render(monitoring__prometheusRule__backup__enabled="true")
+        self.assertNotIn(PROMETHEUS_RULE, docs)
+
+
+class PrometheusRuleEnabledTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(**ALERTS_ENABLED)
+        cls.rules = alert_rules(cls.docs)
+
+    def test_single_rule_resource(self) -> None:
+        rules = [key for key in self.docs if key[0] == "PrometheusRule"]
+        self.assertEqual(rules, [PROMETHEUS_RULE])
+        doc = self.docs[PROMETHEUS_RULE]
+        self.assertEqual(doc["apiVersion"], "monitoring.coreos.com/v1")
+        labels = doc["metadata"]["labels"]
+        self.assertEqual(labels["app.kubernetes.io/instance"], RELEASE)
+        self.assertEqual(labels["app.kubernetes.io/component"], "monitoring")
+
+    def test_expected_alerts(self) -> None:
+        self.assertEqual(set(self.rules), ALL_ALERTS)
+
+    def test_every_expr_scoped_to_release_namespace(self) -> None:
+        for name, rule in self.rules.items():
+            expr = rule["expr"]
+            self.assertIn(f'namespace="{NAMESPACE}"', expr, name)
+            self.assertNotRegex(expr, r"namespace=~|namespace!=", name)
+            # Every selector in the expression carries the namespace matcher.
+            selectors = expr.count("{")
+            self.assertEqual(expr.count(f'namespace="{NAMESPACE}"'), selectors, name)
+
+    def test_pod_and_workload_exprs_scoped_to_release_names(self) -> None:
+        for name in POD_ALERTS | WORKLOAD_ALERTS:
+            expr = self.rules[name]["expr"]
+            selectors = expr.count("{")
+            self.assertEqual(expr.count('=~"lc-lyrics-canvas-.*"'), selectors, name)
+
+    def test_backup_exprs_match_backup_cronjobs(self) -> None:
+        stale = self.rules["LyricsCanvasBackupStale"]["expr"]
+        self.assertIn('cronjob=~".*-backup"', stale)
+        failed = self.rules["LyricsCanvasBackupJobFailed"]["expr"]
+        self.assertIn('owner_kind="CronJob"', failed)
+        self.assertIn('owner_name=~".*-backup"', failed)
+
+    def test_default_tunables(self) -> None:
+        r = self.rules
+        self.assertEqual(r["LyricsCanvasPodNotReady"]["for"], "10m")
+        self.assertEqual(r["LyricsCanvasContainerRestarting"]["for"], "0m")
+        self.assertIn("[1h]", r["LyricsCanvasContainerRestarting"]["expr"])
+        self.assertRegex(r["LyricsCanvasContainerRestarting"]["expr"], r"> 3\b")
+        self.assertEqual(r["LyricsCanvasContainerWaiting"]["for"], "5m")
+        self.assertIn("CrashLoopBackOff|ImagePullBackOff|ErrImagePull", r["LyricsCanvasContainerWaiting"]["expr"])
+        self.assertEqual(r["LyricsCanvasDeploymentUnavailable"]["for"], "10m")
+        self.assertEqual(r["LyricsCanvasStatefulSetUnavailable"]["for"], "10m")
+        self.assertEqual(r["LyricsCanvasPodMetricsAbsent"]["for"], "15m")
+        self.assertIn(str(36 * 3600), r["LyricsCanvasBackupStale"]["expr"])
+        self.assertEqual(r["LyricsCanvasBackupStale"]["for"], "15m")
+        self.assertEqual(r["LyricsCanvasBackupJobFailed"]["for"], "0m")
+
+    def test_severity_and_annotations(self) -> None:
+        severities = {name: rule["labels"]["severity"] for name, rule in self.rules.items()}
+        self.assertEqual(severities["LyricsCanvasPodNotReady"], "critical")
+        self.assertEqual(severities["LyricsCanvasDeploymentUnavailable"], "critical")
+        self.assertEqual(severities["LyricsCanvasStatefulSetUnavailable"], "critical")
+        for name in ALL_ALERTS - {
+            "LyricsCanvasPodNotReady",
+            "LyricsCanvasDeploymentUnavailable",
+            "LyricsCanvasStatefulSetUnavailable",
+        }:
+            self.assertEqual(severities[name], "warning", name)
+        for name, rule in self.rules.items():
+            ann = rule["annotations"]
+            self.assertTrue(ann.get("summary"), name)
+            self.assertIn(f"kubectl -n {NAMESPACE} ", ann["description"], name)
+            self.assertNotIn("microk8s", ann["description"], name)
+
+    def test_annotations_use_alert_labels(self) -> None:
+        # Prometheus templating survives Helm rendering.
+        self.assertIn("{{ $labels.pod }}", self.rules["LyricsCanvasPodNotReady"]["annotations"]["summary"])
+        self.assertIn("{{ $labels.cronjob }}", self.rules["LyricsCanvasBackupStale"]["annotations"]["summary"])
+
+    def test_pod_not_ready_catches_init_and_unknown(self) -> None:
+        expr = self.rules["LyricsCanvasPodNotReady"]["expr"]
+        self.assertIn("kube_pod_status_ready", expr)
+        self.assertIn('condition!="true"', expr)
+        self.assertIn('phase=~"Pending|Unknown"', expr)
+        self.assertIn('phase=~"Succeeded|Failed"', expr)
+
+    def test_restarts_include_init_containers(self) -> None:
+        expr = self.rules["LyricsCanvasContainerRestarting"]["expr"]
+        self.assertIn("kube_pod_container_status_restarts_total", expr)
+        self.assertIn("kube_pod_init_container_status_restarts_total", expr)
+        expr = self.rules["LyricsCanvasContainerWaiting"]["expr"]
+        self.assertIn("kube_pod_container_status_waiting_reason", expr)
+        self.assertIn("kube_pod_init_container_status_waiting_reason", expr)
+
+    def test_fullname_override_scopes_exprs(self) -> None:
+        docs = render(fullnameOverride="songs-app", **ALERTS_ENABLED)
+        self.assertIn(("PrometheusRule", "songs-app"), docs)
+        rules = alert_rules({PROMETHEUS_RULE: docs[("PrometheusRule", "songs-app")]})
+        self.assertIn('=~"songs-app-.*"', rules["LyricsCanvasPodNotReady"]["expr"])
+
+
+class PrometheusRuleTunablesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("alerts.yaml")
+        cls.rules = alert_rules(cls.docs)
+
+    def test_extra_labels(self) -> None:
+        labels = self.docs[PROMETHEUS_RULE]["metadata"]["labels"]
+        self.assertEqual(labels["release"], "kps")
+        self.assertEqual(labels["team"], "lyrics")
+        self.assertEqual(labels["app.kubernetes.io/instance"], RELEASE)
+
+    def test_for_durations(self) -> None:
+        r = self.rules
+        self.assertEqual(r["LyricsCanvasPodNotReady"]["for"], "7m")
+        self.assertEqual(r["LyricsCanvasContainerRestarting"]["for"], "2m")
+        self.assertEqual(r["LyricsCanvasContainerWaiting"]["for"], "4m")
+        self.assertEqual(r["LyricsCanvasDeploymentUnavailable"]["for"], "12m")
+        self.assertEqual(r["LyricsCanvasStatefulSetUnavailable"]["for"], "12m")
+        self.assertEqual(r["LyricsCanvasPodMetricsAbsent"]["for"], "20m")
+        self.assertEqual(r["LyricsCanvasBackupStale"]["for"], "30m")
+        self.assertEqual(r["LyricsCanvasBackupJobFailed"]["for"], "1m")
+
+    def test_thresholds_in_exprs(self) -> None:
+        restart = self.rules["LyricsCanvasContainerRestarting"]["expr"]
+        self.assertIn("[30m]", restart)
+        self.assertNotIn("[1h]", restart)
+        self.assertRegex(restart, r"> 5\b")
+        waiting = self.rules["LyricsCanvasContainerWaiting"]["expr"]
+        self.assertIn('reason=~"CrashLoopBackOff|ImagePullBackOff"', waiting)
+        self.assertNotIn("ErrImagePull", waiting)
+        stale = self.rules["LyricsCanvasBackupStale"]["expr"]
+        self.assertIn(str(48 * 3600), stale)
+        self.assertNotIn(str(36 * 3600), stale)
+
+    def test_severity_overrides(self) -> None:
+        r = self.rules
+        self.assertEqual(r["LyricsCanvasPodNotReady"]["labels"]["severity"], "warning")
+        self.assertEqual(r["LyricsCanvasDeploymentUnavailable"]["labels"]["severity"], "warning")
+        self.assertEqual(r["LyricsCanvasBackupStale"]["labels"]["severity"], "critical")
+        self.assertEqual(r["LyricsCanvasBackupJobFailed"]["labels"]["severity"], "critical")
+
+    def test_kubectl_command(self) -> None:
+        for name, rule in self.rules.items():
+            self.assertIn(f"microk8s kubectl -n {NAMESPACE} ", rule["annotations"]["description"], name)
+
+    def test_alerts_can_be_disabled_individually(self) -> None:
+        docs = render(
+            "alerts.yaml",
+            monitoring__prometheusRule__podNotReady__enabled="false",
+            monitoring__prometheusRule__metricsAbsent__enabled="false",
+            monitoring__prometheusRule__workloadUnavailable__enabled="false",
+        )
+        self.assertEqual(
+            set(alert_rules(docs)),
+            ALL_ALERTS
+            - {"LyricsCanvasPodNotReady", "LyricsCanvasPodMetricsAbsent"}
+            - WORKLOAD_ALERTS,
+        )
+
+    def test_backup_alerts_toggle(self) -> None:
+        docs = render("alerts.yaml", monitoring__prometheusRule__backup__enabled="false")
+        rule = docs[PROMETHEUS_RULE]
+        self.assertEqual(set(alert_rules(docs)), ALL_ALERTS - BACKUP_ALERTS)
+        for group in rule["spec"]["groups"]:
+            self.assertTrue(group["rules"], group["name"])
+
+    def test_all_alerts_disabled_renders_no_empty_groups(self) -> None:
+        docs = render(
+            "alerts.yaml",
+            monitoring__prometheusRule__podNotReady__enabled="false",
+            monitoring__prometheusRule__containerRestarts__enabled="false",
+            monitoring__prometheusRule__containerWaiting__enabled="false",
+            monitoring__prometheusRule__metricsAbsent__enabled="false",
+            monitoring__prometheusRule__workloadUnavailable__enabled="false",
+            monitoring__prometheusRule__backup__enabled="false",
+        )
+        self.assertEqual(docs[PROMETHEUS_RULE]["spec"]["groups"], [])
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "alerts.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class PrometheusRuleSchemaTest(unittest.TestCase):
+    def assert_rejected(self, *sets: str) -> None:
+        args = ["template", RELEASE, str(CHART), "--set", "monitoring.prometheusRule.enabled=true"]
+        for s in sets:
+            args += ["--set", s]
+        result = helm(*args)
+        self.assertNotEqual(result.returncode, 0, "expected schema rejection for " + ", ".join(sets))
+
+    def test_rejects_unknown_keys(self) -> None:
+        self.assert_rejected("monitoring.serviceMonitor.enabled=true")
+        self.assert_rejected("monitoring.prometheusRule.bogus=1")
+        self.assert_rejected("monitoring.prometheusRule.podNotReady.threshold=3")
+        self.assert_rejected("monitoring.prometheusRule.backup.cronJob=x")
+
+    def test_rejects_bad_durations(self) -> None:
+        self.assert_rejected("monitoring.prometheusRule.podNotReady.for=10")
+        self.assert_rejected("monitoring.prometheusRule.podNotReady.for=ten minutes")
+        self.assert_rejected("monitoring.prometheusRule.backup.staleFor=")
+        self.assert_rejected("monitoring.prometheusRule.containerRestarts.window=0m")
+        self.assert_rejected("monitoring.prometheusRule.containerRestarts.window=1h30")
+
+    def test_rejects_bad_numbers(self) -> None:
+        self.assert_rejected("monitoring.prometheusRule.containerRestarts.threshold=0")
+        self.assert_rejected("monitoring.prometheusRule.containerRestarts.threshold=three")
+        self.assert_rejected("monitoring.prometheusRule.backup.maxAgeHours=0")
+        self.assert_rejected("monitoring.prometheusRule.backup.maxAgeHours=1.5")
+
+    def test_rejects_bad_severity_labels_and_strings(self) -> None:
+        self.assert_rejected("monitoring.prometheusRule.podNotReady.severity=page")
+        self.assert_rejected("monitoring.prometheusRule.enabled=yes")
+        self.assert_rejected("monitoring.prometheusRule.labels.release=1")
+        self.assert_rejected("monitoring.prometheusRule.kubectlCommand=")
+        self.assert_rejected("monitoring.prometheusRule.kubectlCommand={{ x }}")
+        self.assert_rejected("monitoring.prometheusRule.containerWaiting.reasons={}")
+        self.assert_rejected("monitoring.prometheusRule.containerWaiting.reasons[0]=Crash|Loop")
+
+
+class HomelabAlertingTest(unittest.TestCase):
+    def test_homelab_enables_rules(self) -> None:
+        docs = render(str(ENVIRONMENTS / "homelab.yaml"))
+        rules = alert_rules(docs)
+        self.assertEqual(set(rules), ALL_ALERTS)
+        for name, rule in rules.items():
+            self.assertIn(
+                f"microk8s kubectl -n {NAMESPACE} ", rule["annotations"]["description"], name
+            )
+
+
+ALERT_TESTS = HERE / "alerts"
+
+
+def promtool_command() -> list[str] | None:
+    """PROMTOOL may be a binary or a command prefix, e.g. a docker run wrapper.
+    It is invoked with relative paths from a temporary working directory."""
+    configured = os.environ.get("PROMTOOL")
+    if configured:
+        return shlex.split(configured)
+    found = shutil.which("promtool")
+    return [found] if found else None
+
+
+class PrometheusRulePromtoolTest(unittest.TestCase):
+    """`promtool check rules` on the rendered rules and `promtool test rules`
+    against synthetic kube-state-metrics series (tests/alerts/rules_test.yaml)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.promtool = promtool_command()
+        if cls.promtool is None:
+            raise unittest.SkipTest("promtool not found; set PROMTOOL")
+        spec = render(**ALERTS_ENABLED)[PROMETHEUS_RULE]["spec"]
+        cls.workdir = Path(tempfile.mkdtemp(prefix="lyrics-canvas-rules-"))
+        atexit.register(shutil.rmtree, cls.workdir, True)
+        (cls.workdir / "full.yaml").write_text(yaml.safe_dump(spec))
+        bare = {
+            "groups": [
+                {**g, "rules": [{k: v for k, v in r.items() if k != "annotations"} for r in g["rules"]]}
+                for g in spec["groups"]
+            ]
+        }
+        (cls.workdir / "rules.yaml").write_text(yaml.safe_dump(bare))
+        shutil.copy(ALERT_TESTS / "rules_test.yaml", cls.workdir / "rules_test.yaml")
+
+    def run_promtool(self, *args: str) -> subprocess.CompletedProcess[str]:
+        assert self.promtool is not None
+        return subprocess.run(
+            [*self.promtool, *args], cwd=self.workdir, capture_output=True, text=True, check=False
+        )
+
+    def test_check_rules(self) -> None:
+        result = self.run_promtool("check", "rules", "full.yaml")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_unit_tests(self) -> None:
+        result = self.run_promtool("test", "rules", "rules_test.yaml")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

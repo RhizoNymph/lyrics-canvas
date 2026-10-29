@@ -41,3 +41,10 @@ frontend:
 
 postgres:
   affinity: *homelabNodes
+
+# kube-prometheus-stack (release kps, namespace monitoring) loads every
+# PrometheusRule in the cluster. Alert routing lives in its Alertmanager config.
+monitoring:
+  prometheusRule:
+    enabled: true
+    kubectlCommand: microk8s kubectl

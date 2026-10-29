@@ -63,7 +63,8 @@ which is gitignored, passed as a second `-f`.
 
 `homelab.yaml` is the home microk8s cluster: images from the
 `localhost:32000` registry addon, all workloads on node0/node1, and the
-frontend on NodePort 32443.
+frontend on NodePort 32443, and the alert rules enabled for the cluster's
+kube-prometheus-stack.
 
 ```bash
 microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
@@ -86,9 +87,37 @@ microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
 | `externalDatabase.url` | `""` | `postgresql+asyncpg://...` for a managed database when `postgres.enabled=false`. The database must allow `CREATE EXTENSION vector`. Or `externalDatabase.existingSecret`. |
 | `ingress.routeApiToBackend` | `true` | Adds a `/api` path straight to the backend Service. |
 | `global.imagePullSecrets` | `[]` | Applied to every pod. |
+| `monitoring.prometheusRule.enabled` | `false` | Renders a `PrometheusRule` with alerts for this release (see below). |
 
 See `values.yaml` for the full list; `values.schema.json` rejects unknown keys
 and wrong types at install time.
+
+## Alerting
+
+`monitoring.prometheusRule.enabled=true` adds a `PrometheusRule`
+(`monitoring.coreos.com/v1`) named after the release, for prometheus-operator
+/ kube-prometheus-stack. It needs the CRD, a Prometheus whose rule selectors
+match it (add labels with `monitoring.prometheusRule.labels`, e.g.
+`release: kps`), and **kube-state-metrics** scraped by that Prometheus; all
+expressions read `kube_*` series.
+
+| Alert | Fires when (defaults) |
+|-------|-----------------------|
+| `LyricsCanvasPodNotReady` | A release pod is Pending / not Ready / Unknown for 10m (catches pods stuck in the `migrate` init container). |
+| `LyricsCanvasContainerRestarting` | A container or init container restarted more than 3 times in 1h. |
+| `LyricsCanvasContainerWaiting` | A container or init container sits in CrashLoopBackOff, ImagePullBackOff, ... for 5m. |
+| `LyricsCanvasDeploymentUnavailable` / `LyricsCanvasStatefulSetUnavailable` | Unavailable replicas for 10m. |
+| `LyricsCanvasPodMetricsAbsent` | No kube-state-metrics series for the release's pods for 15m (the other alerts are blind). |
+| `LyricsCanvasBackupStale` | A `*-backup` CronJob in the namespace has not succeeded for 36h (`backup.maxAgeHours`). |
+| `LyricsCanvasBackupJobFailed` | A Job of a `*-backup` CronJob failed and no later run succeeded. |
+
+Each alert block (`podNotReady`, `containerRestarts`, `containerWaiting`,
+`workloadUnavailable`, `metricsAbsent`, `backup`) has `enabled`, a `for`
+duration and `severity`; restart `threshold`/`window`, waiting `reasons` and
+backup `maxAgeHours` are tunable too. Descriptions say which `kubectl`
+commands to run; set `kubectlCommand` (homelab: `microk8s kubectl`).
+Notification routing is configured in Alertmanager, not in this chart. Details:
+[docs/features/alerting.md](../../../docs/features/alerting.md).
 
 ## Runtime notes
 
@@ -105,3 +134,6 @@ and wrong types at install time.
 ```bash
 python3 deploy/helm/tests/test_chart.py      # needs helm and PyYAML
 ```
+
+With `promtool` on PATH (or `PROMTOOL` set to a command), the suite also runs
+`promtool check rules` and the rule unit tests in `tests/alerts/`.

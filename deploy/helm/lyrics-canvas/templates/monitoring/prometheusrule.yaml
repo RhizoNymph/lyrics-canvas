@@ -1,0 +1,214 @@
+{{- $r := .Values.monitoring.prometheusRule }}
+{{- if $r.enabled }}
+{{- /*
+Every selector carries the release namespace. Pod, Deployment and StatefulSet
+selectors also match the release fullname prefix, which every workload and
+pod name of this chart starts with (kube_pod_labels is not used: it only has
+label_* series for labels allowlisted in kube-state-metrics). Backup alerts
+match CronJobs named "*-backup" so they also cover a CronJob added later.
+*/}}
+{{- $fullname := include "lyrics-canvas.fullname" . }}
+{{- $prefix := printf "%s-.*" $fullname }}
+{{- $ns := printf "namespace=%q" .Release.Namespace }}
+{{- $pod := printf "%s, pod=~%q" $ns $prefix }}
+{{- $kubectl := printf "%s -n %s" $r.kubectlCommand .Release.Namespace }}
+{{- $backupCron := printf "%s, cronjob=~%q" $ns ".*-backup" }}
+{{- $backupOwner := printf "label_replace(kube_job_owner{%s, owner_kind=\"CronJob\", owner_name=~\".*-backup\"}, \"cronjob\", \"$1\", \"owner_name\", \"(.+)\")" $ns }}
+{{- $podGroup := or $r.podNotReady.enabled $r.containerRestarts.enabled $r.containerWaiting.enabled $r.metricsAbsent.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    {{- with $r.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if not (or $podGroup $r.workloadUnavailable.enabled $r.backup.enabled) }}
+  groups: []
+  {{- else }}
+  groups:
+    {{- if $podGroup }}
+    - name: lyrics-canvas.pods
+      rules:
+        {{- with $r.podNotReady }}
+        {{- if .enabled }}
+        - alert: LyricsCanvasPodNotReady
+          expr: |-
+            (
+              max by (namespace, pod) ({{ printf `kube_pod_status_ready{%s, condition!="true"}` $pod }}) == 1
+              or
+              max by (namespace, pod) ({{ printf `kube_pod_status_phase{%s, phase=~"Pending|Unknown"}` $pod }}) == 1
+            )
+            unless on (namespace, pod)
+            max by (namespace, pod) ({{ printf `kube_pod_status_phase{%s, phase=~"Succeeded|Failed"}` $pod }}) == 1
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Pod {{ $labels.pod }} has not been Ready`}} for {{ .for }}
+            description: >-
+              {{`Pod {{ $labels.pod }} in {{ $labels.namespace }}`}} has been Pending, not Ready or
+              Unknown for over {{ .for }}. Init:N/M or Init:CrashLoopBackOff in the STATUS column means
+              it is stuck in an init container (migrate). Investigate with
+              `{{ $kubectl }} get pod {{`{{ $labels.pod }}`}} -o wide`,
+              `{{ $kubectl }} describe pod {{`{{ $labels.pod }}`}}` (events and init container state) and
+              `{{ $kubectl }} logs {{`{{ $labels.pod }}`}} --all-containers --prefix --tail=100`.
+        {{- end }}
+        {{- end }}
+        {{- with $r.containerRestarts }}
+        {{- if .enabled }}
+        - alert: LyricsCanvasContainerRestarting
+          expr: |-
+            max by (namespace, pod, container) (increase({{ printf `kube_pod_container_status_restarts_total{%s}` $pod }}[{{ .window }}])) > {{ int .threshold }}
+            or
+            max by (namespace, pod, container) (increase({{ printf `kube_pod_init_container_status_restarts_total{%s}` $pod }}[{{ .window }}])) > {{ int .threshold }}
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Container {{ $labels.container }} of {{ $labels.pod }} restarted {{ $value | humanize }} times`}} in {{ .window }}
+            description: >-
+              {{`Container {{ $labels.container }} (init or main) of pod {{ $labels.pod }}`}} restarted more
+              than {{ int .threshold }} times in {{ .window }}. See why the previous run exited with
+              `{{ $kubectl }} logs {{`{{ $labels.pod }} -c {{ $labels.container }}`}} --previous --tail=100`
+              and `{{ $kubectl }} describe pod {{`{{ $labels.pod }}`}}` (Last State, exit code, events).
+        {{- end }}
+        {{- end }}
+        {{- with $r.containerWaiting }}
+        {{- if .enabled }}
+        {{- $reasons := printf "reason=~%q" (join "|" .reasons) }}
+        - alert: LyricsCanvasContainerWaiting
+          expr: |-
+            max by (namespace, pod, container, reason) ({{ printf `kube_pod_container_status_waiting_reason{%s, %s}` $pod $reasons }}) == 1
+            or
+            max by (namespace, pod, container, reason) ({{ printf `kube_pod_init_container_status_waiting_reason{%s, %s}` $pod $reasons }}) == 1
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Container {{ $labels.container }} of {{ $labels.pod }} is in {{ $labels.reason }}`}}
+            description: >-
+              {{`Container {{ $labels.container }} (init or main) of pod {{ $labels.pod }} has been waiting
+              with reason {{ $labels.reason }}`}} for over {{ .for }}. Check
+              `{{ $kubectl }} describe pod {{`{{ $labels.pod }}`}}` for events (image pulls, missing
+              Secrets or ConfigMaps) and
+              `{{ $kubectl }} logs {{`{{ $labels.pod }} -c {{ $labels.container }}`}} --previous --tail=100`
+              for crashes.
+        {{- end }}
+        {{- end }}
+        {{- with $r.metricsAbsent }}
+        {{- if .enabled }}
+        - alert: LyricsCanvasPodMetricsAbsent
+          expr: |-
+            absent({{ printf `kube_pod_info{%s}` $pod }})
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: No kube-state-metrics series for {{ $fullname }} pods in {{ $.Release.Namespace }}
+            description: >-
+              Prometheus has no kube_pod_info series for pods named {{ $fullname }}-* in
+              {{ $.Release.Namespace }} for over {{ .for }}, so the other {{ $fullname }} alerts cannot
+              fire. Either kube-state-metrics is not running or not scraped (check the Prometheus
+              Targets page), or the release has no pods: run `{{ $kubectl }} get pods`.
+        {{- end }}
+        {{- end }}
+    {{- end }}
+    {{- with $r.workloadUnavailable }}
+    {{- if .enabled }}
+    - name: lyrics-canvas.workloads
+      rules:
+        - alert: LyricsCanvasDeploymentUnavailable
+          expr: |-
+            max by (namespace, deployment) ({{ printf `kube_deployment_status_replicas_unavailable{%s, deployment=~%q}` $ns $prefix }}) > 0
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Deployment {{ $labels.deployment }} has {{ $value }} unavailable replica(s)`}}
+            description: >-
+              {{`Deployment {{ $labels.deployment }} in {{ $labels.namespace }}`}} has had unavailable
+              replicas for over {{ .for }}. Run
+              `{{ $kubectl }} get deploy,rs,pods -o wide` and
+              `{{ $kubectl }} describe deploy {{`{{ $labels.deployment }}`}}`, then look at the pods'
+              events and logs.
+        - alert: LyricsCanvasStatefulSetUnavailable
+          expr: |-
+            max by (namespace, statefulset) ({{ printf `kube_statefulset_replicas{%s, statefulset=~%q}` $ns $prefix }})
+            -
+            max by (namespace, statefulset) ({{ printf `kube_statefulset_status_replicas_ready{%s, statefulset=~%q}` $ns $prefix }})
+            > 0
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`StatefulSet {{ $labels.statefulset }} has {{ $value }} replica(s) not ready`}}
+            description: >-
+              {{`StatefulSet {{ $labels.statefulset }} in {{ $labels.namespace }}`}} has had fewer ready
+              replicas than desired for over {{ .for }}. Run
+              `{{ $kubectl }} get sts,pods,pvc -o wide` and
+              `{{ $kubectl }} describe sts {{`{{ $labels.statefulset }}`}}`; for PostgreSQL also
+              `{{ $kubectl }} logs {{`{{ $labels.statefulset }}`}}-0 --tail=100`.
+    {{- end }}
+    {{- end }}
+    {{- with $r.backup }}
+    {{- if .enabled }}
+    {{- $maxAge := mul (int .maxAgeHours) 3600 }}
+    - name: lyrics-canvas.backup
+      rules:
+        - alert: LyricsCanvasBackupStale
+          expr: |-
+            time() - max by (namespace, cronjob) ({{ printf `kube_cronjob_status_last_successful_time{%s}` $backupCron }}) > {{ $maxAge }}
+            or
+            (
+              time() - max by (namespace, cronjob) ({{ printf `kube_cronjob_created{%s}` $backupCron }}) > {{ $maxAge }}
+              unless on (namespace, cronjob)
+              {{ printf `kube_cronjob_status_last_successful_time{%s}` $backupCron }}
+            )
+          for: {{ .staleFor }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Backup CronJob {{ $labels.cronjob }}`}} has not succeeded in {{ int .maxAgeHours }}h
+            description: >-
+              {{`CronJob {{ $labels.cronjob }} in {{ $labels.namespace }}`}} last succeeded
+              {{`{{ $value | humanizeDuration }}`}} ago (limit {{ int .maxAgeHours }}h), or was created that
+              long ago and has never succeeded. Run
+              `{{ $kubectl }} get cronjob {{`{{ $labels.cronjob }}`}} -o wide` (SUSPEND, LAST SCHEDULE),
+              `{{ $kubectl }} get jobs --sort-by=.metadata.creationTimestamp` and
+              `{{ $kubectl }} logs job/<latest job> --tail=100`.
+        - alert: LyricsCanvasBackupJobFailed
+          expr: |-
+            max by (namespace, cronjob, job_name) (
+              ({{ printf `kube_job_status_failed{%s}` $ns }} > 0)
+              * on (namespace, job_name) group_left (cronjob)
+              max by (namespace, job_name, cronjob) ({{ $backupOwner }})
+            )
+            unless on (namespace, job_name)
+            (
+              max by (namespace, job_name) ({{ printf `kube_job_status_start_time{%s}` $ns }})
+              < on (namespace, job_name)
+              max by (namespace, job_name) (
+                {{ $backupOwner }}
+                * on (namespace, cronjob) group_left ()
+                max by (namespace, cronjob) ({{ printf `kube_cronjob_status_last_successful_time{%s}` $backupCron }})
+              )
+            )
+          for: {{ .failedFor }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: {{`Backup Job {{ $labels.job_name }} failed`}}
+            description: >-
+              {{`Job {{ $labels.job_name }} of CronJob {{ $labels.cronjob }} in {{ $labels.namespace }}`}}
+              failed and no later run has succeeded. Run
+              `{{ $kubectl }} describe job {{`{{ $labels.job_name }}`}}` and
+              `{{ $kubectl }} logs job/{{`{{ $labels.job_name }}`}} --tail=100`. The alert clears once
+              a later run succeeds or the failed Job is deleted.
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
