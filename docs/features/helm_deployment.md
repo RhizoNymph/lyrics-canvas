@@ -16,6 +16,8 @@ Kubernetes, plus the production frontend image it needs
 - A production frontend image: Vite build served by nginx, `/api` reverse
   proxied to the backend Service.
 - A render-and-assert test suite for the chart.
+- Committed per-cluster values files (`deploy/helm/environments/`) with
+  credentials kept out of git.
 
 ## Non-scope
 
@@ -100,7 +102,7 @@ with a clear message when neither is set.
 | `templates/backend/pvc.yaml` | Optional model cache claim. |
 | `templates/backend/service.yaml` | ClusterIP (configurable) on `backend.service.port`. |
 | `templates/frontend/deployment.yaml` | nginx Deployment; `BACKEND_URL` env; probes on `/healthz`. |
-| `templates/frontend/service.yaml` | Service on `frontend.service.port` to container port 8080. |
+| `templates/frontend/service.yaml` | Service on `frontend.service.port` to container port 8080; `nodePort` is set only for `type: NodePort` with `frontend.service.nodePort`. |
 | `templates/postgres/statefulset.yaml` | Single replica pgvector with `volumeClaimTemplates` (or emptyDir). |
 | `templates/postgres/secret.yaml`, `service.yaml`, `configmap-initdb.yaml` | Password, ClusterIP, `01-init.sql`. |
 | `templates/ingress.yaml` | One rule per host: optional `/api` to backend, `/` to frontend; TLS passthrough from values. |
@@ -109,6 +111,8 @@ with a clear message when neither is set.
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
 | `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions. |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443). Rendering it matches the live `lyrics` release. |
+| `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
 | `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, SPA fallback, asset caching. |
 | `frontend/.dockerignore` | Keeps `node_modules` and `dist` out of both image builds. |
@@ -137,5 +141,11 @@ with a clear message when neither is set.
   `UV_NO_SYNC=1`, so `uv run` uses the venv built into the image and never
   re-resolves or rebuilds the project (which would fetch `hatchling` from
   PyPI on every pod restart). The chart sets it too so older images are safe.
+- Committed values files (the chart's `values.yaml` and
+  `deploy/helm/environments/*.yaml`) leave `backend.secretKey`,
+  `postgres.auth.password` and `externalDatabase.url` empty;
+  `CommittedValuesSafetyTest` enforces this and checks that
+  `*.secret.yaml` overrides are gitignored. A new credential-bearing value
+  must be added to `SECRET_PATHS` in the test suite.
 - The chart test suite must pass (`python3 deploy/helm/tests/test_chart.py`)
   and rendered output must validate with `kubeconform -strict`.
