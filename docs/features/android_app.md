@@ -11,6 +11,8 @@ touch. Lives in `android/` of this repo.
 - An app module with Compose UI: login/register, canvas list, canvas screen, rhyme sheet, grid editor.
 - Backend hardening the client needs: typed response models on every route the app calls, a committed
   OpenAPI snapshot, and a server-side merge endpoint shared by both clients.
+- An app-wide status banner for backend outages and cluster alerts:
+  [android_health_banner.md](./android_health_banner.md).
 
 ## Non-scope
 
@@ -43,6 +45,7 @@ server merge endpoint.
 | Snippets | `POST /api/canvases/{id}/snippets`, `PUT /api/snippets/{id}`, `DELETE /api/snippets/{id}`, `PATCH /api/snippets/batch-position` |
 | Merge | `POST /api/canvases/{id}/merge` (new, see Backend) |
 | NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest` |
+| Status | `GET /api/health`, `GET /_status/alerts` (frontend nginx origin; see [android_health_banner.md](./android_health_banner.md)) |
 
 `docs/api/openapi.json` is the committed snapshot; `:core:model` has a test that every DTO field the app
 reads exists in that snapshot with a compatible type.
@@ -102,6 +105,7 @@ Open canvas -> CanvasViewModel(StateFlow<CanvasUiState>) + RhymeViewModel(port =
   Merge -> MergeRequest.of -> POST merge -> replace originals with merged snippet, select it
   Tap card -> EditorRoute -> GridEditorRoute(snippet) -> onSaved -> CanvasViewModel.replaceSnippet
 any 401 -> ApiClient clears TokenStore -> SignedOut -> login
+every ApiClient call -> ApiCallObserver (HealthMonitor) -> StatusBannerViewModel -> StatusBanner above AppNavHost
 ```
 
 Screens, ViewModels, gestures, rendering and the rhyme sheet in detail:
@@ -131,7 +135,9 @@ Outside the sandbox a plain `./gradlew assembleDebug test` works with the normal
 
 Release APKs are produced by the tag-triggered workflow described in
 [android_release.md](./android_release.md); the same Gradle properties (`-PversionName`, `-PversionCode`,
-`-PapiBaseUrl`) and `ANDROID_KEYSTORE_*` environment variables drive a local release build.
+`-PapiBaseUrl`, `-PstatusAlertsUrl`) and `ANDROID_KEYSTORE_*` environment variables drive a local release build.
+`-PstatusAlertsUrl` is where the status banner fetches cluster alerts (blank: `<apiBaseUrl>/_status/alerts`;
+`none`: off); see [android_health_banner.md](./android_health_banner.md).
 
 ## Milestones
 
@@ -157,6 +163,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `Merge.kt` | `MergeMode`, `MergeRequest` (only via `MergeRequest.of`, null for < 2 distinct ids), `MergeResponse` |
 | | | `Nlp.kt` | `SyllabifyRequest` |
 | | | `Rhyme.kt` | `RhymeLimits` (`PAGE_SIZE`, `MAX_LIMIT`, `STRESS_PATTERN`), `RhymeK` (int-serialised enum), `SourceName`, sealed `AnchorRef` = `SnippetAnchorRef` / `TextAnchorRef` (discriminator `kind`), `AnchorRange`, `Slot`, `ScoreWeights`, `DialectRule(Kind)`, `DialectMap`, `RhymeSuggestRequest`, `RhymeSyllable`, `RhymeUnitFields`, `RhymeUnit`, `RhymeCandidate`, `SyllableAlignment`, `RhymeSuggestResponse` |
+| | `dev.nymph.lyrics.model.status` | `Health.kt`, `ClusterAlert.kt`, `AlertsFetch.kt` | `HealthSignal`, `Outage`, `DownCause`, `UnreachableReason`; `ClusterAlert`, `AlertSeverity`, `IncidentKey`; `AlertsFetch`, `AlertsFetchError` |
 | | `dev.nymph.lyrics.model.error` | `ApiError.kt` | sealed `ApiError` (`Unauthorized(status, detail)`, `NotFound(detail)`, `Validation(status, detail)`, `Server(status, detail)`, `Network(cause)`, `Decoding(cause)`), `ApiError.fromHttp`, `ApiError.detailFromBody` (FastAPI string or pydantic list) |
 | | | `ApiResult.kt` | sealed `ApiResult<T>` (`Success`, `Failure`), `map`, `flatMap`, `fold`, `onSuccess`, `onFailure` |
 | `:core:logic` | `dev.nymph.lyrics.logic` | `JsCompat.kt` | internal `jsTrim`, `jsSplitWhitespace`, `jsSlice`: JS string/array semantics the ports rely on |
@@ -172,10 +179,12 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `dev.nymph.lyrics.logic.canvas` | `Viewport.kt` | `Point`, `ViewSize`, `MIN_ZOOM`/`MAX_ZOOM`, `clampZoom`, `Viewport` (`worldToScreen`, `screenToWorld`, `zoomAbout`, `scaleAbout`, `panBy`, `toState`, `Viewport.from(ViewportState?)`), `viewportCenter` |
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
 | | | `MergeError.kt` | sealed `MergeError` (`TooFewSnippets`, `NotFound`, `Invalid`, `Server`, `Network`, `Unknown`), `toMergeError` |
+| | `dev.nymph.lyrics.logic.status` | `HealthMachine.kt`, `Alerts.kt` | Health state machine (`HealthState`, `HealthEvent`, `reduce`, backoff), alerts state (`AlertsState`, `applyAlertsFetch`, `displayOrder`) |
 | | `dev.nymph.lyrics.logic.list` | `ListOrder.kt` | List-mode order: `parseServerTimestamp`, `sortForList` (`content_updated_at` desc, `created_at` desc, id), `ListOrder` (`of`, `arrange`) — see [list_mode.md](list_mode.md) |
-| `:app` | `…app` | `LyricsApp.kt`, `MainActivity.kt` | Application holding the `AppContainer`; activity hosting `LyricsTheme { AppNavHost }` |
-| | `…app.di` | `AppContainer.kt`, `DataStoreTokenStore.kt`, `ProcessScope.kt` | Manual dependency graph; DataStore `TokenStore`; process-lifetime scope for saves that outlive a screen |
-| | `…app.nav` | `Routes.kt`, `AppNavHost.kt` | Type-safe routes (`AuthRoute`, `CanvasListRoute`, `CanvasRoute`, `EditorRoute`); session-driven navigation; editor destination sharing the canvas ViewModel |
+| `:app` | `…app` | `LyricsApp.kt`, `MainActivity.kt` | Application holding the `AppContainer`; activity hosting `LyricsTheme { AppRoot }` and running the status monitors while started |
+| | `…app.di` | `AppContainer.kt`, `DataStoreTokenStore.kt`, `ProcessScope.kt` | Manual dependency graph (including `status: StatusMonitors`, whose health monitor observes the `ApiClient`); DataStore `TokenStore`; process-lifetime scope for saves that outlive a screen |
+| | `…app.nav` | `Routes.kt`, `AppNavHost.kt`, `AppRoot.kt` | Type-safe routes (`AuthRoute`, `CanvasListRoute`, `CanvasRoute`, `EditorRoute`); session-driven navigation; editor destination sharing the canvas ViewModel; `AppRoot` puts the status banner above the nav host |
+| | `…app.status` | `HealthMonitor.kt`, `AlertsMonitor.kt`, `StatusMonitors.kt`, `Connectivity.kt`, `BannerModel.kt`, `StatusBannerViewModel.kt`, `StatusBanner.kt` | Server health and cluster alerts banner, see [android_health_banner.md](./android_health_banner.md#files) |
 | | `…app.session` | `SessionViewModel.kt` | `SessionState`, `SessionViewModel` (token store -> signed in / out, `signOut`) |
 | | `…app.auth` | `AuthViewModel.kt`, `AuthScreen.kt` | Email / password login and register |
 | | `…app.canvaslist` | `CanvasListViewModel.kt`, `CanvasListScreen.kt` | List, create, open canvases |
@@ -187,7 +196,9 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `…app.rhyme.ui` | `RhymePanel.kt`, `QueryControls.kt`, `AnchorChipsView.kt`, `CandidateRow.kt`, `SyllableStrip.kt`, `AlignmentTable.kt` | Sheet content (web `components/rhyme/*`) |
 | | `…app.ui` | `UserMessages.kt`, `theme/Palette.kt`, `theme/LyricsTheme.kt` | `ApiError.userMessage()`, hex colour parsing; web palette; dark Material 3 theme |
 | | `…app.editor` | `GridEditorRoute.kt` | Editor entry point (B2) |
-| `:core:data` | `dev.nymph.lyrics.data` | `ApiClient.kt` | `ApiClient(baseUrl: HttpUrl, tokenStore, okHttpClient, ioDispatcher)`, `ApiClient.create(String, ...)`, `HttpMethod`; `get`, `send`, `delete` return `ApiResult` |
+| `:core:data` | `dev.nymph.lyrics.data` | `ApiClient.kt` | `ApiClient(baseUrl: HttpUrl, tokenStore, okHttpClient, ioDispatcher, json, observer)`, `ApiClient.create(String, ...)`, `HttpMethod`; `get`, `send`, `delete` return `ApiResult`; each completed call is reported to `observer` |
+| | | `ApiCallObserver.kt` | `ApiCallObserver`, `healthSignalOf(ApiResult)`, `unreachableReasonOf` |
+| | `dev.nymph.lyrics.data.status` | `StatusRepository.kt`, `AlertsJson.kt` | `/api/health` probe and `/_status/alerts` fetch (`HttpStatusRepository`, `AlertsEndpoint`), defensive alert parsing |
 | | | `TokenStore.kt` | `TokenStore` (`tokens: Flow<String?>`, suspend `token`/`save`/`clear`), `InMemoryTokenStore` |
 | | `dev.nymph.lyrics.data.repository` | `AuthRepository.kt` | `AuthRepository` / `HttpAuthRepository` (`login`, `register` store the token then load `me`; `me`; `logout`) |
 | | | `CanvasRepository.kt` | `CanvasRepository` / `HttpCanvasRepository` (`list`, `create`, `get`, `update`, `saveViewport`) |
@@ -223,6 +234,7 @@ Repository fn -> ApiClient.call(method, segments, body)
      non-2xx                -> ApiError.fromHttp(status, body); 401 also clears the TokenStore
      2xx, bad shape         -> Failure(Decoding)
      2xx                    -> Success(LyricsJson.decode(body))
+  -> observer.onCallOutcome(healthSignalOf(result)) unless the coroutine was cancelled
 ViewModel -> toRhymeError / toMergeError (:core:logic) -> UI state
 ```
 

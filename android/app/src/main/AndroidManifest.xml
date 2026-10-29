@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Connectivity callbacks for the status banner (probe at once on reconnect, offline at once). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Cleartext is allowed only because the dev backend is plain HTTP on the LAN. -->
     <application

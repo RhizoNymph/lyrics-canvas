@@ -43,11 +43,12 @@ backend URL and (optionally) the signing key.
 ```
 tag v1.2.3 pushed (or manual dispatch)
   -> meta:    version = tag without "v" (dispatch: 0.0.0-<sha7>), code = run number,
-              url = input api_base_url || vars.ANDROID_API_BASE_URL (fail if empty or not http(s))
+              url = input api_base_url || vars.ANDROID_API_BASE_URL (fail if empty or not http(s)),
+              alerts_url = vars.ANDROID_STATUS_ALERTS_URL (optional; fail unless empty, none or http(s))
   -> signing: secret ANDROID_KEYSTORE_BASE64 present ? decode to $RUNNER_TEMP/release.jks,
               export ANDROID_KEYSTORE_FILE, mode=keystore : mode=debug
   -> JDK 21 (temurin) + gradle/actions cache
-  -> ./gradlew test :app:assembleRelease -PversionName -PversionCode -PapiBaseUrl
+  -> ./gradlew test :app:assembleRelease -PversionName -PversionCode -PapiBaseUrl -PstatusAlertsUrl
   -> rename to lyrics-canvas-<version>.apk, verify_release_apk.sh <apk> <version> <code> <mode> --api-base-url <url>
   -> sha256 sidecar, upload as workflow artifact
   -> on tags only: softprops/action-gh-release attaches both files, generated notes + a body that
@@ -70,6 +71,7 @@ non-zero on the first mismatch and prints an `OK:` line with the resolved values
 | Where | Name | Purpose |
 |-------|------|---------|
 | Repository variable | `ANDROID_API_BASE_URL` | Backend URL baked into the APK. Set to `http://100.64.0.10:8000` (the tailnet address the hand-built APK used); change it when the backend moves, e.g. to the Kubernetes NodePort or an ingress host. |
+| Repository variable (optional) | `ANDROID_STATUS_ALERTS_URL` | Cluster alerts URL for the status banner ([android_health_banner.md](./android_health_banner.md)). Empty derives `<ANDROID_API_BASE_URL>/_status/alerts`, which only exists when the API base is the frontend nginx origin; with the backend-direct `http://100.64.0.10:8000` set it to the nginx origin's `http://<host>:32443/_status/alerts`, or `none` to turn alerts off. |
 | Secret (optional) | `ANDROID_KEYSTORE_BASE64` | `base64 -w0 release.jks` |
 | Secret (optional) | `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Keystore and key credentials |
 

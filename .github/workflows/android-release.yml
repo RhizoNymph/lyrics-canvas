@@ -9,6 +9,10 @@ name: Android release
 # Configuration
 #   variable ANDROID_API_BASE_URL           backend URL baked into the APK (required unless
 #                                           the dispatch input api_base_url is given)
+#   variable ANDROID_STATUS_ALERTS_URL      cluster alerts URL (optional): blank derives
+#                                           <api base>/_status/alerts, "none" turns alerts off;
+#                                           set http://<nginx>/_status/alerts when the API base
+#                                           is the backend directly
 #   secrets  ANDROID_KEYSTORE_BASE64        base64 of the release keystore (optional)
 #            ANDROID_KEYSTORE_PASSWORD
 #            ANDROID_KEY_ALIAS
@@ -44,6 +48,7 @@ jobs:
         env:
           INPUT_URL: ${{ inputs.api_base_url }}
           VAR_URL: ${{ vars.ANDROID_API_BASE_URL }}
+          ALERTS_URL: ${{ vars.ANDROID_STATUS_ALERTS_URL }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF#refs/tags/v}"
@@ -59,8 +64,13 @@ jobs:
             echo "::error::ANDROID_API_BASE_URL must start with http:// or https://, got '$url'" >&2
             exit 1
           fi
+          if [[ -n "$ALERTS_URL" && "$ALERTS_URL" != none && ! "$ALERTS_URL" =~ ^https?:// ]]; then
+            echo "::error::ANDROID_STATUS_ALERTS_URL must be empty, 'none' or an http(s) URL, got '$ALERTS_URL'" >&2
+            exit 1
+          fi
           {
             echo "version=$version"
+            echo "alerts_url=$ALERTS_URL"
             echo "code=$GITHUB_RUN_NUMBER"
             echo "url=$url"
             echo "apk=lyrics-canvas-$version.apk"
@@ -98,7 +108,8 @@ jobs:
           ./gradlew --no-daemon test :app:assembleRelease \
             -PversionName="${{ steps.meta.outputs.version }}" \
             -PversionCode="${{ steps.meta.outputs.code }}" \
-            -PapiBaseUrl="${{ steps.meta.outputs.url }}"
+            -PapiBaseUrl="${{ steps.meta.outputs.url }}" \
+            -PstatusAlertsUrl="${{ steps.meta.outputs.alerts_url }}"
 
       - name: Verify APK
         run: |

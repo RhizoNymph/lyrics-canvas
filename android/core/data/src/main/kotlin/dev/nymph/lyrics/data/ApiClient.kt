@@ -5,6 +5,8 @@ import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
@@ -32,7 +34,8 @@ enum class HttpMethod { GET, POST, PUT, PATCH, DELETE }
  * Every call returns an [ApiResult]; no exception escapes except coroutine cancellation.
  * Requests carry `Authorization: Bearer <token>` when [tokenStore] has a token, and a 401 clears
  * it (the web client's interceptor does the same). Paths are given as literal segments, each
- * percent-encoded onto [baseUrl].
+ * percent-encoded onto [baseUrl]. Every completed call is also reported to [observer] as a
+ * [dev.nymph.lyrics.model.status.HealthSignal] (see [healthSignalOf]); results are unchanged.
  */
 class ApiClient(
     private val baseUrl: HttpUrl,
@@ -40,6 +43,7 @@ class ApiClient(
     private val okHttpClient: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val json: Json = LyricsJson,
+    private val observer: ApiCallObserver = ApiCallObserver.None,
 ) {
     suspend fun <T> get(path: List<String>, response: DeserializationStrategy<T>): ApiResult<T> =
         call(HttpMethod.GET, path, null) { json.decodeFromString(response, it) }
@@ -60,11 +64,17 @@ class ApiClient(
         val response = try {
             okHttpClient.newCall(request).await()
         } catch (e: IOException) {
-            return ApiResult.Failure(ApiError.Network(e))
+            return report(ApiResult.Failure(ApiError.Network(e)))
         }
         val result = withContext(ioDispatcher) { response.use { read(it, decode) } }
         val error = result.errorOrNull()
         if (error is ApiError.Unauthorized && error.status == 401) tokenStore.clear()
+        return report(result)
+    }
+
+    /** Tell [observer] unless the caller went away (a cancelled call says nothing about the server). */
+    private suspend fun <T> report(result: ApiResult<T>): ApiResult<T> {
+        if (currentCoroutineContext().isActive) observer.onCallOutcome(healthSignalOf(result))
         return result
     }
 
@@ -103,12 +113,13 @@ class ApiClient(
             tokenStore: TokenStore,
             okHttpClient: OkHttpClient,
             ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-        ): ApiClient? = baseUrl.toHttpUrlOrNull()?.let { ApiClient(it, tokenStore, okHttpClient, ioDispatcher) }
+            observer: ApiCallObserver = ApiCallObserver.None,
+        ): ApiClient? = baseUrl.toHttpUrlOrNull()?.let { ApiClient(it, tokenStore, okHttpClient, ioDispatcher, observer = observer) }
     }
 }
 
 /** Enqueue the call and suspend until it answers; cancelling the coroutine cancels the call. */
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
     continuation.invokeOnCancellation { cancel() }
     enqueue(
         object : Callback {
