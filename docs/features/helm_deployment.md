@@ -20,12 +20,16 @@ Kubernetes, plus the production frontend image it needs
   credentials kept out of git.
 - An optional nightly `pg_dump` CronJob for the bundled PostgreSQL
   (`backup.*`), documented in [postgres_backup.md](./postgres_backup.md).
+- An optional `PrometheusRule` with availability and backup alerts; see
+  [alerting.md](./alerting.md).
 
 ## Non-scope
 
 - Building or publishing the container images (no CI pipeline is included).
 - High availability for PostgreSQL, point-in-time recovery, backups of an
   external database, or connection pooling.
+- Alertmanager receivers and routing, and installing kube-state-metrics or
+  Prometheus (the alert rules assume a prometheus-operator stack).
 - Autoscaling, network policies, pod disruption budgets.
 - The Android client (it only needs the API URL).
 
@@ -112,10 +116,11 @@ with a clear message when neither is set.
 | `templates/ingress.yaml` | One rule per host: optional `/api` to backend, `/` to frontend; TLS passthrough from values. |
 | `templates/serviceaccount.yaml` | Shared service account with token automount off. |
 | `templates/tests/test-connection.yaml` | `helm test` hook. |
+| `templates/monitoring/prometheusrule.yaml` | Optional `PrometheusRule` (`monitoring.prometheusRule.enabled`); see [alerting.md](./alerting.md). |
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
-| `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions. |
-| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443, backup CronJob to a node1 hostPath). |
+| `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions; with `promtool` available, also `promtool check rules` and the rule unit tests in `deploy/helm/tests/alerts/`. |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443, backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions). |
 | `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
 | `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, SPA fallback, asset caching. |
@@ -151,6 +156,8 @@ with a clear message when neither is set.
   `CommittedValuesSafetyTest` enforces this and checks that
   `*.secret.yaml` overrides are gitignored. A new credential-bearing value
   must be added to `SECRET_PATHS` in the test suite.
+- Every pod and workload the chart creates is named `<fullname>-...`; the
+  alert rules select this release's pods by that prefix.
 - The backup CronJob is named `<fullname>-backup` (alert rules match the
   suffix) and reads the database password only through `secretKeyRef`.
 - The chart test suite must pass (`python3 deploy/helm/tests/test_chart.py`)

@@ -1,0 +1,29 @@
+monitoring:
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kps
+      team: lyrics
+    kubectlCommand: microk8s kubectl
+    podNotReady:
+      for: 7m
+      severity: warning
+    containerRestarts:
+      threshold: 5
+      window: 30m
+      for: 2m
+    containerWaiting:
+      for: 4m
+      reasons:
+        - CrashLoopBackOff
+        - ImagePullBackOff
+    workloadUnavailable:
+      for: 12m
+      severity: warning
+    metricsAbsent:
+      for: 20m
+    backup:
+      maxAgeHours: 48
+      staleFor: 30m
+      failedFor: 1m
+      severity: critical

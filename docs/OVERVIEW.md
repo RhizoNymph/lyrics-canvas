@@ -86,6 +86,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
+| [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -139,6 +140,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
 | Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
+| Alerting | PrometheusRule (prometheus-operator) + kube-state-metrics | Availability and backup alerts for a release; routing in Alertmanager |
 
 ## Data Model (Simplified)
 
@@ -308,6 +310,15 @@ Features Index:
       - frontend/src/api/client.ts (installHealthInterceptors)
     depends_on: [helm_deployment]
     doc: docs/features/health_banner.md
+  alerting:
+    description: Optional PrometheusRule rendered by the Helm chart (monitoring.prometheusRule.enabled, on in homelab) for kube-prometheus-stack. Alerts scoped to the release namespace and the release's name prefix, using kube-state-metrics series - pod not Ready / stuck in init, container and init container restart loops and CrashLoopBackOff-style waiting reasons, Deployment/StatefulSet unavailable replicas, KSM series absent (monitoring blind), and for CronJobs named *-backup a stale last success and failed Jobs. Tunable for-durations, thresholds and severities, schema-validated; kubectl commands in descriptions. Routing and receivers live in the Alertmanager config, not here. Tested with render assertions and promtool unit tests.
+    entry_points:
+      - deploy/helm/lyrics-canvas/templates/monitoring/prometheusrule.yaml
+      - deploy/helm/lyrics-canvas/values.yaml (monitoring.prometheusRule)
+      - deploy/helm/environments/homelab.yaml
+      - deploy/helm/tests/alerts/rules_test.yaml
+    depends_on: [helm_deployment]
+    doc: docs/features/alerting.md
   android_release:
     description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
     entry_points:
