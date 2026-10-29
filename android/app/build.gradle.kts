@@ -55,6 +55,15 @@ android {
         // override per build with -PapiBaseUrl=http://<lan-ip>:8000 for a phone.
         val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8000"
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        // Cluster alerts (GET /_status/alerts) exist only on the frontend nginx origin. Blank: derive
+        // <apiBaseUrl>/_status/alerts (right when apiBaseUrl is that origin; a backend-direct URL
+        // answers 404 and the app stays quiet). Set -PstatusAlertsUrl=http://<nginx>/_status/alerts
+        // for a backend-direct apiBaseUrl, or "none" to turn alerts off.
+        val statusAlertsUrl = ((project.findProperty("statusAlertsUrl") as String?) ?: "").trim()
+        if (statusAlertsUrl.isNotEmpty() && statusAlertsUrl != "none" && !Regex("^https?://[^\\s\"]+$").matches(statusAlertsUrl)) {
+            throw GradleException("-PstatusAlertsUrl must be blank, 'none' or an http(s) URL, got '$statusAlertsUrl'")
+        }
+        buildConfigField("String", "STATUS_ALERTS_URL", "\"$statusAlertsUrl\"")
     }
 
     signingConfigs {

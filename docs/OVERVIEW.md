@@ -76,6 +76,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [BACKEND.md](./BACKEND.md) | Backend index with links to granular module docs |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
+| [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -283,4 +284,15 @@ Features Index:
       - android/scripts/verify_release_apk.sh
     depends_on: [android_app]
     doc: docs/features/android_release.md
+  android_health_banner:
+    description: App-wide status banner in the Android client while it is in the foreground - polls GET /api/health (15 s, quick 3 s confirm, 5-60 s backoff while down) and counts 502/503/504 and IO errors of every regular ApiClient call through an observer; a pure debounced state machine (2 failures with one from a probe, offline at once, brief back online) shared in behaviour with the web client; polls GET /_status/alerts (frontend nginx origin, configured by -PstatusAlertsUrl when the API base is the backend directly) and shows firing alerts critical first; per-incident dismiss, expandable descriptions, live-region announcements.
+    entry_points:
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/status/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppRoot.kt
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/status/
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/status/
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/ApiCallObserver.kt
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/status/
+    depends_on: [android_app, android_release]
+    doc: docs/features/android_health_banner.md
 ```
