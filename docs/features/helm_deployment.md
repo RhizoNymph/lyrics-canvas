@@ -132,9 +132,10 @@ with a clear message when neither is set.
 - `backend.modelCache.persistence.accessModes` must be `ReadWriteMany` if
   `backend.replicaCount > 1` and pods can land on different nodes; the chart
   does not enforce this.
-- Pods must start without internet access. The backend image sets
-  `UV_NO_SYNC=1`, so the `migrate` init container's and the API's `uv run`
-  use the venv built into the image and never re-resolve or rebuild the
-  project (which would fetch `hatchling` from PyPI on every pod restart).
+- Pods must start without internet access. Both the backend image and the
+  chart (on the `migrate` init container and the API container) set
+  `UV_NO_SYNC=1`, so `uv run` uses the venv built into the image and never
+  re-resolves or rebuilds the project (which would fetch `hatchling` from
+  PyPI on every pod restart). The chart sets it too so older images are safe.
 - The chart test suite must pass (`python3 deploy/helm/tests/test_chart.py`)
   and rendered output must validate with `kubeconform -strict`.

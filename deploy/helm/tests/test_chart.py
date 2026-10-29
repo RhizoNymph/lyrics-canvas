@@ -141,6 +141,15 @@ class DefaultRenderTest(unittest.TestCase):
         self.assertEqual(env["HF_HOME"]["value"], "/cache/huggingface")
         self.assertNotIn("GOOGLE_CLIENT_ID", env)
 
+    def test_backend_containers_never_resync_uv(self) -> None:
+        # Pods restart without network access; `uv run` must use the image's venv.
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
+        for c in (
+            container(dep["spec"]["template"], "backend"),
+            container(dep["spec"]["template"], "migrate", init=True),
+        ):
+            self.assertEqual(env_map(c)["UV_NO_SYNC"]["value"], "1", c["name"])
+
     def test_backend_probes_hit_health(self) -> None:
         dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
         c = container(dep["spec"]["template"], "backend")
