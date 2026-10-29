@@ -1,0 +1,23 @@
+{{- $b := .Values.backup }}
+{{- if and $b.enabled .Values.postgres.enabled (eq $b.destination.type "persistentVolumeClaim") (not $b.destination.persistentVolumeClaim.existingClaim) }}
+{{- $c := $b.destination.persistentVolumeClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "lyrics-canvas.backup.fullname" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  annotations:
+    # Dumps outlive the release: `helm uninstall` leaves this claim behind.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml $c.accessModes | nindent 4 }}
+  {{- if $c.storageClass }}
+  storageClassName: {{ $c.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $c.size | quote }}
+{{- end }}

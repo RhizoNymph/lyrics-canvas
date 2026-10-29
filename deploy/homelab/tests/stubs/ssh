@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Stand-in for ssh used by test_deploy_script.py.
+
+Records every invocation as one JSON line in $STUB_SSH_LOG and answers from
+the rules in $STUB_SSH_RULES (a JSON list of {"match": regex, "stdout": str,
+"exit": int}; the first rule whose regex matches the remote command wins; no
+match means exit 0 with no output). Unless -n is given, stdin is saved to a
+file next to the log so tests can inspect what was shipped.
+"""
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+OPTS_WITH_ARG = set("BbcDEeFIiJLlmOoPpQRSWw")
+
+
+def split_argv(argv: list[str]) -> tuple[list[str], str, str]:
+    flags: list[str] = []
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):
+        arg = argv[i]
+        flags.append(arg)
+        if len(arg) == 2 and arg[1] in OPTS_WITH_ARG:
+            i += 1
+            flags.append(argv[i])
+        i += 1
+    host = argv[i]
+    command = " ".join(argv[i + 1 :])
+    return flags, host, command
+
+
+def main() -> int:
+    flags, host, command = split_argv(sys.argv[1:])
+    log_path = Path(os.environ["STUB_SSH_LOG"])
+    stdin_file = None
+    if "-n" not in flags:
+        data = sys.stdin.buffer.read()
+        count = sum(1 for _ in log_path.parent.glob("stdin-*")) if log_path.parent.exists() else 0
+        stdin_path = log_path.parent / f"stdin-{count}"
+        stdin_path.write_bytes(data)
+        stdin_file = str(stdin_path)
+    with log_path.open("a") as fh:
+        fh.write(json.dumps({"flags": flags, "host": host, "command": command, "stdin_file": stdin_file}) + "\n")
+
+    rules_path = os.environ.get("STUB_SSH_RULES")
+    rules = json.loads(Path(rules_path).read_text()) if rules_path else []
+    for rule in rules:
+        if re.search(rule["match"], command):
+            sys.stdout.write(rule.get("stdout", ""))
+            return int(rule.get("exit", 0))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

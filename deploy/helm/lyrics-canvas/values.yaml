@@ -176,6 +176,64 @@ postgres:
   tolerations: []
   affinity: {}
 
+# Nightly pg_dump of the bundled PostgreSQL (requires postgres.enabled).
+# Writes lyrics_canvas-<UTC timestamp>.dump (custom format, for pg_restore)
+# under a hidden temp name and renames it when complete, then keeps the
+# newest `retain` dumps. See docs/features/postgres_backup.md.
+backup:
+  enabled: false
+  # Cron expression or @daily-style macro, evaluated in timeZone.
+  schedule: "15 3 * * *"
+  # IANA zone (e.g. America/Los_Angeles); empty = kube-controller-manager's zone.
+  timeZone: ""
+  # Number of dumps kept in the destination; older ones are deleted.
+  retain: 14
+  # Empty repository = postgres.image (no extra pull for the bundled database;
+  # pg_dump must be at least the server's major version).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Files are created as this uid/gid (mode 600). 999 is the image's postgres
+  # user; for a hostPath, use the owner of the directory on the node.
+  runAsUser: 999
+  runAsGroup: 999
+  destination:
+    # hostPath | persistentVolumeClaim
+    type: hostPath
+    hostPath:
+      # Absolute path on the node. Must already exist (hostPath type
+      # Directory) and be writable by runAsUser. Pin the pod with
+      # nodeSelector/affinity so dumps land on one node.
+      path: ""
+    persistentVolumeClaim:
+      # Use an existing claim; otherwise the chart creates
+      # <fullname>-backup, annotated helm.sh/resource-policy=keep.
+      existingClaim: ""
+      size: 10Gi
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+  # Skip a run if it cannot start within this many seconds of its slot.
+  startingDeadlineSeconds: 3600
+  # Retries (new pods) before the Job is marked failed.
+  backoffLimit: 2
+  # Hard cap on one Job's total runtime, across retries.
+  activeDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 512Mi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 externalDatabase:
   # SQLAlchemy async URL, e.g. postgresql+asyncpg://user:pass@host:5432/db.
   # Stored in the chart-managed backend Secret.
@@ -195,3 +253,64 @@ ingress:
   # Send /api straight to the backend Service; otherwise every request goes to
   # the frontend, whose nginx proxies /api itself.
   routeApiToBackend: true
+
+monitoring:
+  # Alerting rules for a prometheus-operator stack such as kube-prometheus-stack.
+  # Needs the monitoring.coreos.com/v1 PrometheusRule CRD, a Prometheus whose
+  # ruleSelector / ruleNamespaceSelector match this release's namespace and
+  # labels, and kube-state-metrics scraped by that Prometheus (every expression
+  # reads kube_* series). Where alerts are delivered is configured in
+  # Alertmanager, not here.
+  prometheusRule:
+    enabled: false
+    # Extra labels on the PrometheusRule, e.g. to match a ruleSelector.
+    labels: {}
+    # Command prefix used in the "to investigate, run ..." alert descriptions.
+    kubectlCommand: kubectl
+
+    # A pod of this release has not been Ready: stuck in an init container,
+    # failing its readiness probe, unschedulable, or on a lost node.
+    podNotReady:
+      enabled: true
+      for: 10m
+      severity: critical
+    # A container or init container restarted more than `threshold` times
+    # within `window`.
+    containerRestarts:
+      enabled: true
+      threshold: 3
+      window: 1h
+      for: 0m
+      severity: warning
+    # A container or init container is waiting with one of these reasons.
+    containerWaiting:
+      enabled: true
+      for: 5m
+      severity: warning
+      reasons:
+        - CrashLoopBackOff
+        - ImagePullBackOff
+        - ErrImagePull
+        - CreateContainerConfigError
+        - CreateContainerError
+    # A Deployment or StatefulSet of this release has unavailable replicas.
+    workloadUnavailable:
+      enabled: true
+      for: 10m
+      severity: critical
+    # No kube-state-metrics series for this release's pods: the other alerts
+    # cannot fire, so this one says monitoring is blind.
+    metricsAbsent:
+      enabled: true
+      for: 15m
+      severity: warning
+    # Alerts for CronJobs named "*-backup" in the release namespace. Inert when
+    # there is no such CronJob.
+    backup:
+      enabled: true
+      # Alert when the last successful run (or, for a CronJob that never
+      # succeeded, its creation) is older than this.
+      maxAgeHours: 36
+      staleFor: 15m
+      failedFor: 0m
+      severity: warning

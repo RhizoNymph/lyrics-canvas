@@ -1,0 +1,13 @@
+# Rendered by deploy/homelab/backup/install.sh; edit the template, not the copy.
+[Unit]
+Description=Daily pull of lyrics-canvas Postgres backups
+
+[Timer]
+# After the cluster's 03:15 dump. Persistent: a run missed while the laptop
+# was off or asleep happens as soon as it is back.
+OnCalendar=@ON_CALENDAR@
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

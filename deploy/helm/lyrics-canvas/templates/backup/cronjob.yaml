@@ -1,0 +1,128 @@
+{{- if .Values.backup.enabled }}
+{{- if not .Values.postgres.enabled }}
+{{- fail "backup.enabled requires postgres.enabled=true: the backup CronJob only dumps the bundled PostgreSQL; back up an external database with its provider's tooling" }}
+{{- end }}
+{{- $b := .Values.backup }}
+{{- $p := .Values.postgres }}
+{{- if and (eq $b.destination.type "hostPath") (not $b.destination.hostPath.path) }}
+{{- fail "backup.destination.hostPath.path is required when backup.destination.type=hostPath" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "lyrics-canvas.backup.fullname" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ $b.schedule | quote }}
+  {{- with $b.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  # Never overlap: a second pg_dump would double the load and race on pruning.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ $b.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ $b.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $b.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "lyrics-canvas.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backup
+    spec:
+      backoffLimit: {{ $b.backoffLimit }}
+      activeDeadlineSeconds: {{ $b.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "lyrics-canvas.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+            {{- with $b.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $b.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          {{- include "lyrics-canvas.imagePullSecrets" . | nindent 10 }}
+          serviceAccountName: {{ include "lyrics-canvas.serviceAccountName" . }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ $b.runAsUser }}
+            runAsGroup: {{ $b.runAsGroup }}
+            fsGroup: {{ $b.runAsGroup }}
+          containers:
+            - name: backup
+              image: {{ include "lyrics-canvas.backup.image" . }}
+              imagePullPolicy: {{ include "lyrics-canvas.backup.imagePullPolicy" . }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  {{- include "lyrics-canvas.backup.script" . | nindent 18 }}
+              env:
+                - name: BACKUP_DIR
+                  value: /backups
+                - name: BACKUP_RETAIN
+                  value: {{ $b.retain | quote }}
+                - name: PGHOST
+                  value: {{ include "lyrics-canvas.postgres.fullname" . | quote }}
+                - name: PGPORT
+                  value: {{ $p.service.port | quote }}
+                - name: PGUSER
+                  value: {{ $p.auth.username | quote }}
+                - name: PGDATABASE
+                  value: {{ $p.auth.database | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "lyrics-canvas.postgres.secretName" . }}
+                      key: {{ $p.auth.existingSecretPasswordKey }}
+                - name: PGCONNECT_TIMEOUT
+                  value: "30"
+                - name: HOME
+                  value: /tmp
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+              {{- with $b.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: backups
+              {{- if eq $b.destination.type "hostPath" }}
+              # type Directory: the directory must already exist on the node,
+              # so a mistyped path fails the pod instead of filling a new dir.
+              hostPath:
+                path: {{ $b.destination.hostPath.path | quote }}
+                type: Directory
+              {{- else }}
+              persistentVolumeClaim:
+                claimName: {{ include "lyrics-canvas.backup.claimName" . }}
+              {{- end }}
+            - name: tmp
+              emptyDir: {}
+          {{- with $b.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $b.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $b.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
