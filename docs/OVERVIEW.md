@@ -77,6 +77,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
+| [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -130,6 +131,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
 | Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
+| Homelab deploy | `deploy/homelab/deploy.sh` (bash over ssh) | One-command build, push and helm deploy of HEAD to the home microk8s cluster |
 
 ## Data Model (Simplified)
 
@@ -275,6 +277,13 @@ Features Index:
       - frontend/nginx/default.conf.template
     depends_on: []
     doc: docs/features/helm_deployment.md
+  homelab_deploy:
+    description: One-command deploy of the committed tree to the home microk8s cluster - refuses a dirty tree (unless --allow-dirty, which still ships HEAD only), tags images with the 12-char commit SHA, ships git archive HEAD over ssh to a per-run dir under ~ on the build host (removed by an EXIT trap), builds backend and frontend with docker build --network host and pushes to localhost:32000 unless the tag is already in the registry (--rebuild / --skip-build), then helm upgrade --install with -f homelab.yaml and both --set image tags (--atomic for an existing release, never --reuse-values), helm test, and prints the URL (http://10.1.1.69:32443) and revision; --dry-run prints every remote command without ssh; key=value logs and one exit code per failure class.
+    entry_points:
+      - deploy/homelab/deploy.sh
+      - deploy/homelab/tests/test_deploy_script.py
+    depends_on: [helm_deployment]
+    doc: docs/features/homelab_deploy.md
   android_release:
     description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
     entry_points:

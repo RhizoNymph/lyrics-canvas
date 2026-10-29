@@ -15,7 +15,10 @@ nginx-unprivileged        uvicorn, init container runs `alembic upgrade head`
 
 ## Images
 
-The chart does not build images. Build and push both from the repository root:
+The chart does not build images. For the home cluster,
+`deploy/homelab/deploy.sh` builds, pushes and deploys in one step (see
+[Environments](#environments)). Elsewhere, build and push both from the
+repository root:
 
 ```bash
 REG=ghcr.io/rhizonymph TAG=0.1.0
@@ -63,12 +66,31 @@ which is gitignored, passed as a second `-f`.
 
 `homelab.yaml` is the home microk8s cluster: images from the
 `localhost:32000` registry addon, all workloads on node0/node1, and the
-frontend on NodePort 32443.
+frontend on NodePort 32443, reached at `http://10.1.1.69:32443` (node0's IP;
+the node names are ssh aliases, not DNS names).
+
+Deploy it from a clean checkout with:
+
+```bash
+deploy/homelab/deploy.sh            # --dry-run, --skip-build, --rebuild, --allow-dirty, -h
+```
+
+It ships the committed tree (`git archive HEAD`) to node0 over ssh, builds
+both images there with `--network host`, pushes them tagged with the short
+commit SHA (skipping tags already in the registry), runs the upgrade below
+with `--set backend.image.tag=<sha> --set frontend.image.tag=<sha> --wait`
+(plus `--atomic` once the release exists), then `helm test`, and prints the
+URL and revision. See `docs/features/homelab_deploy.md` for configuration and
+exit codes.
+
+The equivalent manual upgrade, run on node0 (it falls back to the `dev` tags):
 
 ```bash
 microk8s helm3 upgrade --install lyrics deploy/helm/lyrics-canvas \
   -n lyrics-canvas --create-namespace -f deploy/helm/environments/homelab.yaml
 ```
+
+Always pass the values file; never use `--reuse-values`.
 
 ## Configuration highlights
 
@@ -104,4 +126,5 @@ and wrong types at install time.
 
 ```bash
 python3 deploy/helm/tests/test_chart.py      # needs helm and PyYAML
+python3 deploy/homelab/tests/test_deploy_script.py   # deploy script, stdlib only
 ```
