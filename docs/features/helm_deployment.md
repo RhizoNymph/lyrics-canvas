@@ -26,6 +26,8 @@ Kubernetes, plus the production frontend image it needs
 ## Non-scope
 
 - Building or publishing the container images (no CI pipeline is included).
+  For the home cluster, `deploy/homelab/deploy.sh` does both and runs the
+  upgrade; see [homelab_deploy.md](homelab_deploy.md).
 - High availability for PostgreSQL, point-in-time recovery, backups of an
   external database, or connection pooling.
 - Alertmanager receivers and routing, and installing kube-state-metrics or
@@ -120,7 +122,7 @@ with a clear message when neither is set.
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
 | `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions; with `promtool` available, also `promtool check rules` and the rule unit tests in `deploy/helm/tests/alerts/`. |
-| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443, backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions). |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
 | `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
 | `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, SPA fallback, asset caching. |
