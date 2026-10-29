@@ -69,8 +69,9 @@ which is gitignored, passed as a second `-f`.
 frontend on NodePort 32443 reached at `http://10.1.1.69:32443` (node0's IP;
 the node names are ssh aliases, not DNS names), the nightly backup CronJob
 writing to `/home/nymph/backups/lyrics-canvas` on node1 (see
-[Backups](#backups)), and the alert rules enabled for the cluster's
-kube-prometheus-stack.
+[Backups](#backups)), the alert rules enabled for the cluster's
+kube-prometheus-stack, and `/_status/alerts` reading its Alertmanager
+(`kps-alertmanager.monitoring.svc:9093`).
 
 Deploy it from a clean checkout with:
 
@@ -101,6 +102,7 @@ Always pass the values file; never use `--reuse-values`.
 |-------|---------|-------|
 | `backend.secretKey` | generated | JWT signing key. Generated once and re-read from the live Secret on upgrade. Or set `backend.existingSecret` / `existingSecretKey`. |
 | `frontend.service.nodePort` | unset | Fixed port (30000-32767), used only when `frontend.service.type=NodePort`. |
+| `frontend.clusterAlerts.alertmanagerUrl` | `""` | `http(s)://host[:port]` of an Alertmanager the frontend pod can reach. Enables `GET /_status/alerts` (this namespace's firing alerts, served by nginx even while the backend is down); empty answers `[]`. `namespace` (default: release namespace) and `resolver` (default: the pod's resolv.conf nameservers) are optional. See `docs/features/cluster_alerts_endpoint.md`. |
 | `backend.corsOrigins` | derived | Defaults to one origin per `ingress.hosts` entry (https when covered by `ingress.tls`). |
 | `backend.googleClientId` | `""` | Enables Google sign-in verification on the API. |
 | `backend.migrations.enabled` | `true` | Init container runs Alembic before each backend pod starts, retrying until the database is reachable. |

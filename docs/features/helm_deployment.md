@@ -63,7 +63,11 @@ Kubernetes, plus the production frontend image it needs
    `alembic_version` table is correctly stamped from the first boot.
 6. The frontend container renders `/etc/nginx/templates/default.conf.template`
    through the image's envsubst entrypoint, substituting `BACKEND_URL`
-   (`http://<release>-backend:<port>`).
+   (`http://<release>-backend:<port>`). Before that,
+   `/docker-entrypoint.d/16-cluster-alerts.envsh` validates the
+   `ALERTMANAGER_URL` / `ALERTS_NAMESPACE` / `ALERTS_RESOLVER` env and exports
+   the values the `/_status/alerts` location uses
+   ([cluster_alerts_endpoint.md](./cluster_alerts_endpoint.md)).
 7. The `helm test` pod fetches `/healthz` on the frontend Service and
    `/api/health` on the backend Service.
 
@@ -74,6 +78,8 @@ browser -> Ingress host
              /api/*  -> backend Service :8000 (ingress.routeApiToBackend=true)
              /*      -> frontend Service :80 -> nginx :8080
                                                  /api/*   proxy_pass $BACKEND_URL
+                                                 = /_status/alerts  fixed Alertmanager query
+                                                 /_status/*         404
                                                  /assets/ immutable cache
                                                  /*       try_files ... /index.html (SPA)
 ```
@@ -110,7 +116,7 @@ with a clear message when neither is set.
 | `templates/backend/secret.yaml` | `secret-key` and, for an external database URL, `database-url`. Skipped entirely when both come from existing Secrets. |
 | `templates/backend/pvc.yaml` | Optional model cache claim. |
 | `templates/backend/service.yaml` | ClusterIP (configurable) on `backend.service.port`. |
-| `templates/frontend/deployment.yaml` | nginx Deployment; `BACKEND_URL` env; probes on `/healthz`. |
+| `templates/frontend/deployment.yaml` | nginx Deployment; `BACKEND_URL`, `ALERTMANAGER_URL`, `ALERTS_NAMESPACE` (defaults to the release namespace), `ALERTS_RESOLVER` env; probes on `/healthz`. |
 | `templates/frontend/service.yaml` | Service on `frontend.service.port` to container port 8080; `nodePort` is set only for `type: NodePort` with `frontend.service.nodePort`. |
 | `templates/postgres/statefulset.yaml` | Single replica pgvector with `volumeClaimTemplates` (or emptyDir). |
 | `templates/postgres/secret.yaml`, `service.yaml`, `configmap-initdb.yaml` | Password, ClusterIP, `01-init.sql`. |
@@ -122,11 +128,12 @@ with a clear message when neither is set.
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
 | `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions; with `promtool` available, also `promtool check rules` and the rule unit tests in `deploy/helm/tests/alerts/`. |
-| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions, `frontend.clusterAlerts.alertmanagerUrl` = kube-prometheus-stack's `kps-alertmanager.monitoring.svc:9093`). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
 | `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
-| `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, SPA fallback, asset caching. |
-| `frontend/.dockerignore` | Keeps `node_modules` and `dist` out of both image builds. |
+| `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, `/_status/alerts` Alertmanager proxy, SPA fallback, asset caching. |
+| `frontend/nginx/entrypoint/16-cluster-alerts.envsh` | Entrypoint hook copied into the image; builds the one Alertmanager URL and the resolver list. |
+| `frontend/.dockerignore` | Keeps `node_modules`, `dist` and `nginx/tests` out of both image builds. |
 
 ## Invariants and constraints
 

@@ -88,6 +88,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
+| [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -328,6 +329,17 @@ Features Index:
       - deploy/homelab/tests/test_deploy_script.py
     depends_on: [helm_deployment]
     doc: docs/features/homelab_deploy.md
+  cluster_alerts_endpoint:
+    description: Read-only GET /_status/alerts on the frontend origin, answered by the production nginx (not the backend) by proxying to the cluster's Alertmanager with one fixed, server-built URL (active, unsilenced, uninhibited alerts with namespace=<release namespace>), so web and Android clients can show an outage banner while the backend is down. 200 [] when unconfigured, 503 {"error":"alertmanager_unavailable"} on any upstream failure, 405 for non GET/HEAD. Variable proxy_pass with a resolver derived from /etc/resolv.conf at container start, so an unresolvable Alertmanager never stops nginx from starting. Chart value frontend.clusterAlerts.alertmanagerUrl.
+    entry_points:
+      - frontend/nginx/default.conf.template (location = /_status/alerts)
+      - frontend/nginx/entrypoint/16-cluster-alerts.envsh
+      - frontend/Dockerfile.prod
+      - deploy/helm/lyrics-canvas/values.yaml (frontend.clusterAlerts)
+      - deploy/helm/lyrics-canvas/templates/frontend/deployment.yaml
+      - frontend/nginx/tests/test_alerts_endpoint.py
+    depends_on: [helm_deployment]
+    doc: docs/features/cluster_alerts_endpoint.md
   android_release:
     description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
     entry_points:

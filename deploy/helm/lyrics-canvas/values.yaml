@@ -103,6 +103,20 @@ frontend:
     nodePort: null
   # nginx-unprivileged listens on 8080.
   containerPort: 8080
+  # GET /_status/alerts on the frontend origin lists this namespace's firing
+  # Alertmanager alerts, so clients can show an outage banner even while the
+  # backend is down (docs/features/cluster_alerts_endpoint.md).
+  clusterAlerts:
+    # scheme://host[:port] of an Alertmanager the pod can reach, e.g.
+    # http://kps-alertmanager.monitoring.svc:9093. No path: nginx only ever
+    # requests /api/v2/alerts with a fixed filter. Empty = endpoint returns [].
+    alertmanagerUrl: ""
+    # Namespace label the alerts are filtered on. Empty = release namespace.
+    namespace: ""
+    # DNS servers for nginx's per-request lookup of alertmanagerUrl (IPv4 or
+    # [IPv6], optional :port, space separated). Empty = the pod's
+    # /etc/resolv.conf nameservers (kube-dns).
+    resolver: ""
   resources:
     requests:
       cpu: 50m

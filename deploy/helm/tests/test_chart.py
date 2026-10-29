@@ -483,6 +483,49 @@ class FrontendNodePortTest(unittest.TestCase):
         self.assertNotIn("nodePort", svc["spec"]["ports"][0])
 
 
+class FrontendClusterAlertsTest(unittest.TestCase):
+    """frontend.clusterAlerts feeds the nginx /_status/alerts endpoint."""
+
+    @staticmethod
+    def frontend_env(docs: dict) -> dict[str, dict]:
+        dep = docs[("Deployment", "lc-lyrics-canvas-frontend")]
+        return env_map(container(dep["spec"]["template"], "frontend"))
+
+    def test_disabled_by_default(self) -> None:
+        env = self.frontend_env(render())
+        self.assertEqual(env["ALERTMANAGER_URL"]["value"], "")
+        self.assertEqual(env["ALERTS_RESOLVER"]["value"], "")
+
+    def test_namespace_defaults_to_release_namespace(self) -> None:
+        env = self.frontend_env(render())
+        self.assertEqual(env["ALERTS_NAMESPACE"]["value"], NAMESPACE)
+
+    def test_alertmanager_url_passed_through(self) -> None:
+        env = self.frontend_env(
+            render(frontend__clusterAlerts__alertmanagerUrl="http://am.monitoring.svc:9093")
+        )
+        self.assertEqual(env["ALERTMANAGER_URL"]["value"], "http://am.monitoring.svc:9093")
+        self.assertEqual(env["ALERTS_NAMESPACE"]["value"], NAMESPACE)
+
+    def test_namespace_and_resolver_overrides(self) -> None:
+        env = self.frontend_env(
+            render(
+                frontend__clusterAlerts__alertmanagerUrl="https://am.example.com",
+                frontend__clusterAlerts__namespace="other-ns",
+                frontend__clusterAlerts__resolver="10.152.183.10",
+            )
+        )
+        self.assertEqual(env["ALERTMANAGER_URL"]["value"], "https://am.example.com")
+        self.assertEqual(env["ALERTS_NAMESPACE"]["value"], "other-ns")
+        self.assertEqual(env["ALERTS_RESOLVER"]["value"], "10.152.183.10")
+
+    def test_backend_url_unchanged(self) -> None:
+        env = self.frontend_env(
+            render(frontend__clusterAlerts__alertmanagerUrl="http://am.monitoring.svc:9093")
+        )
+        self.assertEqual(env["BACKEND_URL"]["value"], "http://lc-lyrics-canvas-backend:8000")
+
+
 class PostgresPersistenceTest(unittest.TestCase):
     def test_disabled_uses_emptydir(self) -> None:
         docs = render(postgres__persistence__enabled="false")
@@ -556,6 +599,12 @@ class HomelabEnvironmentTest(unittest.TestCase):
         self.assertEqual(svc["ports"][0]["nodePort"], 32443)
         self.assertIn(("PersistentVolumeClaim", "lc-lyrics-canvas-model-cache"), self.docs)
 
+    def test_frontend_cluster_alerts_from_monitoring_alertmanager(self) -> None:
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-frontend")]
+        env = env_map(container(dep["spec"]["template"], "frontend"))
+        self.assertEqual(env["ALERTMANAGER_URL"]["value"], "http://kps-alertmanager.monitoring.svc:9093")
+        self.assertEqual(env["ALERTS_NAMESPACE"]["value"], NAMESPACE)
+
 
 class CommittedValuesSafetyTest(unittest.TestCase):
     def test_environments_exist(self) -> None:
@@ -598,6 +647,29 @@ class SchemaTest(unittest.TestCase):
     def test_rejects_node_port_out_of_range(self) -> None:
         self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=8080")
         self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=40000")
+
+    def test_rejects_alertmanager_url_with_path_or_query(self) -> None:
+        # Only scheme://host[:port] is accepted; nginx appends the one fixed path.
+        self.assert_rejected("frontend.clusterAlerts.alertmanagerUrl=http://am:9093/api/v2/status")
+        self.assert_rejected("frontend.clusterAlerts.alertmanagerUrl=http://am:9093?x=1")
+        self.assert_rejected("frontend.clusterAlerts.alertmanagerUrl=ftp://am:9093")
+        self.assert_rejected("frontend.clusterAlerts.alertmanagerUrl=am:9093")
+        self.assert_rejected("frontend.clusterAlerts.alertmanagerUrl=http://user@am:9093")
+
+    def test_rejects_bad_alerts_namespace_and_resolver(self) -> None:
+        self.assert_rejected("frontend.clusterAlerts.namespace=Bad_NS")
+        self.assert_rejected("frontend.clusterAlerts.namespace=ns\"; evil")
+        self.assert_rejected("frontend.clusterAlerts.resolver=dns.example.com")
+        self.assert_rejected("frontend.clusterAlerts.resolver=10.0.0.1;evil")
+        self.assert_rejected("frontend.clusterAlerts.enabled=true")
+
+    def test_accepts_valid_cluster_alerts_values(self) -> None:
+        result = helm(
+            "template", RELEASE, str(CHART),
+            "--set", "frontend.clusterAlerts.alertmanagerUrl=http://kps-alertmanager.monitoring.svc:9093/",
+            "--set", "frontend.clusterAlerts.resolver=10.152.183.10 [fd00::a]:53",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_rejects_unknown_keys(self) -> None:
         self.assert_rejected("backend.replicas=2")

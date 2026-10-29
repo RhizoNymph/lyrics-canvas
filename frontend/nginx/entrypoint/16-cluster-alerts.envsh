@@ -1,0 +1,219 @@
+#!/bin/sh
+# Prepares the read-only GET /_status/alerts endpoint
+# (docs/features/cluster_alerts_endpoint.md).
+#
+# Sourced by the nginx image entrypoint (docker-entrypoint.sh, which runs with
+# `set -e`, and 15-local-resolvers.envsh leaves `set -u` on) before
+# 20-envsubst-on-templates.sh renders default.conf.template. Inputs:
+#
+#   ALERTMANAGER_URL  scheme://host[:port] of Alertmanager; empty disables the endpoint
+#   ALERTS_NAMESPACE  Kubernetes namespace whose alerts are shown
+#   ALERTS_RESOLVER   optional DNS servers for nginx; default: /etc/resolv.conf nameservers
+#
+# Exports (the only values the template substitutes for this feature):
+#
+#   ALERTS_STATE           disabled | enabled | misconfigured
+#   ALERTS_UPSTREAM        the one fixed Alertmanager URL nginx may request
+#                          (empty unless enabled)
+#   ALERTS_RESOLVER_ADDRS  addresses for nginx's `resolver` directive
+#
+# Every input is validated here, so nothing that reaches the nginx config can
+# break its syntax. A bad value only turns the endpoint into a 503; this script
+# never fails and never stops nginx from starting.
+
+alerts_log() {
+    # $1 = level, rest = key=value pairs
+    alerts_level=$1
+    shift
+    if [ "$alerts_level" = info ] && [ -n "${NGINX_ENTRYPOINT_QUIET_LOGS:-}" ]; then
+        return 0
+    fi
+    echo "16-cluster-alerts.envsh: level=$alerts_level $*"
+}
+
+alerts_is_port() {
+    case "$1" in
+        "" | *[!0-9]*) return 1 ;;
+    esac
+    [ "${#1}" -le 5 ] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+# IPv4 address with optional :port, or [IPv6] with optional :port.
+alerts_is_resolver_addr() {
+    case "$1" in
+        "["*)
+            alerts_inner=${1#\[}
+            case "$alerts_inner" in
+                *"]"*) ;;
+                *) return 1 ;;
+            esac
+            alerts_rest=${alerts_inner#*\]}
+            alerts_inner=${alerts_inner%%\]*}
+            case "$alerts_inner" in
+                "" | *[!0-9A-Fa-f:.]*) return 1 ;;
+            esac
+            case "$alerts_rest" in
+                "") return 0 ;;
+                :*) alerts_is_port "${alerts_rest#:}"; return $? ;;
+                *) return 1 ;;
+            esac
+            ;;
+        "" | *[!0-9.:]*)
+            return 1
+            ;;
+    esac
+    alerts_ip=$1
+    case "$alerts_ip" in
+        *:*)
+            alerts_is_port "${alerts_ip#*:}" || return 1
+            alerts_ip=${alerts_ip%%:*}
+            ;;
+    esac
+    case "$alerts_ip" in
+        *.*.*.*.* | .* | *. | *..*) return 1 ;;
+        *.*.*.*) ;;
+        *) return 1 ;;
+    esac
+    alerts_octets=$alerts_ip
+    while [ -n "$alerts_octets" ]; do
+        alerts_octet=${alerts_octets%%.*}
+        case "$alerts_octets" in
+            *.*) alerts_octets=${alerts_octets#*.} ;;
+            *) alerts_octets="" ;;
+        esac
+        case "$alerts_octet" in
+            "" | *[!0-9]*) return 1 ;;
+        esac
+        [ "${#alerts_octet}" -le 3 ] && [ "$alerts_octet" -le 255 ] || return 1
+    done
+    return 0
+}
+
+# Keeps the valid addresses of a space-separated list, logging the rest.
+# Only called in a command substitution, so `set -f` (no globbing of "[...]"
+# IPv6 forms while splitting) stays in that subshell.
+alerts_filter_resolvers() {
+    set -f
+    alerts_kept=""
+    for alerts_addr in $1; do
+        if alerts_is_resolver_addr "$alerts_addr"; then
+            alerts_kept="${alerts_kept:+$alerts_kept }$alerts_addr"
+        else
+            alerts_log warn "msg=\"ignoring resolver address\" source=$2 address=\"$alerts_addr\"" >&2
+        fi
+    done
+    printf '%s' "$alerts_kept"
+}
+
+alerts_resolv_conf=${ALERTS_RESOLV_CONF:-/etc/resolv.conf}
+
+alerts_resolv_nameservers() {
+    [ -r "$alerts_resolv_conf" ] || return 0
+    awk 'BEGIN{ORS=" "} $1=="nameserver" {if ($2 ~ ":") {print "["$2"]"} else {print $2}}' \
+        "$alerts_resolv_conf" 2>/dev/null || true
+}
+
+# The cluster domain from a "svc.<domain>" resolv.conf search entry (Kubernetes
+# pods get "<ns>.svc.<domain> svc.<domain> <domain>").
+alerts_cluster_domain() {
+    [ -r "$alerts_resolv_conf" ] || return 0
+    awk '$1=="search" { for (i = 2; i <= NF; i++) if ($i ~ /^svc\./) { sub(/^svc\./, "", $i); print $i; exit } }' \
+        "$alerts_resolv_conf" 2>/dev/null || true
+}
+
+alerts_is_hostname() {
+    case "$1" in
+        "" | *[!A-Za-z0-9.-]* | .* | -* | *. | *- | *..*) return 1 ;;
+    esac
+    [ "${#1}" -le 253 ]
+}
+
+alerts_is_namespace() {
+    case "$1" in
+        "" | *[!a-z0-9-]* | -* | *-) return 1 ;;
+    esac
+    [ "${#1}" -le 63 ]
+}
+
+# --- resolver ---------------------------------------------------------------
+
+ALERTS_RESOLVER_ADDRS=""
+if [ -n "${ALERTS_RESOLVER:-}" ]; then
+    ALERTS_RESOLVER_ADDRS=$(alerts_filter_resolvers "$ALERTS_RESOLVER" ALERTS_RESOLVER)
+fi
+alerts_resolver_source=ALERTS_RESOLVER
+if [ -z "$ALERTS_RESOLVER_ADDRS" ]; then
+    ALERTS_RESOLVER_ADDRS=$(alerts_filter_resolvers "$(alerts_resolv_nameservers)" "$alerts_resolv_conf")
+    alerts_resolver_source=$alerts_resolv_conf
+fi
+if [ -z "$ALERTS_RESOLVER_ADDRS" ]; then
+    # nginx needs some address; lookups then fail and the endpoint answers 503.
+    ALERTS_RESOLVER_ADDRS=127.0.0.1
+    alerts_resolver_source=fallback
+    alerts_log warn "msg=\"no usable resolver, alerts lookups will fail\" resolver=127.0.0.1"
+fi
+
+# --- upstream ---------------------------------------------------------------
+
+ALERTS_STATE=disabled
+ALERTS_UPSTREAM=""
+alerts_url=${ALERTMANAGER_URL:-}
+alerts_ns=${ALERTS_NAMESPACE:-}
+
+alerts_misconfigured() {
+    ALERTS_STATE=misconfigured
+    ALERTS_UPSTREAM=""
+    alerts_log error "msg=\"cluster alerts misconfigured, endpoint will answer 503\" reason=\"$1\""
+}
+
+if [ -n "$alerts_url" ]; then
+    alerts_url=${alerts_url%/}
+    case "$alerts_url" in
+        http://*) alerts_scheme=http ;;
+        https://*) alerts_scheme=https ;;
+        *) alerts_scheme="" ;;
+    esac
+    alerts_hostport=${alerts_url#*://}
+    alerts_host=${alerts_hostport%%:*}
+    alerts_port=""
+    case "$alerts_hostport" in
+        *:*) alerts_port=${alerts_hostport#*:} ;;
+    esac
+
+    if [ -z "$alerts_scheme" ]; then
+        alerts_misconfigured "ALERTMANAGER_URL must start with http:// or https://"
+    elif ! alerts_is_hostname "$alerts_host"; then
+        alerts_misconfigured "ALERTMANAGER_URL must be scheme://host[:port] with no path, query or credentials"
+    elif [ -n "$alerts_port" ] || [ "$alerts_hostport" != "$alerts_host" ]; then
+        if ! alerts_is_port "$alerts_port"; then
+            alerts_misconfigured "ALERTMANAGER_URL must be scheme://host[:port] with no path, query or credentials"
+        fi
+    fi
+
+    if [ "$ALERTS_STATE" = disabled ] && ! alerts_is_namespace "$alerts_ns"; then
+        # Without a namespace the filter would match every alert in the cluster.
+        alerts_misconfigured "ALERTS_NAMESPACE must be a Kubernetes namespace name"
+    fi
+
+    if [ "$ALERTS_STATE" = disabled ]; then
+        # nginx's resolver ignores resolv.conf search domains, so expand the
+        # usual "<svc>.<ns>.svc" form to the cluster FQDN.
+        case "$alerts_host" in
+            *.svc)
+                alerts_domain=$(alerts_cluster_domain)
+                if [ -n "$alerts_domain" ] && alerts_is_hostname "$alerts_host.$alerts_domain"; then
+                    alerts_host="$alerts_host.$alerts_domain"
+                else
+                    alerts_log warn "msg=\"no svc.<domain> search entry, using host as given\" host=$alerts_host"
+                fi
+                ;;
+        esac
+        ALERTS_STATE=enabled
+        ALERTS_UPSTREAM="$alerts_scheme://$alerts_host${alerts_port:+:$alerts_port}/api/v2/alerts?active=true&silenced=false&inhibited=false&filter=namespace%3D%22$alerts_ns%22"
+    fi
+fi
+
+alerts_log info "msg=\"cluster alerts endpoint\" state=$ALERTS_STATE namespace=${alerts_ns:-none} upstream=\"${ALERTS_UPSTREAM:-none}\" resolver=\"$ALERTS_RESOLVER_ADDRS\" resolver_source=$alerts_resolver_source"
+
+export ALERTS_STATE ALERTS_UPSTREAM ALERTS_RESOLVER_ADDRS
+return 0
