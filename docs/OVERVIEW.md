@@ -68,6 +68,14 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
+### Health Banner
+The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
+while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
+server is down (nginx answered 502/503/504) or unreachable (offline, network error), and that changes may
+not be saving; "Back online" shows briefly on recovery. It also polls `GET /_status/alerts` (nginx in front
+of Alertmanager) and lists firing cluster alerts, critical first; a deployment without that endpoint stays
+quiet. Cards are dismissible per incident. See [health_banner.md](./features/health_banner.md).
+
 ## Module Documentation
 
 | Document | Scope |
@@ -115,7 +123,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 |-------|-----------|---------|
 | Frontend rendering | Pixi.js v7 + `@pixi/react` | GPU-accelerated 2D canvas |
 | Frontend framework | React 18 + TypeScript | Component UI |
-| State management | Zustand | Three stores: auth, canvas, UI |
+| State management | Zustand | Stores: auth, canvas, UI, rhyme, status |
 | Routing | react-router-dom v6 | SPA navigation with protected routes |
 | HTTP client | Axios | JWT-intercepted API calls |
 | Build tool | Vite 5 | HMR dev server, production bundler |
@@ -287,6 +295,19 @@ Features Index:
       - deploy/homelab/backup/pull.sh
     depends_on: [helm_deployment]
     doc: docs/features/postgres_backup.md
+  health_banner:
+    description: Web banner for backend health and cluster alerts. A pure state machine (unknown/ok/suspect/failing/recovered) fed by GET /api/health probes (15 s, 3 s to confirm, 5-60 s backoff while down, paused while hidden) and by a pass-through axios interceptor on api/client.ts (502/503/504 down, no response unreachable); two consecutive failures before showing, 5 s "Back online". Polls GET /_status/alerts (Alertmanager v2 list via nginx, sibling feat/status-alerts-endpoint), validated at runtime into typed alerts; 404 or HTML fallback = absent and silent, 5xx = stale. Ordered cards (backend first, then critical, warning, other), role alert/status, dismissible per incident.
+    entry_points:
+      - frontend/src/hooks/useStatusMonitoring.ts
+      - frontend/src/components/status/StatusBanner.tsx
+      - frontend/src/stores/statusStore.ts
+      - frontend/src/lib/health/
+      - frontend/src/lib/alerts/
+      - frontend/src/lib/statusBanner/
+      - frontend/src/api/status.ts (probeHealth, fetchClusterAlerts)
+      - frontend/src/api/client.ts (installHealthInterceptors)
+    depends_on: [helm_deployment]
+    doc: docs/features/health_banner.md
   android_release:
     description: Tag-triggered GitHub Actions workflow that tests, builds, verifies and attaches an Android APK to a GitHub Release; Gradle takes versionName/versionCode from properties and signs release builds with a keystore from the environment (all-or-nothing, typed as a sealed ReleaseSigning) or falls back to the debug key; a script asserts the APK's version, signer and baked-in backend URL.
     entry_points:
