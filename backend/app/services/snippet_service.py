@@ -1,6 +1,6 @@
 import logging
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -137,14 +137,24 @@ async def get_canvas_snippets(
     return list(result.scalars().all())
 
 
+# Moves children of the merge originals onto the merged snippet: (db, merged_id, original_ids).
+Reparent = Callable[[AsyncSession, uuid.UUID, Sequence[uuid.UUID]], Awaitable[None]]
+
+
 async def replace_with_merged(
     db: AsyncSession,
     canvas_id: uuid.UUID,
     fields: Mapping[str, object],
     tags: Sequence[Tag],
     originals: Sequence[Snippet],
+    *,
+    reparent: Reparent | None = None,
 ) -> Snippet:
     """Create the merged snippet with ``tags`` and delete ``originals`` in one transaction.
+
+    ``reparent(db, merged_id, original_ids)`` runs after the merged snippet is inserted and before
+    the originals are deleted, so children that would cascade with them (the merge route passes
+    ``recording_service.reassign_recordings``) move to the merged snippet instead.
 
     All or nothing: any database error rolls the whole transaction back and raises
     ``MergePersistError``; on success there is exactly one commit.
@@ -154,6 +164,8 @@ async def replace_with_merged(
     try:
         db.add(snippet)
         await db.flush()
+        if reparent is not None:
+            await reparent(db, snippet.id, [original.id for original in originals])
         for original in originals:
             await db.delete(original)
         await db.commit()

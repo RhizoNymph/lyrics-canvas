@@ -430,7 +430,7 @@ def test_merge_route_returns_content_updated_at_and_does_not_set_it(client, monk
     async def fake_get(db, canvas_id, owner_id, snippet_ids):
         return [a, b]
 
-    async def fake_replace(db, canvas_id, fields, tags, originals):
+    async def fake_replace(db, canvas_id, fields, tags, originals, **kwargs):
         seen.update(fields)
         return fake_snippet(canvas_id, fields["raw_text"], **fields, content_updated_at=merged_at)
 

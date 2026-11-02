@@ -24,6 +24,8 @@ that because it moves on every write, including drags, resizes and batch reposit
 | Create (`POST /api/canvases/{id}/snippets`) | now (server default) |
 | Merge (`POST /api/canvases/{id}/merge`), merged snippet | now (server default; not copied from the originals) |
 | `PUT /api/snippets/{id}` with `raw_text`, `snippet_type`, `grid_mode`, `beats_per_line` or `grid_data` that **differs** from the stored value | now (SQL `now()`, equal to the new `updated_at`) |
+| Voice take appended (`POST /api/canvases/{id}/voice-takes`, `target.kind = append`) | now (SQL `now()`, set by `recording_service.append_with_recording`; see [voice_capture.md](./voice_capture.md)) |
+| Voice take as a new snippet | now (server default) |
 | `PUT` whose content fields all equal the stored values (e.g. identical text) | unchanged |
 | `PUT` with only `position_x/y`, `width/height`, `z_index`, `group_id` | unchanged |
 | `PATCH /api/snippets/batch-position` | unchanged |
@@ -73,6 +75,7 @@ as stored JSON dicts (the same `model_dump` shape the route writes).
 | `backend/alembic/versions/003_snippet_content_updated_at.py` | Add column, backfill, set NOT NULL; downgrade drops it | revision `003` (down `002`) |
 | `backend/app/services/snippet_service.py` | Bump decision and write | `CONTENT_FIELDS`, `content_edits_differ(snippet, edits) -> bool`, `update_snippet(db, snippet_id, owner_id, *, content_edits, **kwargs)` |
 | `backend/app/api/snippets.py` | Splits client-sent content fields from derived values on PUT | `update_snippet` route |
+| `backend/app/services/recording_service.py` | Voice-take append bumps it with the appended lines | `append_with_recording` |
 | `backend/app/services/canvas_service.py` | Fork copies the source value | `fork_canvas` |
 | `backend/app/schemas/snippet.py` | Response field | `SnippetResponse.content_updated_at: str` |
 | `backend/app/api/canvases.py` | Emits it | `_snippet_response` |
@@ -85,6 +88,7 @@ as stored JSON dicts (the same `model_dump` shape the route writes).
 - Only a differing value in `CONTENT_FIELDS` moves it; adding a content column means adding it to
   `CONTENT_FIELDS`.
 - Derived values (re-syllabified grid, phonetics, auto-size) never count as edits on their own.
-- No `onupdate` on the column: an ORM write that does not go through `update_snippet` leaves it alone.
+- No `onupdate` on the column: an ORM write that does not go through `update_snippet` (or the voice-take
+  append, which always adds text and so always bumps it) leaves it alone.
 - Deploying requires `alembic upgrade head` on existing databases; startup `create_all` does not add
   columns to existing tables.

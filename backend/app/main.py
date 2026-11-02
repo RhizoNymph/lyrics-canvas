@@ -16,6 +16,7 @@ from app.api.groups import router as groups_router
 from app.api.tags import router as tags_router
 from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
+from app.api.voice import router as voice_router
 from app.services.phonetics import ResourceError, ensure_resources
 from app.services.phonetics.resources import configure as configure_nltk_data
 
@@ -55,6 +56,7 @@ app.include_router(groups_router)
 app.include_router(tags_router)
 app.include_router(nlp_router)
 app.include_router(export_router)
+app.include_router(voice_router)
 
 
 @app.get("/api/health")
