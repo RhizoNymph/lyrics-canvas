@@ -16,6 +16,9 @@ Backspace line split and join).
   row menu, chunk toolbar, active-row text field above the IME, hint line.
 - Gestures: tap select, extend mode, selection handles, long-press chunk drag with drop indicator and
   edge auto-scroll, long-press row drag to reorder.
+- Voice: a "Record" top-bar action (saves pending edits, then records a take appended to this snippet and
+  reloads the rows from the result) and a collapsible Recordings section above the hint line; see
+  [android_voice_capture.md](../features/android_voice_capture.md).
 
 ## Non-scope
 
@@ -27,7 +30,7 @@ Backspace line split and join).
 ## Screen
 
 ```
-TopAppBar   [VERSE ▾]                                  Discard  [Save]
+TopAppBar   [VERSE ▾]                         Record   Discard  [Save]
 Rows (Column + verticalScroll, imePadding below the Scaffold insets)
   ≡  1  | hel | lo | · | world |  →scrolls→         3  ⋮
         ●                   ●        <- selection handles (row with a selection)
@@ -36,6 +39,7 @@ Rows (Column + verticalScroll, imePadding below the Scaffold insets)
         [ Type lyrics…                 ]  <- active row only; IME Next splits at the caret,
                                              Backspace at the start joins onto the row above
   + Add line
+Recordings (2) ▸        <- collapsible: date · duration, transcript preview, Play/Pause, Delete
 Hint line (+ "local estimates" note after a syllabify failure)
 ```
 
@@ -79,6 +83,12 @@ moveRow(row, ±1)          selection row via indexAfterReorder
 save      SnippetUpdateRequest(snippet_type, grid_data, raw_text = rawTextForSave) -> PUT
             Saving -> Saved(updated snippet) | Failed(ApiError); ignored while Saving / after Saved
 ```
+
+Voice takes: `flushPendingEdits()` PUTs `saveRequest(state)` only when it differs from the request the
+baseline snippet (opened, last flushed or last reloaded) would give, and does not change `save`;
+`reloadFrom(snippet)` replaces the whole state with `EditorUiState.initial(snippet)` and makes it the
+baseline. `GridEditorRoute` calls them around the voice modal and reports each new server copy through
+`onSnippetChanged` (the canvas replaces its card) without closing the editor.
 
 Every mutation goes through one `update` that, after the reducer, drops a selection that no longer fits
 its row's cells (e.g. a syllabify result with fewer cells for a row that was only selected, never
@@ -144,15 +154,15 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 
 | File | Role / key exports |
 |---|---|
-| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier)`: ViewModel per visit, `onSaved` on `Saved` |
-| `GridEditorViewModel.kt` | `GridEditorViewModel`, `SYLLABIFY_DEBOUNCE_MS`, `saveRequest(state)`, `selectionIsAllRests(state)` |
+| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier, onSnippetChanged)`: ViewModels per visit (editor, voice capture, recordings), `onSaved` on `Saved`, Record button, recordings section |
+| `GridEditorViewModel.kt` | `GridEditorViewModel` (+ `flushPendingEdits`, `reloadFrom`), `SYLLABIFY_DEBOUNCE_MS`, `saveRequest(state)`, `selectionIsAllRests(state)` |
 | `GridEditorActions.kt` | `GridEditorActions`: every user intent the screen can send |
 | `EditorUiState.kt` | `EditorUiState` (`rows`, `selection`, `extendMode`, `snippetType`, `save`, `syllabifyError`, derived `rowLines`), sealed `SaveStatus` (`Idle`, `Saving`, `Saved(snippet)`, `Failed(error)`) |
 | `CellSelection.kt` | `CellSelection` (private constructor; `of`, `cell`, `contains`, `shiftedBy`, `inRow`, `fitsIn`), `SelectionEdge`, `tapSelection`, `resizeSelection`, `indexAfterReorder` |
 | `LineFieldEdit.kt` | `LINE_FIELD_SENTINEL`, `LineFieldState`, sealed `LineFieldEdit` (`Edit`, `JoinPrevious`, `Split`), `interpretLineFieldChange`, `enterSplit` |
 | `DragGeometry.kt` | `CellMetrics`, `cellIndexAt`, `cellIndexClamped`, `dropGapAt` (core `gapFromX`), `handleAt`, `edgeAutoScrollDelta`, `RowSpan`, `reorderTargetIndex` |
-| `ui/GridEditorScreen.kt` | Scaffold, back handling, save-error snackbar, reorderable rows column, hint line |
-| `ui/EditorTopBar.kt` | Snippet type selector, Discard, Save (progress while saving) |
+| `ui/GridEditorScreen.kt` | Scaffold, back handling, save-error snackbar, reorderable rows column, hint line; `snackbar`, `topBarActions`, `bottomPanel` slots |
+| `ui/EditorTopBar.kt` | Snippet type selector, extra actions slot, Discard, Save (progress while saving) |
 | `ui/EditorRow.kt` | `RowModel` (incl. `caret` request for the row), `EditorRow` (handle, number, strip, count, menu, toolbar, field) |
 | `ui/CellStrip.kt` | Cells, gestures (tap / handles / long-press drag), drop indicator, auto-scroll |
 | `ui/RowToolbar.kt` | `+·`, `−`, ◀, ▶, Extend chip, Clear |
@@ -161,4 +171,4 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 
 Tests under `android/app/src/test/kotlin/dev/nymph/lyrics/app/editor/` (JUnit 5, coroutines-test,
 Turbine; no Robolectric): `GridEditorViewModelTest` (fake repositories in `Fakes.kt`),
-`CellSelectionTest`, `DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`.
+`CellSelectionTest`, `DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`, `GridEditorVoiceTest`.

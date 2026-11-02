@@ -8,9 +8,8 @@ appended to the snippet open in the editor. The audio is kept and listed in the 
 played and deleted.
 
 The cross-cutting contract (STT service, backend endpoints, line assembly, Android behaviour) is in
-[voice_capture.md](./voice_capture.md), written by the backend branch. This document covers the web
-client only. The web client was built against that contract before the backend landed
-(feat/voice-takes-backend) and is tested with mocked HTTP.
+[voice_capture.md](./voice_capture.md). This document covers the web client only; its tests mock
+the HTTP layer.
 
 ## Scope
 

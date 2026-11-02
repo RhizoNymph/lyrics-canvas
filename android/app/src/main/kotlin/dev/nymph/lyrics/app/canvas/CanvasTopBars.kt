@@ -25,6 +25,8 @@ fun CanvasTopBar(
     onBack: () -> Unit,
     onSetMode: (CanvasModeKind) -> Unit,
     onToggleRhymes: () -> Unit,
+    /** Opens the voice recording modal; null hides the button (not loaded yet). */
+    onRecord: (() -> Unit)? = null,
 ) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -38,6 +40,7 @@ fun CanvasTopBar(
                 CanvasModeKind.LIST -> TextButton(onClick = { onSetMode(CanvasModeKind.CANVAS) }) { Text("Canvas") }
                 null -> Unit
             }
+            if (onRecord != null) TextButton(onClick = onRecord) { Text("Record") }
             TextButton(onClick = onToggleRhymes) { Text(if (rhymesOpen) "Hide rhymes" else "Rhymes") }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Sidebar),

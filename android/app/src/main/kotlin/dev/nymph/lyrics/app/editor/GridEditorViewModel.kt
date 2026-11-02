@@ -221,6 +221,32 @@ class GridEditorViewModel(
 
     /** Dismiss a save failure message. */
     override fun acknowledgeSaveError() = _state.update { s -> if (s.save is SaveStatus.Failed) s.copy(save = SaveStatus.Idle) else s }
+
+    // ---- Voice takes (append to this snippet) ----
+
+    /** The server's latest copy of the snippet: the one opened, flushed or reloaded last. */
+    private var baseline: Snippet = snippet
+
+    /**
+     * Save pending edits without closing, before a voice take appends to the snippet (the server
+     * appends after its stored last line). Nothing to save (the rows still say what [baseline]
+     * says) answers [baseline] without a request. Does not touch [EditorUiState.save].
+     */
+    suspend fun flushPendingEdits(): ApiResult<Snippet> {
+        val current = _state.value
+        if (current.isSaving) return ApiResult.Success(baseline)
+        val body = saveRequest(current)
+        if (body == saveRequest(EditorUiState.initial(baseline))) return ApiResult.Success(baseline)
+        val result = snippets.update(snippet.id, body)
+        if (result is ApiResult.Success) baseline = result.value
+        return result
+    }
+
+    /** Replace the rows with [updated] (the snippet a voice take returned), as if it had just been opened. */
+    fun reloadFrom(updated: Snippet) {
+        baseline = updated
+        _state.value = EditorUiState.initial(updated)
+    }
 }
 
 /** True when a selection exists and every selected cell is a rest. */

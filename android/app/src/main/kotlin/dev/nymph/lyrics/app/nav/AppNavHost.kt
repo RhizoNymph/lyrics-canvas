@@ -98,5 +98,6 @@ private fun EditorDestination(container: AppContainer, nav: NavHostController, e
             close()
         },
         onClose = { close() },
+        onSnippetChanged = canvas::replaceSnippet,
     )
 }

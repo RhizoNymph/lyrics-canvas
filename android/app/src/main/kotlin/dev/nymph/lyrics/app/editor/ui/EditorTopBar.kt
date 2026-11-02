@@ -1,6 +1,7 @@
 package dev.nymph.lyrics.app.editor.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
@@ -32,10 +33,12 @@ internal fun EditorTopBar(
     onSnippetTypeChange: (SnippetType) -> Unit,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
+    extraActions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = { SnippetTypeSelector(snippetType, onSnippetTypeChange) },
         actions = {
+            extraActions()
             TextButton(onClick = onDiscard, enabled = !saving) { Text("Discard") }
             Button(onClick = onSave, enabled = !saving, modifier = Modifier.padding(end = 8.dp)) {
                 if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Save")

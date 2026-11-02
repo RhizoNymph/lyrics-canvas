@@ -15,6 +15,8 @@ its own milestone.
 - List mode: a top-bar toggle that swaps the canvas for a `LazyColumn` of the same cards, last edited
   first, sharing tap-to-edit and the selection actions (see [list_mode.md](../features/list_mode.md)).
 - Rhyme sheet: every feature of the web rhyme sidebar (see [rhyme-view.md](../frontend/rhyme-view.md)).
+- Record: the top-bar "Record" button (canvas and list mode) opens the voice modal; the take becomes a
+  new snippet at the viewport centre, selected (see [android_voice_capture.md](../features/android_voice_capture.md)).
 
 ## Non-scope
 
@@ -77,7 +79,9 @@ kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coor
 | `merge(mode)` | `MergeRequest.of(selected, mode)`; null (fewer than two) => `MergeError.TooFewSnippets`, no request. Success: drop `deleted_ids`, append the merged snippet, select only it. Failure: nothing changes, `mergeError = toMergeError(e)` and a snackbar |
 | `deleteSelected()` | `DELETE` each selected snippet in parallel; removes the ones the server deleted; the rest stay selected; first error to the snackbar (after a confirm dialog in the UI) |
 | `createSnippetAtCenter()` | `POST` a freestyle snippet at `viewportCenter(viewport, viewSize)`, insert it, then `OpenEditor` |
-| `replaceSnippet(s)` | The editor's `onSaved`: replace in place; in list mode, capture a new list order |
+| `replaceSnippet(s)` | The editor's `onSaved` (and `onSnippetChanged` after a voice append): replace in place; in list mode, capture a new list order |
+| `voiceTarget()` | `VoiceTakeTarget.New(viewportCenter(viewport, viewSize))`; in list mode the viewport is the last canvas one and the size is the list body's; null before load |
+| `onVoiceTakeSaved(response)` | Created: insert, select only it, and in list mode emit `CanvasEvent.RevealSnippet`; appended: `replaceSnippet` |
 | `hitTest(screen)` | Topmost card under a dp point (`hitTestScreen`) |
 
 Viewport persistence: every camera change cancels and restarts a 1 s timer; when it fires, or on
@@ -141,7 +145,7 @@ Strokes are expressed in dp (`1 / zoom` card units).
 
 `CanvasScreen` = `BoxWithConstraints` around a `Scaffold`:
 
-- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
+- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
   (enabled with ≥ 2 selected and nothing in flight), Delete (confirm dialog), Rhymes, ✕).
 - FAB "New snippet" while not selecting.
 - Body: the canvas or, in list mode, `SnippetList` (rows are the canvas card resized for the row by
@@ -149,7 +153,11 @@ Strokes are expressed in dp (`1 / zoom` card units).
   message with Retry; or a progress indicator.
 - Rhyme sheet: with `maxWidth >= 840.dp` a permanent 380 dp side pane right of the canvas (system back
   closes it); otherwise a `ModalBottomSheet` (dismissing it closes the session).
-- Snackbars for `CanvasEvent.Message`; `CanvasEvent.OpenEditor` navigates.
+- Snackbars for `CanvasEvent.Message`; `CanvasEvent.OpenEditor` navigates; `CanvasEvent.RevealSnippet`
+  scrolls the list (`LazyListState` hoisted here) to the row.
+- The body box reports its size to `setViewSize` in both modes (the canvas also does), so a voice take
+  from the list lands at the centre of the last canvas viewport.
+- `VoiceCaptureHost(voice)` shows the recording modal; a stored take goes to `onVoiceTakeSaved`.
 
 ## Rhyme sheet
 
@@ -224,13 +232,13 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `session/SessionViewModel.kt` | `SessionState` (`Unknown`, `SignedOut`, `SignedIn`), `SessionViewModel` (`state`, `signOut`) |
 | `auth/AuthViewModel.kt`, `auth/AuthScreen.kt` | `AuthMode`, `AuthFieldError`, `AuthUiState`, `AuthViewModel` (`setMode`, `setEmail`, `setPassword`, `setDisplayName`, `submit`); the form |
 | `canvaslist/CanvasListViewModel.kt`, `canvaslist/CanvasListScreen.kt` | `CanvasListUiState`, `CanvasListEvent` (`Open`, `Message`), `CanvasListViewModel` (`refresh`, `create`); the list |
-| `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`) |
+| `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`, `RevealSnippet`) |
 | `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS`, `CANVAS_MODE_KEY` |
 | `canvas/CanvasScreen.kt` | `CanvasScreen`, `canvasViewModel(container, canvasId, owner)` |
-| `canvas/CanvasTopBars.kt` | `CanvasTopBar`, `SelectionTopBar` |
+| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`), `SelectionTopBar` |
 | `canvas/SnippetCanvas.kt` | `SnippetCanvas` (draw loop, layout cache, size reporting, gestures) |
 | `canvas/list/ListCardSize.kt` | `ListCardMetrics`, `ListCardWidth`, `listCardNeededWidth`, `listCardWidth`, `listCardHeight`, `listCard` (pure) |
-| `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`; rows drawn with `cardLayout` + `drawCard`) |
+| `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`, optional hoisted `listState`; rows drawn with `cardLayout` + `drawCard`) |
 | `canvas/render/CardLayout.kt` | `CardMetrics`, `CellTextKind`, `CellText`, `CountText`, `TagPill`, `GridFrame`, `CardLayout`, `placeCellText`, `cardLayout`, `textVisible` (pure) |
 | `canvas/render/Culling.kt` | `intersects`, `visibleCards`, `BackgroundGrid`, `backgroundGridLines` (pure) |
 | `canvas/render/CardRenderer.kt` | `CardTextStyles`, `DrawScope.drawCard` |
@@ -251,7 +259,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 
 Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, fake repositories in
 `fakes/`): `CanvasViewModelTest`, `CanvasViewModelListModeTest`, `ListCardSizeTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
-`CanvasListViewModelTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
+`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
 `MainDispatcherExtension` installs a `StandardTestDispatcher` as `Dispatchers.Main`.
 
 ## Invariants

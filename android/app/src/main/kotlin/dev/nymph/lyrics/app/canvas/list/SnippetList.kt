@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
@@ -56,6 +58,7 @@ fun SnippetList(
     onTap: (SnippetId) -> Unit,
     onLongPress: (SnippetId) -> Unit,
     modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     if (rows.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -70,6 +73,7 @@ fun SnippetList(
         val availableDp = (maxWidth - ROW_GUTTER * 2 - SHADOW_SPACE).value.toDouble()
         LazyColumn(
             Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = PaddingValues(horizontal = ROW_GUTTER, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

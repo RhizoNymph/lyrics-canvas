@@ -13,6 +13,8 @@ touch. Lives in `android/` of this repo.
   OpenAPI snapshot, and a server-side merge endpoint shared by both clients.
 - An app-wide status banner for backend outages and cluster alerts:
   [android_health_banner.md](./android_health_banner.md).
+- Voice capture: record a take from the canvas or editor, transcribed by the server into a new snippet
+  or appended lines, with the recordings listed in the editor: [android_voice_capture.md](./android_voice_capture.md).
 
 ## Non-scope
 
@@ -46,6 +48,7 @@ server merge endpoint.
 | Merge | `POST /api/canvases/{id}/merge` (new, see Backend) |
 | NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest` |
 | Status | `GET /api/health`, `GET /_status/alerts` (frontend nginx origin; see [android_health_banner.md](./android_health_banner.md)) |
+| Voice | `POST /api/canvases/{id}/voice-takes` (multipart), `GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}` (see [android_voice_capture.md](./android_voice_capture.md)) |
 
 `docs/api/openapi.json` is the committed snapshot; `:core:model` has a test that every DTO field the app
 reads exists in that snapshot with a compatible type.
@@ -76,6 +79,7 @@ fewer than two distinct ids. The web `canvasStore.mergeSelected` switches to thi
 | Ctrl+wheel zoom, middle-drag pan | Pinch zoom (0.1–5×, anchored at the centroid), one/two-finger pan |
 | Double-click to edit | Tap a card while not selecting opens the grid editor |
 | Double-click empty canvas | FAB "New snippet" creates one at the viewport centre and opens the editor |
+| Toolbar / editor mic button, click = next line, double-click = stop | Top-bar "Record" (canvas, list, editor); full-screen modal, tap = next line, double-tap = stop |
 | Rhyme sidebar (380 px) | `ModalBottomSheet` on compact width; permanent side pane at ≥ 840 dp (expanded width class) |
 | Anchor chip ▸ word range | Same: chip expands to syllable strips; tap start word, tap end word |
 | Row expand / Materialize / Dismiss | Same, as list rows; swipe-to-dismiss as a shortcut |
@@ -106,6 +110,8 @@ Open canvas -> CanvasViewModel(StateFlow<CanvasUiState>) + RhymeViewModel(port =
   Tap card -> EditorRoute -> GridEditorRoute(snippet) -> onSaved -> CanvasViewModel.replaceSnippet
 any 401 -> ApiClient clears TokenStore -> SignedOut -> login
 every ApiClient call -> ApiCallObserver (HealthMonitor) -> StatusBannerViewModel -> StatusBanner above AppNavHost
+Record -> VoiceCaptureViewModel (reduceRecorder) -> MediaRecorder -> POST voice-takes
+  -> canvas: insert + select the new snippet | editor: reload rows, RecordingsViewModel.add (android_voice_capture.md)
 ```
 
 Screens, ViewModels, gestures, rendering and the rhyme sheet in detail:
@@ -164,7 +170,8 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `Nlp.kt` | `SyllabifyRequest` |
 | | | `Rhyme.kt` | `RhymeLimits` (`PAGE_SIZE`, `MAX_LIMIT`, `STRESS_PATTERN`), `RhymeK` (int-serialised enum), `SourceName`, sealed `AnchorRef` = `SnippetAnchorRef` / `TextAnchorRef` (discriminator `kind`), `AnchorRange`, `Slot`, `ScoreWeights`, `DialectRule(Kind)`, `DialectMap`, `RhymeSuggestRequest`, `RhymeSyllable`, `RhymeUnitFields`, `RhymeUnit`, `RhymeCandidate`, `SyllableAlignment`, `RhymeSuggestResponse` |
 | | `dev.nymph.lyrics.model.status` | `Health.kt`, `ClusterAlert.kt`, `AlertsFetch.kt` | `HealthSignal`, `Outage`, `DownCause`, `UnreachableReason`; `ClusterAlert`, `AlertSeverity`, `IncidentKey`; `AlertsFetch`, `AlertsFetchError` |
-| | `dev.nymph.lyrics.model.error` | `ApiError.kt` | sealed `ApiError` (`Unauthorized(status, detail)`, `NotFound(detail)`, `Validation(status, detail)`, `Server(status, detail)`, `Network(cause)`, `Decoding(cause)`), `ApiError.fromHttp`, `ApiError.detailFromBody` (FastAPI string or pydantic list) |
+| | `dev.nymph.lyrics.model.error` | `ApiError.kt` | sealed `ApiError` (`Unauthorized(status, detail)`, `NotFound(detail)`, `Validation(status, detail)`, `Server(status, detail)`, `Network(cause)`, `Decoding(cause)`), `ApiError.fromHttp`, `ApiError.detailFromBody` (FastAPI string, pydantic list, or a structured detail's message), `ApiError.code` / `errorCodeFromBody` (`{"detail": {"error": code}}`; `NotFound`, `Validation`, `Server` carry it) |
+| | `dev.nymph.lyrics.model.voice` | `Voice.kt`, `VoiceErrorCode.kt` | Voice DTOs and error codes, see [android_voice_capture.md](./android_voice_capture.md#files) |
 | | | `ApiResult.kt` | sealed `ApiResult<T>` (`Success`, `Failure`), `map`, `flatMap`, `fold`, `onSuccess`, `onFailure` |
 | `:core:logic` | `dev.nymph.lyrics.logic` | `JsCompat.kt` | internal `jsTrim`, `jsSplitWhitespace`, `jsSlice`: JS string/array semantics the ports rely on |
 | | `dev.nymph.lyrics.logic.grid` | `WordIndex.kt`, `RawText.kt`, `MoveChunk.kt`, `ReorderLines.kt`, `Rests.kt`, `DropIndex.kt`, `LocalSyllabify.kt` | `rebaseWordIndexes`, `countSyllables`, `attachWords(All)`, `rebuildRawText(All)`, `withRebuiltText`, `moveChunk`, `reorderLines`, `insertRest`, `removeCell`, `gapFromX`, `moveTargetFromGap`, `estimateSyllableCount`, `splitWord`, `localSyllabifyLine` |
@@ -180,6 +187,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
 | | | `MergeError.kt` | sealed `MergeError` (`TooFewSnippets`, `NotFound`, `Invalid`, `Server`, `Network`, `Unknown`), `toMergeError` |
 | | `dev.nymph.lyrics.logic.status` | `HealthMachine.kt`, `Alerts.kt` | Health state machine (`HealthState`, `HealthEvent`, `reduce`, backoff), alerts state (`AlertsState`, `applyAlertsFetch`, `displayOrder`) |
+| | `dev.nymph.lyrics.logic.voice` | `TapGesture.kt`, `SilenceVad.kt`, `RecorderMachine.kt`, `VoiceUploadError.kt` | Tap / double-tap reducer, silence VAD, recording modal state machine, voice error mapping ([android_voice_capture.md](./android_voice_capture.md#files)) |
 | | `dev.nymph.lyrics.logic.list` | `ListOrder.kt` | List-mode order: `parseServerTimestamp`, `sortForList` (`content_updated_at` desc, `created_at` desc, id), `ListOrder` (`of`, `arrange`) — see [list_mode.md](list_mode.md) |
 | `:app` | `…app` | `LyricsApp.kt`, `MainActivity.kt` | Application holding the `AppContainer`; activity hosting `LyricsTheme { AppRoot }` and running the status monitors while started |
 | | `…app.di` | `AppContainer.kt`, `DataStoreTokenStore.kt`, `ProcessScope.kt` | Manual dependency graph (including `status: StatusMonitors`, whose health monitor observes the `ApiClient`); DataStore `TokenStore`; process-lifetime scope for saves that outlive a screen |
@@ -195,8 +203,9 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `…app.rhyme` | `RhymeCanvasPort.kt`, `RhymeUiState.kt`, `AnchorChips.kt`, `RhymeViewModel.kt` | Canvas port for the sheet; sheet state; pure chip model; query pipeline, controls, materialize |
 | | `…app.rhyme.ui` | `RhymePanel.kt`, `QueryControls.kt`, `AnchorChipsView.kt`, `CandidateRow.kt`, `SyllableStrip.kt`, `AlignmentTable.kt` | Sheet content (web `components/rhyme/*`) |
 | | `…app.ui` | `UserMessages.kt`, `theme/Palette.kt`, `theme/LyricsTheme.kt` | `ApiError.userMessage()`, hex colour parsing; web palette; dark Material 3 theme |
-| | `…app.editor` | `GridEditorRoute.kt` | Editor entry point (B2) |
-| `:core:data` | `dev.nymph.lyrics.data` | `ApiClient.kt` | `ApiClient(baseUrl: HttpUrl, tokenStore, okHttpClient, ioDispatcher, json, observer)`, `ApiClient.create(String, ...)`, `HttpMethod`; `get`, `send`, `delete` return `ApiResult`; each completed call is reported to `observer` |
+| | `…app.editor` | `GridEditorRoute.kt` | Editor entry point (B2); hosts the editor's Record button and recordings section |
+| | `…app.voice` (+ `recorder`, `recordings`, `ui`) | `VoiceCaptureViewModel.kt`, `VoiceSettings.kt`, `MediaRecorderAudioRecorder.kt`, `RecordingsViewModel.kt`, `VoiceCaptureDialog.kt`, ... | Voice capture, see [android_voice_capture.md](./android_voice_capture.md#files) |
+| `:core:data` | `dev.nymph.lyrics.data` | `ApiClient.kt` | `ApiClient(baseUrl: HttpUrl, tokenStore, okHttpClient, ioDispatcher, json, observer)`, `ApiClient.create(String, ...)`, `HttpMethod`; `get`, `send`, `sendMultipart`, `download` (raw bytes to a file), `delete` return `ApiResult`; each completed call is reported to `observer` |
 | | | `ApiCallObserver.kt` | `ApiCallObserver`, `healthSignalOf(ApiResult)`, `unreachableReasonOf` |
 | | `dev.nymph.lyrics.data.status` | `StatusRepository.kt`, `AlertsJson.kt` | `/api/health` probe and `/_status/alerts` fetch (`HttpStatusRepository`, `AlertsEndpoint`), defensive alert parsing |
 | | | `TokenStore.kt` | `TokenStore` (`tokens: Flow<String?>`, suspend `token`/`save`/`clear`), `InMemoryTokenStore` |
@@ -204,6 +213,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `CanvasRepository.kt` | `CanvasRepository` / `HttpCanvasRepository` (`list`, `create`, `get`, `update`, `saveViewport`) |
 | | | `SnippetRepository.kt` | `SnippetRepository` / `HttpSnippetRepository` (`create`, `update`, `delete`, `batchPosition`, `merge`) |
 | | | `NlpRepository.kt` | `NlpRepository` / `HttpNlpRepository` (`syllabify`, `rhymeSuggest`) |
+| | | `VoiceRepository.kt` | `VoiceRepository` / `HttpVoiceRepository` (`uploadTake`, `recordings`, `downloadAudio`, `deleteRecording`) |
 
 ### Files: `:app` grid editor (`dev.nymph.lyrics.app.editor`)
 

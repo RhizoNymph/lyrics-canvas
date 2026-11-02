@@ -7,18 +7,17 @@ an automatic split when there were none) and turned into a **new snippet** (canv
 **appended** after the last line of the snippet open in the editor. The audio is kept, attached to
 the snippet, and can be played back or deleted from the editor.
 
-This is the canonical document for the whole feature. The backend part (this branch,
-`feat/voice-takes-backend`) is described in full; the STT service and the clients are built on
-sibling branches against the same contract and are summarised here from it:
+This is the canonical document for the whole feature. The backend part is described in full here;
+the other parts have their own feature docs:
 
-| Part | Branch | Where |
+| Part | Doc | Where |
 |---|---|---|
-| STT service (faster-whisper, own image + chart component) | `feat/stt-service` | `stt/` |
-| Backend: endpoints, line assembly, storage | `feat/voice-takes-backend` | `backend/app/api/voice.py`, `backend/app/services/voice/`, `backend/app/services/recording_service.py` |
-| Web client: record button, modal, recordings list | `feat/web-voice-capture` | `frontend/` |
-| Android client: same behaviour | `feat/android-voice-capture` | `android/` |
-| Editor Enter-split / Backspace-join for fixing lines | `feat/editor-line-split-join` | web + Android editors |
-| Ingress TLS (mic needs a secure context) and upload limits | `feat/homelab-ingress-tls` | `deploy/`, `frontend/nginx/` |
+| STT service (faster-whisper, own image + chart component) | [stt_service.md](./stt_service.md) | `stt/` |
+| Backend: endpoints, line assembly, storage | this document | `backend/app/api/voice.py`, `backend/app/services/voice/`, `backend/app/services/recording_service.py` |
+| Web client: record button, modal, recordings list | [web_voice_capture.md](./web_voice_capture.md) | `frontend/src/components/voice/`, `frontend/src/lib/voice/` |
+| Android client: same behaviour | [android_voice_capture.md](./android_voice_capture.md) | `android/app/.../app/voice/`, `android/core/logic/.../logic/voice/` |
+| Editor Enter-split / Backspace-join for fixing lines | [editor_line_split_join.md](./editor_line_split_join.md) | web + Android editors |
+| Ingress TLS (mic needs a secure context) and upload limits | [homelab_tls.md](./homelab_tls.md) | `deploy/homelab/tls/`, `frontend/nginx/` |
 
 ## Scope
 
@@ -42,7 +41,7 @@ sibling branches against the same contract and are summarised here from it:
 - Choosing the language or a prompt from the client (the STT service auto-detects; the backend sends
   neither `language` nor `initial_prompt`).
 - Re-transcribing or re-splitting a stored recording; editing lines happens in the editor (Enter
-  splits, Backspace joins, see `feat/editor-line-split-join`).
+  splits, Backspace joins, see [editor_line_split_join.md](./editor_line_split_join.md)).
 - Copying recordings when a canvas is forked, exporting them, or showing them on shared (public)
   canvases.
 - Audio transcoding, trimming or compression on the server; the bytes are stored as uploaded.
@@ -345,8 +344,8 @@ parses the body with pydantic. Words with blank text are dropped.
 | `voice_max_upload_bytes` | `VOICE_MAX_UPLOAD_BYTES` | `26214400` (25 MiB) | largest accepted recording |
 
 The upload passes through nginx (`client_max_body_size 26m` for `/api/`) and the ingress
-(`proxy-body-size: 26m`) on `feat/homelab-ingress-tls`; the chart wires `STT_URL` to the STT
-component on `feat/stt-service`. `docker-compose.yaml` has no STT service, so local Compose runs with
+(`proxy-body-size: 26m`) ([homelab_tls.md](./homelab_tls.md)); the chart wires `STT_URL` to the STT
+component ([stt_service.md](./stt_service.md)). `docker-compose.yaml` has no STT service, so local Compose runs with
 voice takes disabled; to try them locally, run the STT service yourself and set `STT_URL` for the
 backend (e.g. in `backend/.env`). Starlette spools multipart uploads (to disk past 1 MiB) before the
 handler runs, so the byte limit is enforced while reading the spooled part; nginx/ingress bound the
@@ -379,11 +378,11 @@ raw request.
 `test_recordings_db.py` runs only with `VOICE_TEST_DATABASE_URL` set to a throwaway database whose name
 contains `test` (it migrates up, down and up, and writes rows); see its docstring.
 
-### Clients and STT (sibling branches)
+### Clients and STT
 
-See the branch table at the top; their feature specifics (modal gestures, silence auto-stop setting,
-permission handling, recordings section UI, STT model/GPU deployment) are documented on those branches
-and summarised in the end-to-end flow above.
+Their specifics (modal gestures, silence auto-stop setting, permission handling, recordings section
+UI, STT model/GPU deployment) are in the docs linked in the table at the top and summarised in the
+end-to-end flow above.
 
 ## Invariants and constraints
 
@@ -395,8 +394,8 @@ and summarised in the end-to-end flow above.
   any database error rolls back and answers 500 `persist_failed` with nothing changed.
 - **Append never rewrites existing lines**: stored grid lines are copied verbatim; only new lines are
   syllabified; grid lines and non-blank text lines stay index-aligned for phonetics.
-- Taps always win over the auto split; lines are never empty; a tie between boundaries goes to the
-  earlier one; `split_mode = single` iff exactly one line came from the auto split.
+- Taps always win over the auto split; lines are never empty; a tap exactly halfway through a word
+  splits before it; `split_mode = single` iff exactly one line came from the auto split.
 - Recordings live and die with their snippet (FK cascade) and survive merges (moved before the
   originals are deleted).
 - The STT service is called only after the request is validated and ownership is confirmed.
