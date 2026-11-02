@@ -20,3 +20,6 @@ spec:
           set -e
           wget -qO- {{ include "lyrics-canvas.frontend.url" . }}/healthz
           wget -qO- {{ include "lyrics-canvas.backend.url" . }}/api/health
+          {{- if .Values.stt.enabled }}
+          wget -qO- {{ include "lyrics-canvas.stt.url" . }}/readyz
+          {{- end }}

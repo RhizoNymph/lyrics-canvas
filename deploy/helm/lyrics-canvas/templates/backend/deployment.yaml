@@ -96,6 +96,10 @@ spec:
             {{- end }}
             - name: HF_HOME
               value: /cache/huggingface
+            {{- if .Values.stt.enabled }}
+            - name: STT_URL
+              value: {{ include "lyrics-canvas.stt.url" . | quote }}
+            {{- end }}
             {{- with $b.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
