@@ -84,6 +84,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [BACKEND.md](./BACKEND.md) | Backend index with links to granular module docs |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
+| [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop), transcribed by the server into a new snippet or appended lines; recordings played back and deleted in the editor |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
@@ -349,6 +350,17 @@ Features Index:
       - android/scripts/verify_release_apk.sh
     depends_on: [android_app]
     doc: docs/features/android_release.md
+  android_voice_capture:
+    description: Android voice capture - top-bar Record on the canvas screen (canvas + list) and the editor opens a full-screen modal (elapsed, level meter, Line N, Stop, Cancel; tap = next line, double-tap within 300 ms = stop; silence auto-stop off/2/3/5/8/10 s per device in DataStore with an adaptive-noise-floor energy VAD). RECORD_AUDIO runtime permission with rationale and app-settings path; MediaRecorder OGG/Opus on API 29+ else AAC/MPEG-4 into the cache. Multipart POST /api/canvases/{id}/voice-takes with breaks_ms since recorder start; new snippet at the viewport centre (selected) or, from the editor, edits saved first then appended and the rows reloaded. Typed errors from the server codes, Retry keeps the file. Editor Recordings section lists, plays (audio fetched with the bearer token into the cache) and deletes takes. Pure state machine, gesture reducer and VAD in :core:logic.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/voice/
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/voice/
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/VoiceRepository.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/voice/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (voiceTarget, onVoiceTakeSaved)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/GridEditorRoute.kt
+    depends_on: [android_app, voice_capture]
+    doc: docs/features/android_voice_capture.md
   android_health_banner:
     description: App-wide status banner in the Android client while it is in the foreground - polls GET /api/health (15 s, quick 3 s confirm, 5-60 s backoff while down) and counts 502/503/504 and IO errors of every regular ApiClient call through an observer; a pure debounced state machine (2 failures with one from a probe, offline at once, brief back online) shared in behaviour with the web client; polls GET /_status/alerts (frontend nginx origin, configured by -PstatusAlertsUrl when the API base is the backend directly) and shows firing alerts critical first; per-incident dismiss, expandable descriptions, live-region announcements.
     entry_points:
