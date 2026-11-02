@@ -18,10 +18,15 @@ import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.buffer
+import okio.sink
+import java.io.File
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -46,7 +51,7 @@ class ApiClient(
     private val observer: ApiCallObserver = ApiCallObserver.None,
 ) {
     suspend fun <T> get(path: List<String>, response: DeserializationStrategy<T>): ApiResult<T> =
-        call(HttpMethod.GET, path, null) { json.decodeFromString(response, it) }
+        call(HttpMethod.GET, path, null) { readJson(it) { text -> json.decodeFromString(response, text) } }
 
     suspend fun <B, T> send(
         method: HttpMethod,
@@ -54,19 +59,38 @@ class ApiClient(
         body: B,
         bodySerializer: SerializationStrategy<B>,
         response: DeserializationStrategy<T>,
-    ): ApiResult<T> = call(method, path, json.encodeToString(bodySerializer, body)) { json.decodeFromString(response, it) }
+    ): ApiResult<T> = call(method, path, json.encodeToString(bodySerializer, body).toRequestBody(JSON_MEDIA_TYPE)) {
+        readJson(it) { text -> json.decodeFromString(response, text) }
+    }
+
+    /** POST a multipart form (file uploads); the JSON response is decoded with [response]. */
+    suspend fun <T> sendMultipart(path: List<String>, body: MultipartBody, response: DeserializationStrategy<T>): ApiResult<T> =
+        call(HttpMethod.POST, path, body) { readJson(it) { text -> json.decodeFromString(response, text) } }
 
     /** DELETE; the 204 body is ignored. */
-    suspend fun delete(path: List<String>): ApiResult<Unit> = call(HttpMethod.DELETE, path, null) { }
+    suspend fun delete(path: List<String>): ApiResult<Unit> = call(HttpMethod.DELETE, path, null) { readJson(it) { } }
 
-    private suspend fun <T> call(method: HttpMethod, path: List<String>, body: String?, decode: (String) -> T): ApiResult<T> {
-        val request = buildRequest(method, path, body, tokenStore.token())
+    /**
+     * GET raw bytes into [target] (written to a sibling `.part` file, then renamed, so [target] is
+     * either complete or absent). Error responses are read and classified like the JSON calls.
+     */
+    suspend fun download(path: List<String>, target: File): ApiResult<File> =
+        call(HttpMethod.GET, path, null, accept = "*/*") { readFile(it, target) }
+
+    private suspend fun <T> call(
+        method: HttpMethod,
+        path: List<String>,
+        body: RequestBody?,
+        accept: String = "application/json",
+        read: (Response) -> ApiResult<T>,
+    ): ApiResult<T> {
+        val request = buildRequest(method, path, body, accept, tokenStore.token())
         val response = try {
             okHttpClient.newCall(request).await()
         } catch (e: IOException) {
             return report(ApiResult.Failure(ApiError.Network(e)))
         }
-        val result = withContext(ioDispatcher) { response.use { read(it, decode) } }
+        val result = withContext(ioDispatcher) { response.use(read) }
         val error = result.errorOrNull()
         if (error is ApiError.Unauthorized && error.status == 401) tokenStore.clear()
         return report(result)
@@ -78,17 +102,31 @@ class ApiClient(
         return result
     }
 
-    private fun buildRequest(method: HttpMethod, path: List<String>, body: String?, token: String?): Request {
+    private fun buildRequest(method: HttpMethod, path: List<String>, body: RequestBody?, accept: String, token: String?): Request {
         val url = baseUrl.newBuilder().apply { path.forEach(::addPathSegment) }.build()
         return Request.Builder()
             .url(url)
-            .method(method.name, body?.toRequestBody(JSON_MEDIA_TYPE))
-            .header("Accept", "application/json")
+            .method(method.name, body)
+            .header("Accept", accept)
             .apply { if (token != null) header("Authorization", "Bearer $token") }
             .build()
     }
 
-    private fun <T> read(response: Response, decode: (String) -> T): ApiResult<T> {
+    private fun readFile(response: Response, target: File): ApiResult<File> {
+        if (!response.isSuccessful) return readJson(response) { target }
+        val part = File(target.parentFile, target.name + ".part")
+        return try {
+            target.parentFile?.mkdirs()
+            part.sink().buffer().use { sink -> sink.writeAll(response.body.source()) }
+            if (!part.renameTo(target)) throw IOException("could not move ${part.name} into place")
+            ApiResult.Success(target)
+        } catch (e: IOException) {
+            part.delete()
+            ApiResult.Failure(ApiError.Network(e))
+        }
+    }
+
+    private fun <T> readJson(response: Response, decode: (String) -> T): ApiResult<T> {
         val text = try {
             response.body.string()
         } catch (e: IOException) {
