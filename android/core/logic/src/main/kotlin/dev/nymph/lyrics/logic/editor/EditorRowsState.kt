@@ -6,7 +6,10 @@ import dev.nymph.lyrics.logic.grid.localSyllabifyLine
 import dev.nymph.lyrics.logic.grid.moveChunk
 import dev.nymph.lyrics.logic.grid.removeCell
 import dev.nymph.lyrics.logic.grid.withRebuiltText
+import dev.nymph.lyrics.logic.jsIsSpace
 import dev.nymph.lyrics.logic.jsTrim
+import dev.nymph.lyrics.logic.jsTrimEnd
+import dev.nymph.lyrics.logic.jsTrimStart
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
 
@@ -18,6 +21,11 @@ import dev.nymph.lyrics.model.GridLine
  * when no row is non-blank. Rows in [arranged] were laid out by hand (or loaded from a saved grid)
  * and are never replaced by a syllabify result until their text is typed again. The constructor is
  * internal so only the reducers below can build a state, keeping the invariant.
+ *
+ * [caret] asks the view to put the caret of row `caret.row` at `caret.offset` when it shows that
+ * row's field. Structural edits (insert, delete, split, join) issue a fresh [CaretRequest] every
+ * time (identity equality), so the view can key on it; typing, grid edits and syllabify merges keep
+ * it, and focusing another row or reordering clears it (the caret then goes to the end of the row).
  */
 @ConsistentCopyVisibility
 data class EditorRowsState internal constructor(
@@ -26,7 +34,20 @@ data class EditorRowsState internal constructor(
     val arranged: Set<Int>,
     /** The focused row; -1 when none (a loaded snippet starts unfocused). */
     val activeRow: Int,
+    val caret: CaretRequest?,
 )
+
+/**
+ * Where the view should put the caret when it (re)builds row [row]'s field. Deliberately not a
+ * data class: two requests are equal only when they are the same edit.
+ */
+class CaretRequest internal constructor(val row: Int, val offset: Int) {
+    override fun toString(): String = "CaretRequest(row=$row, offset=$offset)"
+}
+
+private val BLANK = Row("", null, false)
+
+private fun edited(text: String): Row = Row(text, if (isBlank(text)) null else localSyllabifyLine(text), false)
 
 private data class Row(val text: String, val grid: GridLine?, val arranged: Boolean)
 
@@ -42,7 +63,7 @@ private fun toRows(state: EditorRowsState): MutableList<Row> {
     }
 }
 
-private fun fromRows(rows: List<Row>, activeRow: Int): EditorRowsState {
+private fun fromRows(rows: List<Row>, activeRow: Int, caret: CaretRequest?): EditorRowsState {
     val gridLines = rows.mapNotNull { it.grid }
     val arranged = rows.indices.filterTo(LinkedHashSet()) { rows[it].arranged && rows[it].grid != null }
     return EditorRowsState(
@@ -50,6 +71,7 @@ private fun fromRows(rows: List<Row>, activeRow: Int): EditorRowsState {
         gridData = if (gridLines.isNotEmpty()) GridData(gridLines) else null,
         arranged = arranged,
         activeRow = activeRow,
+        caret = caret,
     )
 }
 
@@ -68,7 +90,7 @@ fun initEditorState(rawText: String, savedGrid: GridData?): EditorRowsState {
             Row(text, localSyllabifyLine(text), false)
         }
     }
-    return fromRows(rows, if (rawText.isNotEmpty()) -1 else 0)
+    return fromRows(rows, if (rawText.isNotEmpty()) -1 else 0, null)
 }
 
 fun gridLineForRow(state: EditorRowsState, row: Int): GridLine? {
@@ -78,30 +100,93 @@ fun gridLineForRow(state: EditorRowsState, row: Int): GridLine? {
 }
 
 fun setActiveRow(state: EditorRowsState, activeRow: Int): EditorRowsState =
-    if (state.activeRow == activeRow) state else state.copy(activeRow = activeRow)
+    if (state.activeRow == activeRow) state else state.copy(activeRow = activeRow, caret = null)
 
 /** The user typed into a row: its grid becomes a local estimate and it is no longer arranged. */
 fun typeLine(state: EditorRowsState, row: Int, text: String): EditorRowsState {
     val rows = toRows(state)
     if (row !in rows.indices) return state
-    rows[row] = Row(text, if (isBlank(text)) null else localSyllabifyLine(text), false)
-    return fromRows(rows, state.activeRow)
+    rows[row] = edited(text)
+    return fromRows(rows, state.activeRow, state.caret)
 }
 
 /** Insert a blank row after [afterRow] and make it active. */
 fun insertRow(state: EditorRowsState, afterRow: Int): EditorRowsState {
     val rows = toRows(state)
-    rows.add((afterRow + 1).coerceIn(0, rows.size), Row("", null, false))
-    return fromRows(rows, afterRow + 1)
+    rows.add((afterRow + 1).coerceIn(0, rows.size), BLANK)
+    return fromRows(rows, afterRow + 1, CaretRequest(afterRow + 1, 0))
 }
 
-/** Remove a row (keeping at least one) and activate the row above. */
+/** Remove a row (keeping at least one) and activate the row above, caret at its end. */
 fun deleteRow(state: EditorRowsState, row: Int): EditorRowsState {
     val rows = toRows(state)
     if (row !in rows.indices) return state
-    if (rows.size == 1) return fromRows(listOf(Row("", null, false)), 0)
+    if (rows.size == 1) return fromRows(listOf(BLANK), 0, CaretRequest(0, 0))
     rows.removeAt(row)
-    return fromRows(rows, maxOf(0, row - 1))
+    val active = maxOf(0, row - 1)
+    return fromRows(rows, active, CaretRequest(active, rows[active].text.length))
+}
+
+/**
+ * Enter at [caret] in [row]: the text before stays (trailing whitespace trimmed), the text after
+ * becomes a new row directly below (leading whitespace trimmed), which becomes active with the
+ * caret at its start. Both halves are re-estimated and lose `arranged`. With only whitespace after
+ * the caret this is [insertRow] (the row is untouched); with only whitespace before it, a blank
+ * row opens above and the row moves down unchanged (keeping its grid and `arranged`).
+ */
+fun splitRow(state: EditorRowsState, row: Int, caret: Int): EditorRowsState {
+    val rows = toRows(state)
+    val current = rows.getOrNull(row) ?: return state
+    val at = caret.coerceIn(0, current.text.length)
+    val before = current.text.substring(0, at)
+    val after = current.text.substring(at)
+    if (isBlank(after)) return insertRow(state, row)
+    rows.removeAt(row)
+    if (isBlank(before)) {
+        rows.addAll(row, listOf(BLANK, current.copy(text = jsTrimStart(after))))
+    } else {
+        rows.addAll(row, listOf(edited(jsTrimEnd(before)), edited(jsTrimStart(after))))
+    }
+    return fromRows(rows, row + 1, CaretRequest(row + 1, 0))
+}
+
+/** The rows after joining `upper + 1` onto `upper`, with the seam offsets before / after the separator. */
+private class Joined(val rows: List<Row>, val seam: Int, val joinPoint: Int)
+
+/**
+ * Join row `upper + 1` onto [upper], with one space between unless either side is blank or already
+ * has whitespace at the seam. A blank side contributes nothing: the other row is kept as is (grid
+ * and `arranged` included). Otherwise the joined row is re-estimated and loses `arranged`.
+ */
+private fun join(state: EditorRowsState, upper: Int): Joined? {
+    val rows = toRows(state)
+    if (upper < 0) return null
+    val top = rows.getOrNull(upper) ?: return null
+    val bottom = rows.getOrNull(upper + 1) ?: return null
+    val joined = when {
+        isBlank(bottom.text) -> Joined(rows, top.text.length, top.text.length)
+        isBlank(top.text) -> Joined(rows, 0, 0).also { rows[upper] = bottom }
+        else -> {
+            val hasSpace = jsIsSpace(top.text.last()) || jsIsSpace(bottom.text.first())
+            val sep = if (hasSpace) "" else " "
+            rows[upper] = edited(top.text + sep + bottom.text)
+            Joined(rows, top.text.length, top.text.length + sep.length)
+        }
+    }
+    rows.removeAt(upper + 1)
+    return joined
+}
+
+/** Backspace at caret 0 of [row]: join it onto the row above; caret at the join point. */
+fun joinWithPrevious(state: EditorRowsState, row: Int): EditorRowsState {
+    val joined = join(state, row - 1) ?: return state
+    return fromRows(joined.rows, row - 1, CaretRequest(row - 1, joined.joinPoint))
+}
+
+/** Delete at the end of [row]: join the row below onto it; the caret stays where it was. */
+fun joinWithNext(state: EditorRowsState, row: Int): EditorRowsState {
+    val joined = join(state, row) ?: return state
+    return fromRows(joined.rows, row, CaretRequest(row, joined.seam))
 }
 
 private inline fun updateGrid(state: EditorRowsState, row: Int, fn: (GridLine) -> GridLine): EditorRowsState {
@@ -112,7 +197,7 @@ private inline fun updateGrid(state: EditorRowsState, row: Int, fn: (GridLine) -
     if (next === grid) return state
     val rebuilt = withRebuiltText(next)
     rows[row] = Row(rebuilt.rawText, rebuilt, true)
-    return fromRows(rows, state.activeRow)
+    return fromRows(rows, state.activeRow, state.caret)
 }
 
 /** Move cells `[start, end)` of a row so the chunk starts at [to] (see [moveChunk]). */
@@ -145,7 +230,7 @@ fun reorderRows(state: EditorRowsState, from: Int, to: Int): EditorRowsState {
     } else if (to <= activeRow && activeRow < from) {
         activeRow += 1
     }
-    return fromRows(rows, activeRow)
+    return fromRows(rows, activeRow, null)
 }
 
 /**
@@ -163,7 +248,7 @@ fun mergeSyllabified(state: EditorRowsState, result: GridData): EditorRowsState 
         consumed += match
         row.copy(grid = attachWords(result.lines[match]))
     }
-    return fromRows(next, state.activeRow)
+    return fromRows(next, state.activeRow, state.caret)
 }
 
 /** True when some non-blank row still wants an API syllabification. */

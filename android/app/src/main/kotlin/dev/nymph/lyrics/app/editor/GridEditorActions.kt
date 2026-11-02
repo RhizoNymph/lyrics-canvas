@@ -9,6 +9,13 @@ interface GridEditorActions {
     fun deactivateRow()
     fun insertRowAfter(row: Int)
     fun deleteRow(row: Int)
+
+    /** Enter in [row]'s field: set its text to [text] (when different), then split at [caret]. */
+    fun splitRow(row: Int, text: String, caret: Int)
+
+    /** Backspace at caret 0 of [row]: join onto the previous row, or delete an empty row. */
+    fun backspaceAtStart(row: Int)
+
     fun setSnippetType(type: SnippetType)
 
     fun tapCell(row: Int, col: Int)

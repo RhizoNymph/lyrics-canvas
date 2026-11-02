@@ -16,6 +16,15 @@ private val JS_TRAILING = Regex("[$JS_SPACE]+$")
 /** `s.trim()` in JS. */
 internal fun jsTrim(s: String): String = s.replace(JS_LEADING, "").replace(JS_TRAILING, "")
 
+/** `s.trimStart()` in JS. */
+internal fun jsTrimStart(s: String): String = s.replace(JS_LEADING, "")
+
+/** `s.trimEnd()` in JS. */
+internal fun jsTrimEnd(s: String): String = s.replace(JS_TRAILING, "")
+
+/** `/\s/.test(c)` in JS for a single character. */
+internal fun jsIsSpace(c: Char): Boolean = JS_LEADING.matchesAt(c.toString(), 0)
+
 /** `s.split(/\s+/)` in JS (callers trim first, as the TS does). */
 internal fun jsSplitWhitespace(s: String): List<String> = s.split(JS_WHITESPACE_RUN)
 
