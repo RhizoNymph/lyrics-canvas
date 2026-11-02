@@ -25,6 +25,8 @@ export default function CanvasViewport() {
   const { editingSnippetId, setEditingSnippet } = useUIStore();
   // The rhyme store needs the canvas size to place materialized snippets at the viewport centre.
   const setRhymeViewSize = useRhymeStore((s) => s.setViewSize);
+  // Voice capture places new snippets at the viewport centre, also from list view (last measured size).
+  const setCanvasViewSize = useCanvasStore((s) => s.setCanvasViewSize);
 
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
@@ -38,12 +40,13 @@ export default function CanvasViewport() {
         const height = containerRef.current.clientHeight;
         setSize({ width, height });
         setRhymeViewSize(width, height);
+        setCanvasViewSize(width, height);
       }
     };
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, [setRhymeViewSize]);
+  }, [setRhymeViewSize, setCanvasViewSize]);
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {
