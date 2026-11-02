@@ -161,7 +161,7 @@ browser https://10.1.1.69/ (no SNI)
          /*     -> frontend Service :80 -> nginx :8080 (SPA, /_status/alerts)
 browser http://10.1.1.69/      -> 308 to https://10.1.1.69/ (force-ssl-redirect)
 android http://10.1.1.69:32443 -> frontend NodePort -> nginx :8080
-                                    /api/ (client_max_body_size 26m, read timeout 120 s) -> backend
+                                    /api/ (client_max_body_size 26m, read timeout 180 s) -> backend
 ```
 
 ## The script
@@ -360,7 +360,7 @@ working. To switch it to `https://10.1.1.69`:
   exposed.
 - Upload limits: the Ingress (26m) and frontend nginx `/api/` (26m) are both
   above the backend's 25 MiB voice limit plus multipart overhead. Read
-  timeouts are Ingress 180 s and nginx `/api/` 120 s; both must stay at or
+  timeouts are Ingress 180 s and nginx `/api/` 180 s; both must stay well
   above the backend's STT timeout.
 - The NodePort 32443 stays: plain-HTTP clients (the Android app) keep
   working.

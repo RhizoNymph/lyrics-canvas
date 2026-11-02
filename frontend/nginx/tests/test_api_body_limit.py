@@ -183,7 +183,9 @@ class TemplateTest(unittest.TestCase):
         self.assertRegex(block, r"\n\s*client_max_body_size 26m;")
         timeout = re.search(r"proxy_read_timeout (\d+)s;", block)
         assert timeout
-        self.assertGreaterEqual(int(timeout.group(1)), 120)
+        # Strictly above the backend's 120 s STT timeout, so a slow transcription answers with the
+        # backend's typed error instead of nginx cutting the connection first.
+        self.assertGreaterEqual(int(timeout.group(1)), 150)
 
     def test_body_limit_only_raised_for_api(self) -> None:
         self.assertEqual(len(re.findall(r"client_max_body_size", self.TEMPLATE)), 1)
