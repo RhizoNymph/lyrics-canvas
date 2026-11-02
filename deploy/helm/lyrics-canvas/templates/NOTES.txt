@@ -5,6 +5,8 @@ Lyrics Canvas {{ .Chart.AppVersion }} is being deployed as release {{ .Release.N
 Open the app at:
 {{- range .Values.ingress.hosts }}
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ . }}/
+{{- else }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://<address of any node running the ingress controller>/
 {{- end }}
 {{- else }}
 

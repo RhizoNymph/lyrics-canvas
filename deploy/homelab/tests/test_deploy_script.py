@@ -86,6 +86,7 @@ class DeployScriptTestCase(unittest.TestCase):
             "deploy/helm/lyrics-canvas/Chart.yaml": "apiVersion: v2\nname: lyrics-canvas\nversion: 0.1.0\n",
             "backend/Dockerfile": "FROM scratch\n",
             "frontend/Dockerfile.prod": "FROM scratch\n",
+            "stt/Dockerfile": "FROM scratch\n",
             "README.md": "committed\n",
         }
         for rel, content in files.items():
@@ -126,10 +127,17 @@ class DeployScriptTestCase(unittest.TestCase):
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return Run(proc.returncode, proc.stdout, proc.stderr, calls)
 
-    def happy_rules(self, *, backend: list[str] | None = None, frontend: list[str] | None = None) -> list[dict]:
+    def happy_rules(
+        self,
+        *,
+        backend: list[str] | None = None,
+        frontend: list[str] | None = None,
+        stt: list[str] | None = None,
+    ) -> list[dict]:
         return [
             registry_rule("lyrics-canvas-backend", backend),
             registry_rule("lyrics-canvas-frontend", frontend),
+            registry_rule("lyrics-canvas-stt", stt),
             {"match": r"helm3 status", "stdout": STATUS_OUTPUT, "exit": 0},
         ]
 
@@ -232,6 +240,8 @@ class TagTest(DeployScriptTestCase):
         self.assertTrue(run.matching(rf"docker build .* -t localhost:32000/lyrics-canvas-frontend:{sha} "))
         self.assertTrue(run.matching(rf"docker push localhost:32000/lyrics-canvas-backend:{sha}$"))
         self.assertTrue(run.matching(rf"docker push localhost:32000/lyrics-canvas-frontend:{sha}$"))
+        self.assertTrue(run.matching(rf"docker build .* -t localhost:32000/lyrics-canvas-stt:{sha} "))
+        self.assertTrue(run.matching(rf"docker push localhost:32000/lyrics-canvas-stt:{sha}$"))
 
     def test_tag_follows_new_commit(self) -> None:
         first = self.sha()
@@ -240,6 +250,7 @@ class TagTest(DeployScriptTestCase):
         self.assertNotEqual(first, self.sha())
         run = self.run_script("--dry-run")
         self.assertIn(f"backend.image.tag={self.sha()}", run.stderr)
+        self.assertIn(f"stt.image.tag={self.sha()}", run.stderr)
         self.assertNotIn(first, run.stderr)
 
 
@@ -258,6 +269,8 @@ class DryRunTest(DeployScriptTestCase):
             "/v2/lyrics-canvas-backend/tags/list",
             f"lyrics-canvas-backend:{sha}",
             f"lyrics-canvas-frontend:{sha}",
+            "/v2/lyrics-canvas-stt/tags/list",
+            f"lyrics-canvas-stt:{sha}",
             "helm3 upgrade --install lyrics",
             "helm3 test lyrics",
             "rm -rf lyrics-canvas-deploy/",
@@ -275,14 +288,17 @@ class BuildTest(DeployScriptTestCase):
         run = self.run_script(rules=self.happy_rules())
         self.assertEqual(run.code, EXIT_OK, run.stderr)
         builds = run.matching(r"docker build")
-        self.assertEqual(len(builds), 2)
+        self.assertEqual(len(builds), 3)
         for cmd in builds:
             self.assertIn("--network host", cmd)
             self.assertNotIn("/tmp", cmd)
-            self.assertRegex(cmd, rf" lyrics-canvas-deploy/{self.sha()}-\d+/(backend|frontend)$")
+            self.assertRegex(cmd, rf" lyrics-canvas-deploy/{self.sha()}-\d+/(backend|frontend|stt)$")
         (frontend,) = run.matching(r"docker build .*lyrics-canvas-frontend")
         self.assertRegex(frontend, r"-f lyrics-canvas-deploy/\S+/frontend/Dockerfile\.prod")
         self.assertIn("--build-arg VITE_GOOGLE_CLIENT_ID=", frontend)
+        (stt,) = run.matching(r"docker build .*lyrics-canvas-stt")
+        self.assertNotIn("--build-arg", stt)
+        self.assertNotIn(" -f ", stt)
 
     def test_google_client_id_passed_to_frontend_build(self) -> None:
         run = self.run_script(rules=self.happy_rules(), env={"LYRICS_VITE_GOOGLE_CLIENT_ID": "abc.apps"})
@@ -291,15 +307,16 @@ class BuildTest(DeployScriptTestCase):
 
     def test_existing_tag_skips_build(self) -> None:
         sha = self.sha()
-        run = self.run_script(rules=self.happy_rules(backend=["dev", sha], frontend=["dev"]))
+        run = self.run_script(rules=self.happy_rules(backend=["dev", sha], frontend=["dev"], stt=[sha]))
         self.assertEqual(run.code, EXIT_OK, run.stderr)
         self.assertEqual(run.matching(r"docker (build|push) .*lyrics-canvas-backend"), [])
+        self.assertEqual(run.matching(r"docker (build|push) .*lyrics-canvas-stt"), [])
         self.assertEqual(len(run.matching(r"docker (build|push) .*lyrics-canvas-frontend")), 2)
         self.assertIn("event=image.exists", run.stderr)
 
-    def test_both_tags_existing_skips_all_builds(self) -> None:
+    def test_all_tags_existing_skips_all_builds(self) -> None:
         sha = self.sha()
-        run = self.run_script(rules=self.happy_rules(backend=[sha], frontend=[sha]))
+        run = self.run_script(rules=self.happy_rules(backend=[sha], frontend=[sha], stt=[sha]))
         self.assertEqual(run.code, EXIT_OK, run.stderr)
         self.assertEqual(run.matching(r"docker "), [])
         self.assertTrue(run.matching(r"helm3 upgrade"))
@@ -312,9 +329,9 @@ class BuildTest(DeployScriptTestCase):
 
     def test_rebuild_ignores_existing_tags(self) -> None:
         sha = self.sha()
-        run = self.run_script("--rebuild", rules=self.happy_rules(backend=[sha], frontend=[sha]))
+        run = self.run_script("--rebuild", rules=self.happy_rules(backend=[sha], frontend=[sha], stt=[sha]))
         self.assertEqual(run.code, EXIT_OK, run.stderr)
-        self.assertEqual(len(run.matching(r"docker build")), 2)
+        self.assertEqual(len(run.matching(r"docker build")), 3)
         self.assertEqual(run.matching(r"/tags/list"), [])
 
     def test_skip_build_requires_existing_tags(self) -> None:
@@ -324,9 +341,21 @@ class BuildTest(DeployScriptTestCase):
         self.assertEqual(run.matching(r"helm3 upgrade"), [])
         self.assert_cleaned_up(run)
 
+    def test_skip_build_requires_stt_tag_too(self) -> None:
+        sha = self.sha()
+        run = self.run_script("--skip-build", rules=self.happy_rules(backend=[sha], frontend=[sha], stt=None))
+        self.assertEqual(run.code, EXIT_REGISTRY)
+        self.assertIn("lyrics-canvas-stt", run.stderr)
+        self.assertEqual(run.matching(r"helm3 upgrade"), [])
+
+    def test_stt_repo_is_configurable(self) -> None:
+        run = self.run_script("--dry-run", env={"LYRICS_STT_REPO": "other-stt"})
+        self.assertEqual(run.code, EXIT_OK, run.stderr)
+        self.assertIn(f"localhost:32000/other-stt:{self.sha()}", run.stderr)
+
     def test_skip_build_with_existing_tags_deploys(self) -> None:
         sha = self.sha()
-        run = self.run_script("--skip-build", rules=self.happy_rules(backend=[sha], frontend=[sha]))
+        run = self.run_script("--skip-build", rules=self.happy_rules(backend=[sha], frontend=[sha], stt=[sha]))
         self.assertEqual(run.code, EXIT_OK, run.stderr)
         self.assertEqual(run.matching(r"docker "), [])
         self.assertTrue(run.matching(r"helm3 upgrade"))
@@ -362,6 +391,7 @@ class HelmTest(DeployScriptTestCase):
         self.assertRegex(cmd, rf" -f {base}/deploy/helm/environments/homelab\.yaml ")
         self.assertIn(f" --set backend.image.tag={sha}", cmd)
         self.assertIn(f" --set frontend.image.tag={sha}", cmd)
+        self.assertIn(f" --set stt.image.tag={sha}", cmd)
         self.assertIn(" --wait", cmd)
         self.assertIn(" --timeout 10m", cmd)
         self.assertNotIn("reuse-values", cmd)
@@ -381,6 +411,7 @@ class HelmTest(DeployScriptTestCase):
         rules = [
             registry_rule("lyrics-canvas-backend", None),
             registry_rule("lyrics-canvas-frontend", None),
+            registry_rule("lyrics-canvas-stt", None),
             {"match": r"helm3 status", "stdout": "", "exit": 1},
         ]
         run = self.run_script(rules=rules)
@@ -440,6 +471,51 @@ class HelmTest(DeployScriptTestCase):
         self.assertIn("rollback", run.stderr)
         self.assert_cleaned_up(run)
 
+    def test_helm_test_never_asks_helm_for_logs(self) -> None:
+        # The test pod is deleted on success (hook-succeeded), so `helm test
+        # --logs` fails after a passing test.
+        run = self.run_script(rules=self.happy_rules())
+        self.assertEqual(run.code, EXIT_OK, run.stderr)
+        (cmd,) = run.matching(r"helm3 test")
+        self.assertNotIn("--logs", cmd)
+        self.assertIn("--timeout 5m", cmd)
+
+    def test_passing_helm_test_does_not_fetch_logs(self) -> None:
+        run = self.run_script(rules=self.happy_rules())
+        self.assertEqual(run.code, EXIT_OK, run.stderr)
+        self.assertEqual(run.matching(r"kubectl logs"), [])
+        self.assertIn("event=helm.test_passed", run.stderr)
+
+    def test_failed_helm_test_prints_test_pod_logs(self) -> None:
+        rules = [
+            {"match": r"helm3 test", "exit": 1},
+            {"match": r"kubectl logs", "stdout": "wget: server returned error: HTTP/1.1 503\n", "exit": 0},
+            *self.happy_rules(),
+        ]
+        run = self.run_script(rules=rules)
+        self.assertEqual(run.code, EXIT_HELM_TEST)
+        (logs,) = run.matching(r"kubectl logs")
+        self.assertRegex(
+            logs,
+            r"^microk8s kubectl logs -n lyrics-canvas -l "
+            # printf %q escapes the comma; the remote shell drops the backslash.
+            r"app\.kubernetes\.io/instance=lyrics\\?,app\.kubernetes\.io/component=test ",
+        )
+        self.assertIn("HTTP/1.1 503", run.stdout + run.stderr)
+        cmds = run.commands()
+        self.assertLess(cmds.index(next(c for c in cmds if "helm3 test" in c)), cmds.index(logs))
+        self.assert_cleaned_up(run)
+
+    def test_unavailable_test_logs_keep_helm_test_exit_code(self) -> None:
+        rules = [
+            {"match": r"helm3 test", "exit": 1},
+            {"match": r"kubectl logs", "exit": 1},
+            *self.happy_rules(),
+        ]
+        run = self.run_script(rules=rules)
+        self.assertEqual(run.code, EXIT_HELM_TEST)
+        self.assertIn("event=helm.test_logs_unavailable", run.stderr)
+
 
 class CleanupTest(DeployScriptTestCase):
     def test_cleanup_on_success(self) -> None:
@@ -495,6 +571,7 @@ class RepoConsistencyTest(unittest.TestCase):
         repos = re.findall(r"repository:\s*(\S+)", values)
         self.assertIn("localhost:32000/lyrics-canvas-backend", repos)
         self.assertIn("localhost:32000/lyrics-canvas-frontend", repos)
+        self.assertIn("localhost:32000/lyrics-canvas-stt", repos)
 
     def test_no_node_name_urls_in_repo_docs(self) -> None:
         """Node names are not in DNS; URLs shown to users must use IPs."""

@@ -129,6 +129,7 @@ private fun EditorRows(state: EditorUiState, actions: GridEditorActions, modifie
                 line = state.rowLines.getOrNull(row),
                 isActive = rows.activeRow == row,
                 arranged = row in rows.arranged,
+                caret = rows.caret?.takeIf { it.row == row },
                 selection = sel,
                 canRemoveRests = sel != null && selectionIsAllRests(state),
                 canMoveUp = row > 0,

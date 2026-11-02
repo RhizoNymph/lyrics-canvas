@@ -45,6 +45,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-frontend" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "lyrics-canvas.stt.fullname" -}}
+{{- printf "%s-stt" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "lyrics-canvas.postgres.fullname" -}}
 {{- printf "%s-postgres" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
@@ -163,6 +167,19 @@ entry.
 {{- printf "http://%s:%d" (include "lyrics-canvas.backend.fullname" .) (int .Values.backend.service.port) }}
 {{- end }}
 
+{{/*
+In-cluster STT base URL for the backend's STT_URL. Only meaningful with
+stt.enabled; the STT Service is ClusterIP and never reachable from outside.
+*/}}
+{{- define "lyrics-canvas.stt.url" -}}
+{{- printf "http://%s:%d" (include "lyrics-canvas.stt.fullname" .) (int .Values.stt.service.port) }}
+{{- end }}
+
+{{/* Claim backing the STT model cache when stt.modelCache.type=persistentVolumeClaim. */}}
+{{- define "lyrics-canvas.stt.claimName" -}}
+{{- default (printf "%s-models" (include "lyrics-canvas.stt.fullname" .)) .Values.stt.modelCache.persistentVolumeClaim.existingClaim }}
+{{- end }}
+
 {{- define "lyrics-canvas.frontend.url" -}}
 {{- printf "http://%s:%d" (include "lyrics-canvas.frontend.fullname" .) (int .Values.frontend.service.port) }}
 {{- end }}
@@ -192,4 +209,29 @@ entry.
 {{/* Claim backing the backup destination when destination.type=persistentVolumeClaim. */}}
 {{- define "lyrics-canvas.backup.claimName" -}}
 {{- default (include "lyrics-canvas.backup.fullname" .) .Values.backup.destination.persistentVolumeClaim.existingClaim }}
+{{- end }}
+
+{{/*
+Ingress paths shared by every rule: /api straight to the backend (unless
+disabled), everything else to the frontend. Only these two Services are ever
+routed; internal components stay unexposed.
+*/}}
+{{- define "lyrics-canvas.ingress.paths" -}}
+paths:
+  {{- if .Values.ingress.routeApiToBackend }}
+  - path: /api
+    pathType: Prefix
+    backend:
+      service:
+        name: {{ include "lyrics-canvas.backend.fullname" . }}
+        port:
+          number: {{ .Values.backend.service.port }}
+  {{- end }}
+  - path: /
+    pathType: Prefix
+    backend:
+      service:
+        name: {{ include "lyrics-canvas.frontend.fullname" . }}
+        port:
+          number: {{ .Values.frontend.service.port }}
 {{- end }}

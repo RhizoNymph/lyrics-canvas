@@ -14,6 +14,9 @@ import {
   typeLine,
   insertRow,
   deleteRow,
+  splitRow,
+  joinWithPrevious,
+  joinWithNext,
   moveChunkInRow,
   insertRestInRow,
   removeCellsInRow,
@@ -23,6 +26,10 @@ import {
   rawTextForSave,
 } from './editorState';
 import type { EditorRowsState } from './editorState';
+import { rowKeyAction } from './editorKeys';
+import { registerEditorBridge } from './editorBridge';
+import RecordButton from '@/components/voice/RecordButton';
+import RecordingsSection from '@/components/voice/RecordingsSection';
 
 const SYLLABIFY_DEBOUNCE_MS = 300;
 
@@ -63,7 +70,7 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const [rows, setRows] = useState<EditorRowsState>(() =>
     initEditorState(snippet?.raw_text ?? '', snippet?.grid_data ?? null),
   );
-  const { lines, activeRow } = rows;
+  const { lines, activeRow, caret } = rows;
   const joinedText = lines.join('\n');
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [snippetType, setSnippetType] = useState<SnippetType>(snippet?.snippet_type || 'freestyle');
@@ -75,21 +82,24 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const isSaving = useRef(false);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+  const snippetTypeRef = useRef(snippetType);
+  snippetTypeRef.current = snippetType;
 
   const setActiveRow = useCallback((row: number) => setRows((prev) => setActiveRowState(prev, row)), []);
 
-  // Focus the active row's input
+  // Focus the active row's input: the caret goes where a split/join/insert/delete asked
+  // (`caret` is a fresh object per structural edit), otherwise to the end of the text.
   useEffect(() => {
-    if (activeRow >= 0) {
-      requestAnimationFrame(() => {
-        const input = inputRefs.current.get(activeRow);
-        if (input) {
-          input.focus();
-          input.selectionStart = input.selectionEnd = input.value.length;
-        }
-      });
-    }
-  }, [activeRow]);
+    if (activeRow < 0) return;
+    const id = requestAnimationFrame(() => {
+      const input = inputRefs.current.get(activeRow);
+      if (!input) return;
+      input.focus();
+      const offset = caret && caret.row === activeRow ? Math.min(caret.offset, input.value.length) : input.value.length;
+      input.setSelectionRange(offset, offset);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [activeRow, caret]);
 
   // Debounced API syllabification, keyed on the text so a merged result does not
   // re-trigger it; arranged rows are never replaced (see mergeSyllabified).
@@ -127,9 +137,32 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     }
   }, [snippetType, snippetId, updateSnippet, closeEditor]);
 
-  // Click-outside
+  // Voice capture: save pending edits without closing, and take the rows of a server-appended snippet.
+  useEffect(
+    () =>
+      registerEditorBridge(snippetId, {
+        flush: async () => {
+          const current = rowsRef.current;
+          await updateSnippet(snippetId, {
+            raw_text: rawTextForSave(current),
+            grid_data: current.gridData,
+            snippet_type: snippetTypeRef.current,
+          });
+        },
+        reload: (next) => {
+          setRows(initEditorState(next.raw_text, next.grid_data));
+          setSelection(null);
+          setSnippetType(next.snippet_type);
+        },
+      }),
+    [snippetId, updateSnippet],
+  );
+
+  // Click-outside (the record buttons and the recording modal keep the editor open)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('[data-keep-editor-open]')) return;
       if (editorRef.current && !editorRef.current.contains(e.target as Node)) {
         save();
       }
@@ -197,14 +230,41 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
 
   // ---- Keyboard ----
 
-  const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>, row: number) => {
-    switch (e.key) {
-      case 'Enter': {
-        e.preventDefault();
-        setSelection(null);
-        setRows((prev) => insertRow(prev, row));
-        break;
+  /** Enter / Backspace / Delete that change the row structure (see `rowKeyAction`). */
+  const applyRowKey = (e: ReactKeyboardEvent<HTMLInputElement>, row: number): boolean => {
+    const input = e.currentTarget;
+    const action = rowKeyAction({
+      key: e.key,
+      text: input.value,
+      selectionStart: input.selectionStart ?? input.value.length,
+      selectionEnd: input.selectionEnd ?? input.value.length,
+      row,
+      rowCount: lines.length,
+      composing: e.nativeEvent.isComposing,
+    });
+    if (action.kind === 'none') return false;
+    e.preventDefault();
+    setSelection(null);
+    setRows((prev) => {
+      switch (action.kind) {
+        case 'split': {
+          const typed = action.text === prev.lines[row] ? prev : typeLine(prev, row, action.text);
+          return splitRow(typed, row, action.caret);
+        }
+        case 'joinPrevious':
+          return joinWithPrevious(prev, row);
+        case 'joinNext':
+          return joinWithNext(prev, row);
+        case 'deleteEmpty':
+          return deleteRow(prev, row);
       }
+    });
+    return true;
+  };
+
+  const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>, row: number) => {
+    if (applyRowKey(e, row)) return;
+    switch (e.key) {
       case 'Tab': {
         e.preventDefault();
         if (e.shiftKey) {
@@ -238,14 +298,6 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
         } else if (row < lines.length - 1) {
           e.preventDefault();
           setActiveRow(row + 1);
-        }
-        break;
-      }
-      case 'Backspace': {
-        if (lines[row] === '' && lines.length > 1) {
-          e.preventDefault();
-          setSelection(null);
-          setRows((prev) => deleteRow(prev, row));
         }
         break;
       }
@@ -370,6 +422,19 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
           <option value="hook">HOOK</option>
           <option value="freestyle">FREESTYLE</option>
         </select>
+        <span style={{ flex: 1 }} />
+        <RecordButton
+          variant="editor"
+          style={{
+            background: 'rgba(0,0,0,0.3)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: 4,
+            padding: '1px 6px',
+            fontSize: 10 * s,
+            cursor: 'pointer',
+          }}
+        />
       </div>
 
       {/* Grid body (inline: wide enough for the longest row, scrolls sideways inside the row) */}
@@ -478,9 +543,11 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
         <div style={{ paddingTop: 4 * s, fontSize: 9 * s, fontFamily: 'monospace', color: '#4a4a6a', whiteSpace: 'nowrap' }}>
           {selection
             ? 'drag or ←/→ to move · shift-click extends · +· rest · − remove rest · alt+↑/↓ move line · esc'
-            : 'click a syllable to select · double-click to edit text · ▲▼ move line'}
+            : 'click a syllable to select · double-click to edit text · ▲▼ move line · enter splits · ⌫ at start joins'}
         </div>
       </div>
+
+      <RecordingsSection snippetId={snippetId} scale={s} />
     </div>
   );
 }

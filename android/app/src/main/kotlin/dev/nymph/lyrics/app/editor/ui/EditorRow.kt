@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.nymph.lyrics.app.editor.CellSelection
 import dev.nymph.lyrics.app.editor.GridEditorActions
+import dev.nymph.lyrics.logic.editor.CaretRequest
 import dev.nymph.lyrics.model.GridLine
 
 /** Per-row facts the screen derives from [dev.nymph.lyrics.app.editor.EditorUiState]. */
@@ -39,6 +40,8 @@ internal data class RowModel(
     val line: GridLine?,
     val isActive: Boolean,
     val arranged: Boolean,
+    /** Where the field should put the caret, when a structural edit asked for this row. */
+    val caret: CaretRequest?,
     /** The selection when it is in this row. */
     val selection: CellSelection?,
     val canRemoveRests: Boolean,
@@ -137,9 +140,10 @@ internal fun EditorRow(
             ActiveLineField(
                 text = model.text,
                 arranged = model.arranged,
+                caret = model.caret,
                 onTextChange = { actions.typeLine(row, it) },
-                onNewLine = { actions.insertRowAfter(row) },
-                onDeleteEmpty = { actions.deleteRow(row) },
+                onSplit = { text, caret -> actions.splitRow(row, text, caret) },
+                onBackspaceAtStart = { actions.backspaceAtStart(row) },
                 modifier = Modifier.padding(start = EditorDimens.RowControl, end = 8.dp, bottom = 4.dp),
             )
         }

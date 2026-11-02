@@ -92,6 +92,12 @@ Equal rhyme keys at full depth score exactly 1.0 (cat/bat, station/nation). Miss
 on the shorter side count as zero: hinge vs door hinge at k=2 is 1.0/1.7. `d == 0` scores 0.
 Symmetric in `a` and `b`; `alignment[i].a_index/b_index` are syllable indexes into each side.
 
+Other consumers: the voice-take auto split
+(`app/services/voice/engine_oracle.py`, [voice_capture.md](../features/voice_capture.md)) scores
+consecutive lines' last words with `score(a, b, k=2)` after applying `DEFAULT_DIALECT_MAP`, and
+treats scores >= 0.75 as an end-rhyme bonus. Appended voice lines get phonetics through
+`compute_snippet_phonetics` with the snippet's stored overrides.
+
 ## Units
 
 `build_unit` is the only constructor. From `pronunciation_override or pronunciation` and the

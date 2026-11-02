@@ -2,7 +2,7 @@
 # Images are built on node0 and pushed to the microk8s registry addon.
 #
 # Deploy with deploy/homelab/deploy.sh, which builds images tagged with the
-# short commit SHA and passes --set {backend,frontend}.image.tag=<sha>. The
+# short commit SHA and passes --set {backend,frontend,stt}.image.tag=<sha>. The
 # `dev` tags below are only the fallback for a manual helm run.
 #
 # Credentials are generated in-cluster on first install and kept on upgrade.
@@ -49,6 +49,61 @@ frontend:
 
 postgres:
   affinity: *homelabNodes
+
+# Speech-to-text on node1's RTX 3090 (GPU operator installed; node1's default
+# containerd runtime is runc, so the pod must ask for the `nvidia` runtime class).
+# Weights (large-v3-turbo, ~1.6 GB) live on node1's disk so they survive pod,
+# PVC and release churn and download only once. Create the directory first,
+# owned by nymph:  ssh node1 mkdir -p /home/nymph/models/whisper
+stt:
+  enabled: true
+  image:
+    repository: localhost:32000/lyrics-canvas-stt
+    tag: dev
+    pullPolicy: IfNotPresent
+  device: cuda
+  gpus: 1
+  runtimeClassName: nvidia
+  nodeSelector:
+    kubernetes.io/hostname: node1
+  modelCache:
+    type: hostPath
+    hostPath:
+      path: /home/nymph/models/whisper
+  # Run as nymph (1000:1000) so the hostPath cache is owned by the same user
+  # as the directory on node1.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+# HTTPS through the microk8s ingress addon (ingress-nginx, class `public`,
+# hostPort 80/443 on every node), so browsers allow microphone access at
+# https://10.1.1.69/ (LAN) and https://100.64.0.4/ (tailnet). The NodePort
+# above stays for plain-HTTP clients such as the Android app.
+#
+# No hosts: one catch-all rule, because requests for bare IPs carry the IP as
+# Host. Browsers send no SNI to IP addresses, so ingress-nginx answers them with
+# its default certificate; point that at the Secret below once per cluster
+# (`microk8s enable ingress:default-ssl-certificate=lyrics-canvas/lyrics-canvas-tls`).
+# The Secret holds a server certificate from a local CA and is created by
+# deploy/homelab/tls/issue-cert.sh; no key material is ever in this file.
+# See docs/features/homelab_tls.md.
+ingress:
+  enabled: true
+  className: public
+  hosts: []
+  tls:
+    - secretName: lyrics-canvas-tls
+  annotations:
+    # Voice-take uploads: up to 25 MiB of audio plus multipart overhead.
+    nginx.ingress.kubernetes.io/proxy-body-size: 26m
+    # Above the backend's 120 s speech-to-text timeout.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+    # http://<node>/ on port 80 redirects to HTTPS.
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 
 # Nightly pg_dump to node1's disk (the NAS is out). The directory must exist on
 # node1, owned by nymph (1000:1000); dumps are created as that user so the

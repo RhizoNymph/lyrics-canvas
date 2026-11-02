@@ -71,6 +71,13 @@ syllabify_text(text):
 | 1 | Primary stress | Bold white text |
 | 2 | Secondary stress | Bold white text |
 
+## Other consumers
+
+- Voice takes ([voice_capture.md](../features/voice_capture.md)): `syllabify_text` builds the grid of a
+  new voice-take snippet and of the lines appended to an existing one (existing lines are never
+  re-syllabified); `syllabify_word` gives the auto split its per-word syllable counts, so line balance
+  matches the grid.
+
 ## Route
 
 ```

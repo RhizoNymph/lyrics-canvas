@@ -17,6 +17,7 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 | [Rhyme Sidebar](./frontend/rhyme-view.md) | Engine-backed rhyme search list with materialize-to-canvas | `rhymeStore`, `RhymeSidebar`, `QueryControls`, `CandidateList`, `CandidateRow`, `lib/rhyme/*` |
 | [State Management](./frontend/state-management.md) | Zustand stores for auth, canvas data, UI state, rhyme sidebar | `authStore`, `canvasStore`, `uiStore`, `rhymeStore` |
 | [List Mode](./features/list_mode.md) | Canvas page list view: last-edited order, tag filter, in-place editor, shared selection | `ListView`, `ListRow`, `GridPreview`, `lib/listMode/*`, `lib/canvas/visibility` |
+| [Web Voice Capture](./features/web_voice_capture.md) | Recorder modal (taps = line breaks, double tap = stop, silence auto-stop), voice-take upload, editor recordings list | `VoiceSession`, `voiceStore`, `VoiceCaptureModal`, `RecordButton`, `RecordingsSection`, `lib/voice/*`, `api/voice.ts` |
 | [Health Banner](./features/health_banner.md) | Backend health monitor, cluster alerts poller, status banner | `useStatusMonitoring`, `statusStore`, `StatusBanner`, `lib/health/*`, `lib/alerts/*`, `lib/statusBanner/*` |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces, constants | `client.ts`, `types/index.ts` |
 
@@ -30,6 +31,7 @@ src/
   types/rhyme.ts                    Rhyme-suggest API contract types + RhymeError
   api/client.ts                     Axios instance + endpoint modules (+ health interceptor)
   api/status.ts                     /api/health probe + /_status/alerts fetch (separate instance)
+  api/voice.ts                      Voice-take + recordings endpoints over an injected axios instance
   hooks/
     useRhymeQuery.ts                Debounced rhyme re-query while the sidebar is open
     useStatusMonitoring.ts          Runs the health monitor + alerts poller (app root)
@@ -38,6 +40,7 @@ src/
   lib/statusBanner/                 Health + alerts -> ordered, dismissible banner items
   lib/canvas/
     visibility.ts                   Tag-filter visibility shared by canvas and list
+  lib/voice/                        Voice capture: recorder machine, gestures, VAD, session, MediaRecorder adapter
   lib/listMode/
     order.ts                        Last-edited sort + frozen order while editing
     selection.ts                    Row click -> selection (plain / ctrl-cmd / shift range)
@@ -56,6 +59,7 @@ src/
     uiStore.ts                      Panel visibility + editing state + view mode
     rhymeStore.ts                   Rhyme sidebar session, query, materialize
     statusStore.ts                  Backend health, cluster alerts, dismissed banner keys
+    voiceStore.ts                   Recorder modal request, silence setting, take hand-off
   components/
     canvas/
       CanvasViewport.tsx            Pixi Stage orchestrator
@@ -65,8 +69,16 @@ src/
       gridCellText.ts               Cell label / tone / colours shared by gridDraw and GridPreview
       SnippetContextMenu.tsx        Right-click tag assignment menu
       InlineGridEditor.tsx          Inline beat grid editor (canvas overlay or in a list row)
+      editorBridge.ts               Flush / reload handle the open editor registers (voice capture)
       InfiniteGrid.tsx              Background grid
       GroupContainer.tsx            Group bounding boxes
+    voice/
+      VoiceCaptureModal.tsx         Store-connected recorder dialog (owns the VoiceSession)
+      VoiceCaptureView.tsx          Presentational recorder modal
+      useFocusTrap.ts               Modal focus trap
+      RecordButton.tsx              Toolbar / editor Record button
+      RecordingsSection.tsx         Editor recordings: fetch, play, delete
+      RecordingsListView.tsx        Presentational recordings list
     status/
       StatusBanner.tsx              Store-connected health/alerts banner
       StatusBannerView.tsx          Presentational banner cards
@@ -114,4 +126,4 @@ Components -> Zustand Actions -> Axios API -> Store Update -> Re-render
 - Dev: `npm run dev` (Vite, port 5173, proxies `/api/*` to `localhost:8000`)
 - Build: `npm run build` (`tsc && vite build`, ~887KB bundle)
 - Type check: `npx tsc --noEmit`
-- Tests: `npm test` (vitest 3.2.7, node environment, `src/**/*.test.ts`; alias `@` from `vitest.config.ts`)
+- Tests: `npm test` (vitest 3.2.7, node environment, `src/**/*.test.ts` and `src/**/*.test.tsx` (static markup); alias `@` from `vitest.config.ts`)

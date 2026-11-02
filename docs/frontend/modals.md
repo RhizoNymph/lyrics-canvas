@@ -1,6 +1,19 @@
 # Modals
 
-Full-screen overlay dialogs for search and export.
+Full-screen overlay dialogs for search and export, and the voice capture recorder.
+
+## VoiceCaptureModal
+
+**Files:** `src/components/voice/VoiceCaptureModal.tsx` (store-connected, owns a `VoiceSession`),
+`src/components/voice/VoiceCaptureView.tsx` (presentational), `src/components/voice/useFocusTrap.ts`
+
+Shown while `voiceStore.request` is set. The whole overlay is the tap target while recording
+(pointerdown or Space/Enter = next line, double tap = stop). It shows the elapsed time, a level meter
+(`role="meter"`), "Line N" (live region), Stop, Cancel and the silence auto-stop select, then a spinner
+while uploading, then typed error states with Retry / Save audio / Discard. It is `role="dialog"` and
+`aria-modal`, traps focus (Tab wraps, focus is restored on close), Escape cancels, and it stops key
+propagation so page shortcuts cannot act behind it. See
+[web_voice_capture.md](../features/web_voice_capture.md).
 
 ## SearchModal
 

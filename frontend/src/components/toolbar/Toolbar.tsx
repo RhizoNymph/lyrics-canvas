@@ -1,6 +1,7 @@
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { nlpApi, exportApi } from '@/api/client';
+import RecordButton from '@/components/voice/RecordButton';
 
 export default function Toolbar() {
   const {
@@ -98,6 +99,10 @@ export default function Toolbar() {
 
       <button onClick={undo} style={btnStyle} title="Undo (Ctrl+Z)">Undo</button>
       <button onClick={redo} style={btnStyle} title="Redo (Ctrl+Shift+Z)">Redo</button>
+
+      <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
+
+      <RecordButton variant="toolbar" style={btnStyle} />
 
       <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
 

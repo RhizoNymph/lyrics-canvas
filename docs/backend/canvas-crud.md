@@ -120,10 +120,14 @@ keeps the cells exactly as sent. Either way `phonetics` is computed from `raw_te
 (`compute_snippet_phonetics`; grid stress wins via overrides). A malformed grid is a 422. `group_id`, when
 given, is converted to a UUID so the new snippet joins that group.
 
+The derivation (grid, phonetics, size) lives in `app/services/snippet_content.py`
+(`derive_new_content`), shared with voice takes, which create their snippets the same way
+([voice_capture.md](../features/voice_capture.md)).
+
 ### Auto-Sizing on Create
 
 When a snippet is created, dimensions are auto-calculated from grid data (the stored one, supplied or
-syllabified):
+syllabified) by `snippet_content.compute_size` (re-exported as `app.api.snippets._compute_size`):
 
 ```
 width  = (max_cells + 1) * 60 + 44   (min: 200)
@@ -179,8 +183,19 @@ Details: [snippet_content_timestamp.md](../features/snippet_content_timestamp.md
 - `replace_with_merged` inserts the merged snippet with its tag links and deletes the originals in
   one transaction with a single commit; any database error rolls everything back and the route
   answers 500 `could not store the merge; nothing changed`.
+- Between the insert and the deletes the route's `reparent` hook
+  (`recording_service.reassign_recordings`) moves the originals' voice recordings onto the merged
+  snippet, so the FK cascade does not delete them.
 
 Rules and flow: [merge_blocks.md](../features/merge_blocks.md).
+
+### Voice Takes and Recordings
+
+`app/api/voice.py`: `POST /api/canvases/{id}/voice-takes` (multipart; new snippet or append),
+`GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}`.
+Append keeps existing grid lines verbatim and syllabifies only the new lines (unlike PUT with only
+`raw_text`), recomputes phonetics and size and bumps `content_updated_at`. Errors carry
+`{"error", "message"}` details. See [voice_capture.md](../features/voice_capture.md).
 
 ### Ownership Verification
 

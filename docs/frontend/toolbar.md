@@ -15,6 +15,7 @@ Top bar with canvas title, zoom controls, undo/redo, and tool toggles.
 | View | `List` / `Canvas` toggle (Ctrl+Shift+L): `uiStore.toggleViewMode`, highlighted in list mode; see [list_mode.md](../features/list_mode.md) |
 | Zoom | `-` (zoom / 1.2), `%` display, `+` (zoom * 1.2), Reset (hidden in list mode) |
 | History | Undo (Ctrl+Z), Redo (Ctrl+Shift+Z) |
+| Voice | `● Record` (Alt+Shift+R): `voiceStore.openRecorder()`; appends to the open editor, else a new snippet. Disabled with the tooltip "Recording needs HTTPS" outside a secure context; see [web_voice_capture.md](../features/web_voice_capture.md) |
 | Tools | Search (Ctrl+F), Rhymes (toggle), t-SNE (toggle; hidden in list mode) |
 | Merge | `Merge ⇣` (vertical, Ctrl+Shift+V), `Merge ⇢` (horizontal, Ctrl+Shift+H); disabled unless 2+ snippets are selected; followed by the merge notice when `mergeError` is set |
 | Export | Export button (right-aligned) |

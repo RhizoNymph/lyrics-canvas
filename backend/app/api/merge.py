@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.merge import MergeRequest, MergeResponse
 from app.schemas.snippet import GridDataModel
-from app.services import merge_service, snippet_service
+from app.services import merge_service, recording_service, snippet_service
 from app.services.merge_service import MergePersistError, MergeSource, MergeSourcesNotFoundError, TooFewSnippetsError
 from app.services.phonetics_service import compute_snippet_phonetics
 
@@ -71,6 +71,8 @@ async def merge_snippets(
             },
             [tags_by_id[t] for t in merged.tag_ids],
             [by_id[i] for i in merged.source_ids],
+            # voice-take recordings follow their lines into the merged snippet
+            reparent=recording_service.reassign_recordings,
         )
     except MergeSourcesNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Snippet not found") from exc

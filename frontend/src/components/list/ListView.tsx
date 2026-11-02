@@ -1,7 +1,8 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useVoiceStore } from '@/stores/voiceStore';
 import { visibleSnippets } from '@/lib/canvas';
 import { listClick, sortForList } from '@/lib/listMode';
 import SnippetContextMenu from '@/components/canvas/SnippetContextMenu';
@@ -23,12 +24,28 @@ export default function ListView() {
   const setEditingSnippet = useUIStore((s) => s.setEditingSnippet);
   const setContextMenu = useUIStore((s) => s.setContextMenu);
   const anchor = useRef<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const revealSnippetId = useVoiceStore((s) => s.revealSnippetId);
+  const clearReveal = useVoiceStore((s) => s.clearReveal);
 
   const sortedIds = useMemo(
     () => sortForList(visibleSnippets(snippets, activeTagFilters)).map((s) => s.id),
     [snippets, activeTagFilters],
   );
   const order = useFrozenOrder(sortedIds, editingSnippetId !== null);
+
+  // Scroll to a snippet a voice take just created (it is already selected).
+  useEffect(() => {
+    if (revealSnippetId === null) return;
+    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-snippet-id]') ?? []).find(
+      (el) => el.dataset.snippetId === revealSnippetId,
+    );
+    if (row) {
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row.focus({ preventScroll: true });
+    }
+    clearReveal(revealSnippetId);
+  }, [revealSnippetId, order, clearReveal]);
 
   const onRowClick = (id: string, e: ReactMouseEvent) => {
     const result = listClick(
@@ -65,6 +82,7 @@ export default function ListView() {
 
   return (
     <div
+      ref={listRef}
       role="listbox"
       aria-multiselectable
       aria-label="Snippets, last edited first"

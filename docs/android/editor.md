@@ -5,7 +5,8 @@ select chunks of cells, drag them along their line, insert or remove rests, reor
 is the touch port of the web `InlineGridEditor` (`frontend/src/components/canvas/{InlineGridEditor,
 GridRow,useChunkDrag,editorState}.ts(x)`); the row state and every grid reducer are the `:core:logic`
 ports, not reimplementations. Contract: `docs/features/android_app.md` (touch mapping, grid editor
-rows); behaviour: `docs/features/grid_rearrange.md`.
+rows); behaviour: `docs/features/grid_rearrange.md`, `docs/features/editor_line_split_join.md` (Enter /
+Backspace line split and join).
 
 ## Scope
 
@@ -35,7 +36,8 @@ Rows (Column + verticalScroll, imePadding below the Scaffold insets)
         ●                   ●        <- selection handles (row with a selection)
         +·  −  ◀  ▶  [Extend]  Clear <- chunk toolbar (row with a selection)
   ≡  2  | ... |                                     4  ⋮
-        [ Type lyrics…                 ]  <- active row only, IME action Next = new line
+        [ Type lyrics…                 ]  <- active row only; IME Next splits at the caret,
+                                             Backspace at the start joins onto the row above
   + Add line
 Recordings (2) ▸        <- collapsible: date · duration, transcript preview, Play/Pause, Delete
 Hint line (+ "local estimates" note after a syllabify failure)
@@ -63,6 +65,10 @@ init      EditorUiState.initial(snippet): initEditorState(raw_text, grid_data)
             Success -> mergeSyllabified (arranged rows untouched), syllabifyError = null
             Failure -> syllabifyError = error (rows keep their local estimates)
 typeLine  typeLine reducer (local estimate now, arranged cleared); clears a selection in that row
+splitRow(row, text, caret)  typeLine first when text differs, then core splitRow (new row below
+          active, caret request at 0); selection cleared
+backspaceAtStart(row)       '' && more rows: deleteRow | row > 0: joinWithPrevious (caret at the join
+          point) | else unchanged; selection cleared
 tapCell   tapSelection(sel, row, col, extendMode)
 beginChunkDrag(row, col)  long-press: keep the selection if it holds col, else select col
 resizeSelection(edge, col) handle drag: resizeSelection (never crosses the other edge)
@@ -120,8 +126,12 @@ neighbour's span)
 and a 3 dp line marks where it will land; drop calls `reorderRow(from, target)`.
 
 Active row: `ActiveLineField` keeps its own `TextFieldValue` (cursor, IME composition) and pushes text
-to the ViewModel; it takes the row's text back only when the row became arranged (a chunk edit rebuilt
-the text). Typing always clears `arranged`, so a stale frame can never overwrite typed text. It
+to the ViewModel. The value always starts with a zero-width space sentinel so Backspace at the row's
+start shows up as a value change on soft keyboards (which send no key event there);
+`interpretLineFieldChange` turns changes into an edit, a join or a split, and IME Next splits at the
+caret (`docs/features/editor_line_split_join.md`). The value is rebuilt (`remember(caret)`) when a
+structural edit issues a new `CaretRequest` for the row, and it takes the row's text back when the row
+became arranged (a chunk edit rebuilt the text). Typing always clears `arranged`, so a stale frame can never overwrite typed text. It
 requests focus when it appears; the row calls `bringIntoView` when it becomes active; the screen
 column has `imePadding()` (the activity uses `adjustResize`).
 
@@ -149,15 +159,16 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 | `GridEditorActions.kt` | `GridEditorActions`: every user intent the screen can send |
 | `EditorUiState.kt` | `EditorUiState` (`rows`, `selection`, `extendMode`, `snippetType`, `save`, `syllabifyError`, derived `rowLines`), sealed `SaveStatus` (`Idle`, `Saving`, `Saved(snippet)`, `Failed(error)`) |
 | `CellSelection.kt` | `CellSelection` (private constructor; `of`, `cell`, `contains`, `shiftedBy`, `inRow`, `fitsIn`), `SelectionEdge`, `tapSelection`, `resizeSelection`, `indexAfterReorder` |
+| `LineFieldEdit.kt` | `LINE_FIELD_SENTINEL`, `LineFieldState`, sealed `LineFieldEdit` (`Edit`, `JoinPrevious`, `Split`), `interpretLineFieldChange`, `enterSplit` |
 | `DragGeometry.kt` | `CellMetrics`, `cellIndexAt`, `cellIndexClamped`, `dropGapAt` (core `gapFromX`), `handleAt`, `edgeAutoScrollDelta`, `RowSpan`, `reorderTargetIndex` |
 | `ui/GridEditorScreen.kt` | Scaffold, back handling, save-error snackbar, reorderable rows column, hint line; `snackbar`, `topBarActions`, `bottomPanel` slots |
 | `ui/EditorTopBar.kt` | Snippet type selector, extra actions slot, Discard, Save (progress while saving) |
-| `ui/EditorRow.kt` | `RowModel`, `EditorRow` (handle, number, strip, count, menu, toolbar, field) |
+| `ui/EditorRow.kt` | `RowModel` (incl. `caret` request for the row), `EditorRow` (handle, number, strip, count, menu, toolbar, field) |
 | `ui/CellStrip.kt` | Cells, gestures (tap / handles / long-press drag), drop indicator, auto-scroll |
 | `ui/RowToolbar.kt` | `+·`, `−`, ◀, ▶, Extend chip, Clear |
-| `ui/ActiveLineField.kt` | Active row `OutlinedTextField` (IME Next = new line, Backspace on empty deletes the row) |
+| `ui/ActiveLineField.kt` | Active row `OutlinedTextField` with the sentinel (IME Next splits at the caret, Backspace at the start joins / deletes an empty row), own "Type lyrics…" overlay |
 | `ui/EditorDimens.kt` | Cell, handle, auto-scroll and control sizes |
 
 Tests under `android/app/src/test/kotlin/dev/nymph/lyrics/app/editor/` (JUnit 5, coroutines-test,
 Turbine; no Robolectric): `GridEditorViewModelTest` (fake repositories in `Fakes.kt`),
-`CellSelectionTest`, `DragGeometryTest`, `GridEditorVoiceTest`.
+`CellSelectionTest`, `DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`, `GridEditorVoiceTest`.
