@@ -31,6 +31,33 @@
         "title": "BatchPositionUpdate",
         "type": "object"
       },
+      "Body_create_voice_take_api_canvases__canvas_id__voice_takes_post": {
+        "properties": {
+          "audio": {
+            "description": "The recording; audio/webm, ogg, mp4, aac, mpeg or wav",
+            "format": "binary",
+            "title": "Audio",
+            "type": "string"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON: {\"breaks_ms\": [int], \"duration_ms\": int, \"target\": {...}}",
+            "title": "Meta"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_create_voice_take_api_canvases__canvas_id__voice_takes_post",
+        "type": "object"
+      },
       "CanvasCreate": {
         "properties": {
           "title": {
@@ -711,6 +738,54 @@
           "syllables"
         ],
         "title": "PronunciationOverride",
+        "type": "object"
+      },
+      "RecordingResponse": {
+        "description": "A stored recording without its audio (fetch that from ``/api/recordings/{id}/audio``).",
+        "properties": {
+          "byte_size": {
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "snippet_id": {
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "split_mode": {
+            "$ref": "#/components/schemas/SplitMode"
+          },
+          "transcript": {
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "snippet_id",
+          "mime_type",
+          "duration_ms",
+          "byte_size",
+          "transcript",
+          "split_mode",
+          "created_at"
+        ],
+        "title": "RecordingResponse",
         "type": "object"
       },
       "RegisterRequest": {
@@ -1787,6 +1862,16 @@
         "title": "SnippetUpdate",
         "type": "object"
       },
+      "SplitMode": {
+        "description": "How a voice take's transcript was broken into lines.",
+        "enum": [
+          "taps",
+          "auto",
+          "single"
+        ],
+        "title": "SplitMode",
+        "type": "string"
+      },
       "SyllabifyRequest": {
         "properties": {
           "text": {
@@ -2126,6 +2211,69 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VoiceErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "VoiceErrorBody",
+        "type": "object"
+      },
+      "VoiceErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/VoiceErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "VoiceErrorResponse",
+        "type": "object"
+      },
+      "VoiceTakeResponse": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "recording": {
+            "$ref": "#/components/schemas/RecordingResponse"
+          },
+          "snippet": {
+            "$ref": "#/components/schemas/SnippetResponse"
+          },
+          "split_mode": {
+            "$ref": "#/components/schemas/SplitMode"
+          }
+        },
+        "required": [
+          "snippet",
+          "recording",
+          "lines",
+          "split_mode",
+          "created"
+        ],
+        "title": "VoiceTakeResponse",
         "type": "object"
       },
       "WordPhonetics": {
@@ -3067,6 +3215,125 @@
         ]
       }
     },
+    "/api/canvases/{canvas_id}/voice-takes": {
+      "post": {
+        "description": "Transcribe a recording into a new snippet or onto the end of one, and keep the audio.",
+        "operationId": "create_voice_take_api_canvases__canvas_id__voice_takes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_voice_take_api_canvases__canvas_id__voice_takes_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceTakeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Voice Take",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
     "/api/groups/{group_id}": {
       "delete": {
         "operationId": "delete_group_api_groups__group_id__delete",
@@ -3311,6 +3578,121 @@
         ]
       }
     },
+    "/api/recordings/{recording_id}": {
+      "delete": {
+        "operationId": "delete_recording_api_recordings__recording_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Recording",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/recordings/{recording_id}/audio": {
+      "get": {
+        "operationId": "get_recording_audio_api_recordings__recording_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "audio/*": {}
+            },
+            "description": "The audio bytes, Content-Type as stored"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Recording Audio",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
     "/api/snippets/batch-position": {
       "patch": {
         "operationId": "batch_position_api_snippets_batch_position_patch",
@@ -3449,6 +3831,69 @@
         "summary": "Update Snippet",
         "tags": [
           "snippets"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/recordings": {
+      "get": {
+        "description": "The snippet's recordings, newest first (no audio bytes).",
+        "operationId": "list_recordings_api_snippets__snippet_id__recordings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecordingResponse"
+                  },
+                  "title": "Response List Recordings Api Snippets  Snippet Id  Recordings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recordings",
+        "tags": [
+          "voice"
         ]
       }
     },

@@ -45,6 +45,8 @@ User 1──N Canvas 1──N Snippet N──M Tag
                    1──N Group ─┘ (via group_id)
                                │
                          SnippetEmbedding (1:1, Vector(384))
+                               │
+                         SnippetRecording (N:1, ON DELETE CASCADE)
 ```
 
 ### Canvas
@@ -87,7 +89,7 @@ Relationships: `owner`, `snippets`, `groups`, `tags` (all cascade: all, delete-o
 | `derived_from` | JSONB | null | `DerivedFromModel`: provenance of a snippet promoted from a rhyme candidate |
 | `created_at` | DateTime(tz) | now() | |
 | `updated_at` | DateTime(tz) | now() | Auto-updates on every write, moves and resizes included |
-| `content_updated_at` | DateTime(tz), NOT NULL | now() | Last content edit (text, type, grid); bumped only by `snippet_service.update_snippet`, never by layout or tags. See [snippet_content_timestamp](../features/snippet_content_timestamp.md) |
+| `content_updated_at` | DateTime(tz), NOT NULL | now() | Last content edit (text, type, grid); bumped by `snippet_service.update_snippet` (content edits) and `recording_service.append_with_recording` (voice-take append), never by layout or tags. See [snippet_content_timestamp](../features/snippet_content_timestamp.md) |
 
 Relationships: `canvas`, `group`, `tags` (N:M via snippet_tags), `embedding` (1:1, cascade)
 
@@ -138,6 +140,31 @@ Relationships: `canvas`, `snippets` (N:M via snippet_tags)
 
 Relationship: `snippet` (back_populates)
 
+### SnippetRecording
+
+**File:** `app/models/recording.py`, **Table:** `snippet_recordings`
+
+One row per voice take ([voice_capture.md](../features/voice_capture.md)).
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | UUID | uuid4 | PK |
+| `snippet_id` | UUID | - | FK -> snippets.id **ON DELETE CASCADE**, NOT NULL |
+| `mime_type` | String(127) | - | As uploaded (type/subtype lower-cased, parameters kept) |
+| `duration_ms` | Integer | - | STT duration, else the client's |
+| `byte_size` | Integer | - | `len(audio)` |
+| `audio` | LargeBinary (bytea) | - | **Deferred**: only `GET /api/recordings/{id}/audio` loads it |
+| `transcript` | Text | - | Assembled lines joined by `\n` |
+| `split_mode` | Enum `recording_split_mode` | - | `taps` / `auto` / `single` (`SplitMode`) |
+| `created_at` | DateTime(tz), NOT NULL | now() | Returned on insert (`eager_defaults`) |
+
+Index: `ix_snippet_recordings_snippet_created (snippet_id, created_at)`.
+
+No ORM relationship on `Snippet` (snippet loads never touch audio); deletes rely on the FK cascade,
+including canvas deletion (ORM cascade to snippets, then the FK). A merge moves the originals'
+recordings to the merged snippet before deleting them
+(`snippet_service.replace_with_merged(..., reparent=recording_service.reassign_recordings)`).
+
 ## Alembic Migrations
 
 **File:** `alembic/versions/001_initial.py`
@@ -173,6 +200,13 @@ Adds `snippets.content_updated_at` (timestamptz, server default `now()`), backfi
 `COALESCE(updated_at, created_at, now())`, then makes it NOT NULL. Downgrade drops it. Startup
 `create_all` does not add columns to an existing table, so an existing database needs
 `alembic upgrade head` before the backend runs this code.
+
+**File:** `alembic/versions/004_snippet_recordings.py`
+
+Creates the `recording_split_mode` enum type, the `snippet_recordings` table (FK to `snippets` with
+`ON DELETE CASCADE`) and its `(snippet_id, created_at)` index. Downgrade drops the index, the table and
+the type. Startup `create_all` creates the table on a fresh dev database; an existing database needs
+`alembic upgrade head`.
 
 ### Running Migrations
 

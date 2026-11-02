@@ -12,32 +12,12 @@ from app.schemas.snippet import BatchPositionResult, BatchPositionUpdate, Snippe
 from app.services import snippet_service
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.phonetics_service import compute_snippet_phonetics
+from app.services.snippet_content import compute_size, derive_new_content
 
 router = APIRouter(tags=["snippets"])
 
-# Must match frontend SnippetCard constants
-CELL_WIDTH = 60
-CELL_HEIGHT = 22
-PADDING = 12
-HEADER_HEIGHT = 28
-MIN_WIDTH = 200
-MIN_HEIGHT = 80
-
-
-def _compute_size(grid_data: dict) -> tuple[float, float]:
-    """Compute snippet width/height from grid data.
-
-    Width = (max_cells + 1) * CELL_WIDTH + padding  ("+1" leaves room for one more syllable)
-    Height = num_lines * CELL_HEIGHT + header + padding
-    Floats, as the columns store them, so a fresh snippet serializes like a reloaded one.
-    """
-    lines = grid_data.get("lines", [])
-    if not lines:
-        return (float(MIN_WIDTH), float(MIN_HEIGHT))
-    max_cells = max((len(line.get("cells", [])) for line in lines), default=0)
-    width = max((max_cells + 1) * CELL_WIDTH + PADDING * 2 + 20, MIN_WIDTH)  # +20 for syllable count column
-    height = max(len(lines) * CELL_HEIGHT + HEADER_HEIGHT + PADDING * 2, MIN_HEIGHT)
-    return (float(width), float(height))
+# Kept under the old name for existing importers; the implementation lives in snippet_content.
+_compute_size = compute_size
 
 
 @router.post("/api/canvases/{canvas_id}/snippets", response_model=SnippetResponse, status_code=201)
@@ -55,18 +35,15 @@ async def create_snippet(
     # A client-supplied grid (block merging) is stored as-is so its rests and stress survive;
     # otherwise the text is syllabified. Either way phonetics follow the stored grid.
     data.pop("grid_data", None)
-    if req.grid_data is not None:
-        grid_data = req.grid_data.model_dump(exclude_unset=True)
-    else:
-        grid_data = syllabify_text(raw_text) if raw_text else {"lines": []}
-    phonetics = compute_snippet_phonetics(raw_text, grid_data, None).model_dump(mode="json")
+    content = derive_new_content(
+        raw_text, req.grid_data.model_dump(exclude_unset=True) if req.grid_data is not None else None
+    )
     group_id = data.pop("group_id", None)
     data["group_id"] = uuid.UUID(group_id) if group_id else None
-    width, height = _compute_size(grid_data)
-    data["width"] = width
-    data["height"] = height
+    data["width"] = content.width
+    data["height"] = content.height
     snippet = await snippet_service.create_snippet(
-        db, canvas_id, str(user.id), raw_text=raw_text, grid_data=grid_data, phonetics=phonetics, **data
+        db, canvas_id, str(user.id), raw_text=raw_text, grid_data=content.grid_data, phonetics=content.phonetics, **data
     )
     if not snippet:
         raise HTTPException(status_code=404, detail="Canvas not found")
