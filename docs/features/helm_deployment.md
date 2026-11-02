@@ -12,7 +12,9 @@ Kubernetes, plus the production frontend image it needs
 - Alembic migrations run automatically before the API starts.
 - Secrets (JWT signing key, database password) generated on first install and
   preserved across upgrades, or supplied from existing Secrets.
-- An optional Ingress with same-host path routing and TLS.
+- An optional Ingress with same-host path routing and TLS, or a single
+  host-less (catch-all) rule when `ingress.hosts` is empty, for access by IP
+  ([homelab_tls.md](./homelab_tls.md)).
 - A production frontend image: Vite build served by nginx, `/api` reverse
   proxied to the backend Service.
 - A render-and-assert test suite for the chart.
@@ -74,10 +76,10 @@ Kubernetes, plus the production frontend image it needs
 ### Request flow
 
 ```
-browser -> Ingress host
+browser -> Ingress host (or any Host, incl. a bare IP, with ingress.hosts: [])
              /api/*  -> backend Service :8000 (ingress.routeApiToBackend=true)
              /*      -> frontend Service :80 -> nginx :8080
-                                                 /api/*   proxy_pass $BACKEND_URL
+                                                 /api/*   proxy_pass $BACKEND_URL (client_max_body_size 26m)
                                                  = /_status/alerts  fixed Alertmanager query
                                                  /_status/*         404
                                                  /assets/ immutable cache
@@ -111,7 +113,7 @@ with a clear message when neither is set.
 | `deploy/helm/lyrics-canvas/Chart.yaml` | Chart metadata; `appVersion` is the default image tag. |
 | `deploy/helm/lyrics-canvas/values.yaml` | All tunables with comments. |
 | `deploy/helm/lyrics-canvas/values.schema.json` | JSON Schema; `additionalProperties: false` on every section, enums for pull policy / service type / access modes, quantity pattern for sizes. |
-| `deploy/helm/lyrics-canvas/templates/_helpers.tpl` | Names, labels, image refs, secret lookups, `databaseEnv`, `corsOrigins`, service URLs. |
+| `deploy/helm/lyrics-canvas/templates/_helpers.tpl` | Names, labels, image refs, secret lookups, `databaseEnv`, `corsOrigins`, service URLs, `ingress.paths`. |
 | `templates/backend/deployment.yaml` | API Deployment with `migrate` init container, probes on `/api/health`, `HF_HOME=/cache` volume (emptyDir or PVC). |
 | `templates/backend/secret.yaml` | `secret-key` and, for an external database URL, `database-url`. Skipped entirely when both come from existing Secrets. |
 | `templates/backend/pvc.yaml` | Optional model cache claim. |
@@ -121,17 +123,18 @@ with a clear message when neither is set.
 | `templates/postgres/statefulset.yaml` | Single replica pgvector with `volumeClaimTemplates` (or emptyDir). |
 | `templates/postgres/secret.yaml`, `service.yaml`, `configmap-initdb.yaml` | Password, ClusterIP, `01-init.sql`. |
 | `templates/backup/cronjob.yaml`, `pvc.yaml`, `_script.tpl` | Optional nightly `pg_dump` CronJob `<fullname>-backup`, its optional claim, and the dump script; see [postgres_backup.md](./postgres_backup.md). |
-| `templates/ingress.yaml` | One rule per host: optional `/api` to backend, `/` to frontend; TLS passthrough from values. |
+| `templates/ingress.yaml` | One rule per host, or one host-less rule when `ingress.hosts` is empty; paths from `lyrics-canvas.ingress.paths` (optional `/api` to backend, `/` to frontend, nothing else); TLS entries (`secretName` required) and annotations passed through from values. |
 | `templates/serviceaccount.yaml` | Shared service account with token automount off. |
 | `templates/tests/test-connection.yaml` | `helm test` hook. |
 | `templates/monitoring/prometheusrule.yaml` | Optional `PrometheusRule` (`monitoring.prometheusRule.enabled`); see [alerting.md](./alerting.md). |
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
 | `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions; with `promtool` available, also `promtool check rules` and the rule unit tests in `deploy/helm/tests/alerts/`. |
-| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions, `frontend.clusterAlerts.alertmanagerUrl` = kube-prometheus-stack's `kps-alertmanager.monitoring.svc:9093`). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions, Ingress on the microk8s `public` class with a host-less rule, TLS Secret `lyrics-canvas-tls`, 26m body size, 180 s timeouts and HTTPS redirect ([homelab_tls.md](./homelab_tls.md)), `frontend.clusterAlerts.alertmanagerUrl` = kube-prometheus-stack's `kps-alertmanager.monitoring.svc:9093`). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
 | `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
-| `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy, `/_status/alerts` Alertmanager proxy, SPA fallback, asset caching. |
+| `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy (`client_max_body_size 26m` for voice uploads, read timeout 120 s), `/_status/alerts` Alertmanager proxy, SPA fallback, asset caching. |
+| `frontend/nginx/tests/test_api_body_limit.py`, `stub_backend.py` | Docker-based checks of the `/api/` upload limit and that nginx proxies nothing but the backend and Alertmanager. |
 | `frontend/nginx/entrypoint/16-cluster-alerts.envsh` | Entrypoint hook copied into the image; builds the one Alertmanager URL and the resolver list. |
 | `frontend/.dockerignore` | Keeps `node_modules`, `dist` and `nginx/tests` out of both image builds. |
 
@@ -150,7 +153,14 @@ with a clear message when neither is set.
   the PostgreSQL tag falls back to `pg16`.
 - The `/api` ingress path and the nginx `/api/` proxy both resolve to the same
   backend Service, so either path is correct; the ingress route only skips a
-  hop.
+  hop. Body limits must agree: an Ingress in front needs
+  `nginx.ingress.kubernetes.io/proxy-body-size` of at least `26m` (homelab
+  sets it) to match nginx's `/api/` limit.
+- The Ingress only ever routes to the frontend and backend Services
+  (`IngressBackendsTest`); internal components such as a speech-to-text
+  service are never exposed.
+- `ingress.tls` only names Secrets created outside the chart; committed values
+  never contain certificates or keys (`CommittedValuesSafetyTest`).
 - `backend.modelCache.persistence.accessModes` must be `ReadWriteMany` if
   `backend.replicaCount > 1` and pods can land on different nodes; the chart
   does not enforce this.

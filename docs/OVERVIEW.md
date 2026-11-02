@@ -89,6 +89,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
+| [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -145,6 +146,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
 | Alerting | PrometheusRule (prometheus-operator) + kube-state-metrics | Availability and backup alerts for a release; routing in Alertmanager |
 | Homelab deploy | `deploy/homelab/deploy.sh` (bash over ssh) | One-command build, push and helm deploy of HEAD to the home microk8s cluster |
+| Homelab TLS | `deploy/homelab/tls/issue-cert.sh` (bash + openssl), ingress-nginx (microk8s addon) | Local CA, server cert as a `kubernetes.io/tls` Secret, HTTPS at the node IPs |
 
 ## Data Model (Simplified)
 
@@ -275,7 +277,7 @@ Features Index:
     depends_on: [rhyme_view, merge_blocks, grid_rearrange, snippet_crud]
     doc: docs/features/android_app.md
   helm_deployment:
-    description: Helm chart that deploys the web stack to Kubernetes - backend Deployment (Alembic migrations in a retrying init container, /api/health probes, HF model cache volume), nginx frontend Deployment (SPA + /api reverse proxy), bundled PostgreSQL + pgvector StatefulSet or externalDatabase, optional Ingress with per-host TLS and derived CORS origins, JWT key and DB password generated once and kept across upgrades, JSON-schema validated values, committed per-cluster values files without credentials (deploy/helm/environments, *.secret.yaml gitignored), render-and-assert test suite; plus the production frontend image (frontend/Dockerfile.prod).
+    description: Helm chart that deploys the web stack to Kubernetes - backend Deployment (Alembic migrations in a retrying init container, /api/health probes, HF model cache volume), nginx frontend Deployment (SPA + /api reverse proxy), bundled PostgreSQL + pgvector StatefulSet or externalDatabase, optional Ingress with per-host TLS or a host-less catch-all rule (IP access), derived CORS origins, routes only frontend/backend, JWT key and DB password generated once and kept across upgrades, JSON-schema validated values, committed per-cluster values files without credentials (deploy/helm/environments, *.secret.yaml gitignored), render-and-assert test suite; plus the production frontend image (frontend/Dockerfile.prod).
     entry_points:
       - deploy/helm/lyrics-canvas/Chart.yaml
       - deploy/helm/lyrics-canvas/values.yaml
@@ -330,6 +332,17 @@ Features Index:
       - deploy/homelab/tests/test_deploy_script.py
     depends_on: [helm_deployment]
     doc: docs/features/homelab_deploy.md
+  homelab_tls:
+    description: HTTPS for the web app on the home microk8s cluster so browsers allow microphone access. deploy/homelab/tls/issue-cert.sh creates a local CA once in ~/.config/lyrics-canvas/tls (dir 700, ca.key 600, never overwritten without --force, which keeps backups), issues/renews an EC P-256 server cert (SANs IP:10.1.1.69, IP:10.1.1.68, IP:100.64.0.4, DNS:lyrics.s8.gay; 397 days; serverAuth; reissued when missing, expiring within 30 days, SANs changed, key mismatch or not signed by the CA) and server-side-applies the lyrics-canvas/lyrics-canvas-tls kubernetes.io/tls Secret over ssh node0 stdin; --dry-run, --renew, --no-apply, key=value logs, typed exit codes. homelab.yaml enables the chart Ingress on class public with a host-less rule (Host = IP), that Secret, proxy-body-size 26m, 180 s timeouts and force-ssl-redirect; IP URLs carry no SNI, so the ingress-nginx default certificate (microk8s enable ingress:default-ssl-certificate=lyrics-canvas/lyrics-canvas-tls, a documented one-time user command) is what serves it. Frontend nginx /api/ gets client_max_body_size 26m. NodePort 32443 (plain HTTP, Android) unchanged; no STT routing. Docs cover CA install on Linux Chrome/Firefox and Android, and a future Android HTTPS move.
+    entry_points:
+      - deploy/homelab/tls/issue-cert.sh
+      - deploy/homelab/tls/tests/test_issue_cert.py
+      - deploy/helm/environments/homelab.yaml (ingress)
+      - deploy/helm/lyrics-canvas/templates/ingress.yaml
+      - frontend/nginx/default.conf.template (location /api/)
+      - frontend/nginx/tests/test_api_body_limit.py
+    depends_on: [helm_deployment, homelab_deploy]
+    doc: docs/features/homelab_tls.md
   cluster_alerts_endpoint:
     description: Read-only GET /_status/alerts on the frontend origin, answered by the production nginx (not the backend) by proxying to the cluster's Alertmanager with one fixed, server-built URL (active, unsilenced, uninhibited alerts with namespace=<release namespace>), so web and Android clients can show an outage banner while the backend is down. 200 [] when unconfigured, 503 {"error":"alertmanager_unavailable"} on any upstream failure, 405 for non GET/HEAD. Variable proxy_pass with a resolver derived from /etc/resolv.conf at container start, so an unresolvable Alertmanager never stops nginx from starting. Chart value frontend.clusterAlerts.alertmanagerUrl.
     entry_points:
