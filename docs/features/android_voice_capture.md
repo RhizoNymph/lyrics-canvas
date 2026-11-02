@@ -7,7 +7,7 @@ snippet open in the editor. The audio is kept on the server and can be played ba
 editor's Recordings section.
 
 This is the Android half of §3 of the shared voice contract; the backend routes, line assembly and STT
-service are documented in [voice_capture.md](./voice_capture.md) (branch `feat/voice-takes-backend`).
+service are documented in [voice_capture.md](./voice_capture.md).
 The web client implements the same behaviour.
 
 ## Scope
@@ -32,7 +32,7 @@ The web client implements the same behaviour.
   for the user (Upload / Discard); nothing records while the app is stopped.
 - Offline queueing: a held take lives only as long as the modal's ViewModel (the file is in the cache).
 - Editing a recording or re-transcribing it; seeking within playback.
-- Line splitting / joining in the editor (`feat/editor-line-split-join`).
+- Line splitting / joining in the editor ([editor_line_split_join.md](./editor_line_split_join.md)).
 
 ## Flow
 
