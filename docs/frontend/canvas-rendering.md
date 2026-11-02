@@ -72,6 +72,7 @@ When `activeTagFilters` is non-empty, only snippets whose tags intersect the fil
 | canvasStore | `viewport`, `setViewport`, `snippets`, `groups`, `activeTagFilters`, `addSnippet`, `clearSelection`, `commitPositions` |
 | uiStore | `editingSnippetId`, `setEditingSnippet` |
 | rhymeStore | `setViewSize` (on resize; the viewport-centre fallback when materializing a candidate) |
+| canvasStore | `setCanvasViewSize` (on resize; voice capture's new-snippet position, also from list view) |
 
 ---
 
@@ -219,6 +220,17 @@ Each row also has `+·` / `−` buttons (shown while that row holds the selectio
   `closeEditor(snippetId)` (clears `editingSnippetId` only if no other editor opened meanwhile). Arranged rows' text is rebuilt from their grid; the backend recomputes phonetics
   from the pair (grid stress wins)
 - Click-outside listener is attached with a 100ms delay to avoid catching the opening double-click
+- Click-outside ignores targets inside `[data-keep-editor-open]` (the Record buttons and the voice
+  recorder modal), so a voice take can append to the open editor
+
+### Voice Capture
+
+- Header: a `● Rec` button (right of the type select) opens the recorder targeting this snippet.
+- The editor registers an `EditorBridge` (`editorBridge.ts`) for its snippet id: `flush()` saves the
+  current rows and type via `updateSnippet` without closing; `reload(snippet)` replaces the rows with
+  `initEditorState(snippet.raw_text, snippet.grid_data)` after a server-side append.
+- Below the grid body: `RecordingsSection` (collapsed `Recordings (n)`, hidden when there are none).
+  See [web_voice_capture.md](../features/web_voice_capture.md).
 
 ### Layout
 
