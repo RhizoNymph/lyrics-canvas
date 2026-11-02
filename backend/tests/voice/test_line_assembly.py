@@ -83,6 +83,34 @@ def test_single_word_has_no_boundaries():
     assert tap_boundaries(timeline("a"), [100, 200]) == []
 
 
+def test_late_tap_early_in_the_word_after_a_long_pause_splits_before_that_word():
+    # Real whisper timings: "Americans," ends 2140, "ask" spans [3340, 3780], "not" follows.
+    # The gap midpoints are 2740 and 3780; 3500 is nearer the second, but it is only 160 ms into
+    # "ask", i.e. the writer tapped a beat late as the next line began.
+    words = [TimedWord("Americans,", 1540, 2140), TimedWord("ask", 3340, 3780), TimedWord("not", 3780, 4340)]
+    assert tap_boundaries(words, [3500]) == [0]
+
+
+def test_tap_late_in_a_word_splits_after_it_even_when_the_previous_pause_is_long():
+    words = [TimedWord("a", 0, 300), TimedWord("b", 2000, 2400), TimedWord("c", 2400, 2800)]
+    assert tap_boundaries(words, [2300]) == [1]
+
+
+def test_tap_anywhere_in_a_long_pause_splits_at_that_pause():
+    words = [TimedWord("a", 0, 300), TimedWord("b", 2000, 2400), TimedWord("c", 2400, 2800)]
+    assert tap_boundaries(words, [310, 1000, 1990]) == [0]
+
+
+def test_tap_in_the_first_half_of_the_first_word_is_ignored():
+    words = [TimedWord("a", 0, 400), TimedWord("b", 500, 900)]
+    assert tap_boundaries(words, [100]) == []
+
+
+def test_tap_in_the_second_half_of_the_last_word_is_ignored():
+    words = [TimedWord("a", 0, 400), TimedWord("b", 500, 900)]
+    assert tap_boundaries(words, [800]) == []
+
+
 def test_overlapping_word_timestamps_still_resolve():
     # word 1 starts before word 0 ends: boundary 0 at (300 + 250) / 2 = 275
     words = [TimedWord("a", 0, 300), TimedWord("b", 250, 600), TimedWord("c", 700, 900)]

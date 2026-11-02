@@ -26,7 +26,8 @@ sibling branches against the same contract and are summarised here from it:
   document (tap breaks, duration, target). Transcribes it through the STT service, assembles lines,
   and in **one transaction** creates a new freestyle snippet or appends to an existing one, and stores
   the recording.
-- Line assembly: taps split at the nearest inter-word boundary; without taps an automatic split by
+- Line assembly: a tap in a pause splits at that pause, a tap inside a word splits before it (first
+  half, a late tap) or after it (second half); without taps an automatic split by
   pause length, syllable balance and end rhyme (phonetic engine), or a single line.
 - Append keeps the existing (possibly hand-arranged) grid lines verbatim, syllabifies only the new
   lines, reuses a blank trailing line, recomputes phonetics and size, bumps `content_updated_at`.
@@ -166,11 +167,17 @@ spaces in order (punctuation kept as the STT service emits it).
 
 ### Taps
 
-- Boundary `i` lies between word `i` and word `i + 1`; its point is the midpoint of
-  `words[i].end_ms` and `words[i + 1].start_ms` (computed in doubled integer ms, so ties are exact).
-- Each break resolves to the nearest boundary point. **Ties go to the earlier boundary** (taps land
-  late more often than early).
-- Breaks `<= words[0].start_ms` or `>= words[-1].end_ms` are ignored (before speech / after it).
+- Boundary `i` lies between word `i` and word `i + 1`.
+- A break in the pause after word `i` (`words[i].end_ms <= t < words[i + 1].start_ms`) resolves to
+  boundary `i`, however long the pause.
+- A break inside word `i` resolves to boundary `i - 1` when it lands in the word's first half
+  (inclusive: the writer tapped late, as the next line began) and to boundary `i` otherwise. When
+  timestamps overlap, the word that started last owns the instant.
+- Whisper often stretches a word over the pause before it, so gap midpoints are a poor guide: with
+  "Americans," ending at 2140 and "ask" spanning 3340-3780, a tap at 3500 belongs before "ask" even
+  though it is nearer the "ask"/"not" gap.
+- Breaks that would split before the first word or after the last word (before or in the first half
+  of the first word; in the second half of the last word or after it) are ignored.
 - Breaks resolving to the same boundary count once; unsorted breaks are fine.
 - If at least one break resolves, `split_mode = "taps"` and only the taps decide the lines.
 - If none resolves (no breaks, or all ignored), the auto split runs.

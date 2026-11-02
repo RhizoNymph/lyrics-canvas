@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 import statistics
-from bisect import bisect_left
+from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -131,30 +131,41 @@ DEFAULT_PARAMS = AutoSplitParams()
 
 
 def tap_boundaries(words: Sequence[TimedWord], breaks_ms: Sequence[int]) -> list[int]:
-    """The boundaries (index ``i`` = after word ``i``) the breaks resolve to, ascending and unique."""
+    """The boundaries (index ``i`` = after word ``i``) the breaks resolve to, ascending and unique.
+
+    A break in the pause after word ``i`` splits there, however long the pause. A break inside a word
+    splits before it when it lands in the word's first half (the writer tapped late, as the next line
+    began; an exact half counts as first) and after it otherwise. When timestamps overlap, the word
+    that started last owns the instant. Breaks that would split before the first word or after the
+    last are ignored.
+    """
     if len(words) < 2:
         return []
-    first_start = words[0].start_ms
-    last_end = words[-1].end_ms
-    # Doubled coordinates keep the midpoints integral, so ties are exact.
-    points = [words[i].end_ms + words[i + 1].start_ms for i in range(len(words) - 1)]
-    monotone = all(a <= b for a, b in zip(points, points[1:]))
+    starts = [w.start_ms for w in words]
+    monotone = all(a <= b for a, b in zip(starts, starts[1:]))
+    last = len(words) - 1
     chosen: set[int] = set()
     for brk in breaks_ms:
-        if brk <= first_start or brk >= last_end:
+        i = _owner(starts, brk, monotone)
+        if i is None:
             continue
-        chosen.add(_nearest(points, 2 * brk, monotone))
+        word = words[i]
+        if brk < word.end_ms and 2 * (brk - word.start_ms) <= word.end_ms - word.start_ms:
+            boundary = i - 1
+        else:
+            boundary = i
+        if 0 <= boundary < last:
+            chosen.add(boundary)
     return sorted(chosen)
 
 
-def _nearest(points: Sequence[int], target: int, monotone: bool) -> int:
-    """Index of the point nearest ``target``; the lowest index on ties."""
+def _owner(starts: Sequence[int], at_ms: int, monotone: bool) -> int | None:
+    """Index of the last word starting at or before ``at_ms`` (latest start on overlap), if any."""
     if monotone:
-        at = bisect_left(points, target)
-        candidates = [i for i in (at - 1, at) if 0 <= i < len(points)]
-    else:
-        candidates = list(range(len(points)))
-    return min(candidates, key=lambda i: (abs(target - points[i]), i))
+        index = bisect_right(starts, at_ms) - 1
+        return index if index >= 0 else None
+    started = [i for i, start in enumerate(starts) if start <= at_ms]
+    return max(started, key=lambda i: (starts[i], i)) if started else None
 
 
 def lines_from_boundaries(words: Sequence[TimedWord], boundaries: Sequence[int]) -> tuple[str, ...]:
