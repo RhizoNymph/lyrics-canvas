@@ -14,7 +14,13 @@ deploy/homelab/deploy.sh --rebuild     # rebuild and push even if the tag exists
 ```
 
 The app is then at `http://10.1.1.69:32443`. The node names (node0, node1,
-node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs.
+node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs. The same
+release also enables an Ingress on the microk8s ingress addon, so after the
+one-time TLS setup in [homelab_tls.md](./homelab_tls.md)
+(`deploy/homelab/tls/issue-cert.sh` plus the ingress default certificate) the
+web app is at `https://10.1.1.69/` and `https://100.64.0.4/` (tailnet), which
+browsers need for microphone access. The printed URL stays the NodePort one,
+which needs no setup.
 
 ## Scope
 
@@ -44,6 +50,10 @@ node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs.
   in `git archive HEAD`; generated credentials are kept across upgrades by the
   chart. Pass it with a manual helm run if ever needed.
 - Pruning old image tags from the registry, CI, other clusters.
+- TLS certificates and the ingress default certificate: created once by
+  `deploy/homelab/tls/issue-cert.sh` ([homelab_tls.md](./homelab_tls.md)).
+  Deploying before that works; the Ingress then serves ingress-nginx's fake
+  certificate until the Secret and default certificate exist.
 - Running anything locally beyond `git` and `ssh` (no local docker, kubectl or
   helm).
 
@@ -165,7 +175,8 @@ enabled also downloads the Whisper weights in the pod (see
 | `deploy/homelab/deploy.sh` | The script. Functions per phase: `parse_args`, `validate_config`, `preflight_git`, `preflight_ssh`, `ship_tree`, `images` / `ensure_image` / `image_state` / `build_image`, `helm_deploy`, `helm_test` (no `--logs`; kubectl logs on failure), `report`; `remote` / `remote_stdin` / `shell_join` for ssh; `log` / `die` for structured logs; `cleanup` on EXIT. |
 | `deploy/homelab/tests/test_deploy_script.py` | `unittest` suite (stdlib only). Each test makes a throwaway git repo containing a copy of the script, runs it with the ssh stub first on PATH, and asserts on the recorded remote commands, exit codes and logs. Also checks the script's registry defaults against `homelab.yaml`, that no tracked doc shows a `http://nodeN` URL, `bash -n`, and `shellcheck` when installed. |
 | `deploy/homelab/tests/stubs/ssh` | Recording ssh stand-in: logs flags, host, remote command and saved stdin per call to `$STUB_SSH_LOG`; answers from regex rules in `$STUB_SSH_RULES`. |
-| `deploy/helm/environments/homelab.yaml` | Values the script deploys with; its `dev` tags are only the fallback for a manual helm run. |
+| `deploy/helm/environments/homelab.yaml` | Values the script deploys with; its `dev` tags are only the fallback for a manual helm run. Enables the HTTPS Ingress (see [homelab_tls.md](./homelab_tls.md)). |
+| `deploy/homelab/tls/issue-cert.sh` | Separate one-time/yearly script for the local CA, server certificate and `lyrics-canvas-tls` Secret; not called by `deploy.sh`. |
 
 Run the tests with `python3 deploy/homelab/tests/test_deploy_script.py`.
 

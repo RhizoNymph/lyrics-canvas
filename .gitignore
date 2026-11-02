@@ -13,6 +13,11 @@ __pycache__/
 .env.*
 !.env.example
 deploy/helm/environments/*.secret.yaml
+# TLS keys and certificates (deploy/homelab/tls keeps them in
+# ~/.config/lyrics-canvas/tls, never in the repo)
+*.key
+*.pem
+*.csr
 
 # editors / tooling
 .idea/
