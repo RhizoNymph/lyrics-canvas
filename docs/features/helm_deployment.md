@@ -24,6 +24,9 @@ Kubernetes, plus the production frontend image it needs
   (`backup.*`), documented in [postgres_backup.md](./postgres_backup.md).
 - An optional `PrometheusRule` with availability and backup alerts; see
   [alerting.md](./alerting.md).
+- An optional speech-to-text component (`stt.*`, default off): a GPU or CPU
+  faster-whisper Deployment behind a ClusterIP Service, wired into the backend
+  as `STT_URL`; see [stt_service.md](./stt_service.md).
 
 ## Non-scope
 
@@ -70,8 +73,13 @@ Kubernetes, plus the production frontend image it needs
    `ALERTMANAGER_URL` / `ALERTS_NAMESPACE` / `ALERTS_RESOLVER` env and exports
    the values the `/_status/alerts` location uses
    ([cluster_alerts_endpoint.md](./cluster_alerts_endpoint.md)).
-7. The `helm test` pod fetches `/healthz` on the frontend Service and
-   `/api/health` on the backend Service.
+7. With `stt.enabled`, the STT pod starts answering `/healthz` at once and
+   turns Ready (`/readyz`) when its model is loaded; on a first start that
+   includes downloading the weights, so `helm --wait` covers the download.
+   The backend gets `STT_URL=http://<release>-stt:<port>`.
+8. The `helm test` pod fetches `/healthz` on the frontend Service and
+   `/api/health` on the backend Service, plus `/readyz` on the STT Service
+   when it is enabled.
 
 ### Request flow
 
@@ -85,6 +93,10 @@ browser -> Ingress host (or any Host, incl. a bare IP, with ingress.hosts: [])
                                                  /assets/ immutable cache
                                                  /*       try_files ... /index.html (SPA)
 ```
+
+The STT Service is not in this picture on purpose: only the backend reaches it
+(`backend pod -> <release>-stt:8000`), and neither the Ingress nor nginx has a
+route to it.
 
 Because the SPA is built with `VITE_API_URL=""`, it always calls `/api`
 relative to its own origin. That is why no CORS configuration is needed for
@@ -113,8 +125,8 @@ with a clear message when neither is set.
 | `deploy/helm/lyrics-canvas/Chart.yaml` | Chart metadata; `appVersion` is the default image tag. |
 | `deploy/helm/lyrics-canvas/values.yaml` | All tunables with comments. |
 | `deploy/helm/lyrics-canvas/values.schema.json` | JSON Schema; `additionalProperties: false` on every section, enums for pull policy / service type / access modes, quantity pattern for sizes. |
-| `deploy/helm/lyrics-canvas/templates/_helpers.tpl` | Names, labels, image refs, secret lookups, `databaseEnv`, `corsOrigins`, service URLs, `ingress.paths`. |
-| `templates/backend/deployment.yaml` | API Deployment with `migrate` init container, probes on `/api/health`, `HF_HOME=/cache` volume (emptyDir or PVC). |
+| `deploy/helm/lyrics-canvas/templates/_helpers.tpl` | Names, labels, image refs, secret lookups, `databaseEnv`, `corsOrigins`, service URLs (`lyrics-canvas.stt.url` feeds the backend's `STT_URL`), `ingress.paths`. |
+| `templates/backend/deployment.yaml` | API Deployment with `migrate` init container, probes on `/api/health`, `HF_HOME=/cache` volume (emptyDir or PVC), `STT_URL` when `stt.enabled`. |
 | `templates/backend/secret.yaml` | `secret-key` and, for an external database URL, `database-url`. Skipped entirely when both come from existing Secrets. |
 | `templates/backend/pvc.yaml` | Optional model cache claim. |
 | `templates/backend/service.yaml` | ClusterIP (configurable) on `backend.service.port`. |
@@ -123,14 +135,15 @@ with a clear message when neither is set.
 | `templates/postgres/statefulset.yaml` | Single replica pgvector with `volumeClaimTemplates` (or emptyDir). |
 | `templates/postgres/secret.yaml`, `service.yaml`, `configmap-initdb.yaml` | Password, ClusterIP, `01-init.sql`. |
 | `templates/backup/cronjob.yaml`, `pvc.yaml`, `_script.tpl` | Optional nightly `pg_dump` CronJob `<fullname>-backup`, its optional claim, and the dump script; see [postgres_backup.md](./postgres_backup.md). |
+| `templates/stt/deployment.yaml`, `service.yaml`, `pvc.yaml` | Optional STT Deployment (one replica, Recreate, GPU requests/limits from `stt.gpus`, `runtimeClassName`, `/models` cache as emptyDir/hostPath/PVC, read-only root with `/tmp` emptyDir, probes `/healthz` + `/readyz`), ClusterIP-only Service, optional `<fullname>-stt-models` claim kept on uninstall; see [stt_service.md](./stt_service.md). |
 | `templates/ingress.yaml` | One rule per host, or one host-less rule when `ingress.hosts` is empty; paths from `lyrics-canvas.ingress.paths` (optional `/api` to backend, `/` to frontend, nothing else); TLS entries (`secretName` required) and annotations passed through from values. |
 | `templates/serviceaccount.yaml` | Shared service account with token automount off. |
-| `templates/tests/test-connection.yaml` | `helm test` hook. |
+| `templates/tests/test-connection.yaml` | `helm test` hook (frontend, backend, and STT readiness when enabled). Deleted on success (`hook-succeeded`), kept on failure for its logs. |
 | `templates/monitoring/prometheusrule.yaml` | Optional `PrometheusRule` (`monitoring.prometheusRule.enabled`); see [alerting.md](./alerting.md). |
 | `templates/NOTES.txt` | Post-install access instructions. |
 | `deploy/helm/lyrics-canvas/README.md` | Image build, install and configuration guide. |
 | `deploy/helm/tests/test_chart.py` | `unittest` suite: `helm lint --strict` plus renders of the fixtures in `deploy/helm/tests/values/` with structural assertions; with `promtool` available, also `promtool check rules` and the rule unit tests in `deploy/helm/tests/alerts/`. |
-| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, alert rules on with `microk8s kubectl` in descriptions, Ingress on the microk8s `public` class with a host-less rule, TLS Secret `lyrics-canvas-tls`, 26m body size, 180 s timeouts and HTTPS redirect ([homelab_tls.md](./homelab_tls.md)), `frontend.clusterAlerts.alertmanagerUrl` = kube-prometheus-stack's `kps-alertmanager.monitoring.svc:9093`). Deployed by `deploy/homelab/deploy.sh`, which overrides the `dev` image tags with the commit SHA. |
+| `deploy/helm/environments/homelab.yaml` | Values for the home microk8s cluster (registry `localhost:32000`, node0/node1 affinity, NodePort 32443 reached at `http://10.1.1.69:32443` (node names are not in DNS), backup CronJob to a node1 hostPath, STT on node1's GPU (`runtimeClassName: nvidia`, weights in the node1 hostPath `/home/nymph/models/whisper`), alert rules on with `microk8s kubectl` in descriptions, Ingress on the microk8s `public` class with a host-less rule, TLS Secret `lyrics-canvas-tls`, 26m body size, 180 s timeouts and HTTPS redirect ([homelab_tls.md](./homelab_tls.md)), `frontend.clusterAlerts.alertmanagerUrl` = kube-prometheus-stack's `kps-alertmanager.monitoring.svc:9093`). Deployed by `deploy/homelab/deploy.sh`, which overrides the three `dev` image tags with the commit SHA. |
 | `.gitignore` (`deploy/helm/environments/*.secret.yaml`) | Keeps per-environment credential overrides out of git. |
 | `frontend/Dockerfile.prod` | Multi-stage: `node:20-slim` build (`npm ci`, `npm run build`) into `nginxinc/nginx-unprivileged:1.27-alpine`. Build args `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`. |
 | `frontend/nginx/default.conf.template` | Server block on 8080: `/healthz`, `/api/` proxy (`client_max_body_size 26m` for voice uploads, read timeout 180 s), `/_status/alerts` Alertmanager proxy, SPA fallback, asset caching. |
@@ -149,7 +162,7 @@ with a clear message when neither is set.
   `backend.secretKey` / `postgres.auth.password` or delete the Secret.
 - `postgres.auth.password` is placed verbatim in a URL; it must not contain
   characters that need percent-encoding. Generated passwords are alphanumeric.
-- `backend.image.tag` and `frontend.image.tag` fall back to `Chart.appVersion`;
+- `backend.image.tag`, `frontend.image.tag` and `stt.image.tag` fall back to `Chart.appVersion`;
   the PostgreSQL tag falls back to `pg16`.
 - The `/api` ingress path and the nginx `/api/` proxy both resolve to the same
   backend Service, so either path is correct; the ingress route only skips a
@@ -179,5 +192,7 @@ with a clear message when neither is set.
   alert rules select this release's pods by that prefix.
 - The backup CronJob is named `<fullname>-backup` (alert rules match the
   suffix) and reads the database password only through `secretKeyRef`.
+- The STT Service is always `ClusterIP` and is never added to the Ingress or
+  the nginx config; `stt.device=cuda` requires `stt.gpus >= 1`.
 - The chart test suite must pass (`python3 deploy/helm/tests/test_chart.py`)
   and rendered output must validate with `kubeconform -strict`.

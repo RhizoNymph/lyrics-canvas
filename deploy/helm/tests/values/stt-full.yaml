@@ -1,0 +1,57 @@
+stt:
+  enabled: true
+  image:
+    repository: registry.local/lc-stt
+    tag: v9
+    pullPolicy: Always
+  service:
+    port: 9000
+  model: Systran/faster-whisper-small
+  device: cpu
+  computeType: int8_float32
+  gpus: 0
+  runtimeClassName: kata
+  defaultLanguage: en
+  beamSize: 2
+  maxUploadBytes: 1048576
+  offline: true
+  logLevel: debug
+  modelCache:
+    type: hostPath
+    hostPath:
+      path: /srv/models/whisper
+  startupTimeoutSeconds: 60
+  extraEnv:
+    - name: STT_CPU_THREADS
+      value: "8"
+  resources:
+    requests:
+      cpu: "2"
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  podAnnotations:
+    team: voice
+  podLabels:
+    tier: stt
+  podSecurityContext:
+    runAsUser: 2000
+  securityContext:
+    readOnlyRootFilesystem: false
+  nodeSelector:
+    pool: cpu
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: stt
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: fast
+                operator: In
+                values:
+                  - "true"

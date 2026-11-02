@@ -1,9 +1,10 @@
 # Default values for lyrics-canvas.
 #
-# Both application images must be built from this repository and pushed to a
+# The application images must be built from this repository and pushed to a
 # registry the cluster can pull from (see deploy/helm/lyrics-canvas/README.md):
 #   backend:  docker build -t <repo>/lyrics-canvas-backend:<tag> backend
 #   frontend: docker build -f frontend/Dockerfile.prod -t <repo>/lyrics-canvas-frontend:<tag> frontend
+#   stt:      docker build -t <repo>/lyrics-canvas-stt:<tag> stt   (only with stt.enabled)
 
 global:
   # Pull secrets applied to every pod, e.g. [{name: regcred}].
@@ -129,6 +130,87 @@ frontend:
   securityContext:
     allowPrivilegeEscalation: false
     runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Speech-to-text service for voice capture (faster-whisper; docs/features/stt_service.md).
+# Cluster-internal only: a ClusterIP Service the backend calls via STT_URL
+# (set automatically when enabled). Never routed by the Ingress or nginx.
+stt:
+  enabled: false
+  image:
+    repository: ghcr.io/rhizonymph/lyrics-canvas-stt
+    # Defaults to .Chart.AppVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8000
+  # faster-whisper size alias (tiny ... large-v3, large-v3-turbo), a Hugging
+  # Face repo id with CTranslate2 weights, or a directory inside the pod.
+  model: large-v3-turbo
+  # cuda | cpu. cuda needs gpus >= 1.
+  device: cuda
+  # CTranslate2 compute type; empty = float16 on cuda, int8 on cpu.
+  computeType: ""
+  # Number of GPUs requested (as resource gpuResourceName, requests = limits).
+  # 0 = none.
+  gpus: 1
+  gpuResourceName: nvidia.com/gpu
+  # Required when the node's default container runtime is not NVIDIA's
+  # (e.g. "nvidia" with the GPU operator on microk8s).
+  runtimeClassName: ""
+  # ISO code used when a request has no `language`; empty = auto-detect.
+  defaultLanguage: ""
+  beamSize: 5
+  # Largest accepted audio file (bytes).
+  maxUploadBytes: 26214400
+  # true = never contact the Hugging Face Hub (sets HF_HUB_OFFLINE=1); the
+  # weights must already be in the model cache. With false the cache is still
+  # checked first and the Hub is only contacted on a cache miss.
+  offline: false
+  logLevel: info
+  # Weights cache mounted at /models (HF_HOME). Without persistence the model
+  # (about 1.6 GB for large-v3-turbo) is downloaded on every pod start.
+  modelCache:
+    # emptyDir | hostPath | persistentVolumeClaim
+    type: emptyDir
+    hostPath:
+      # Absolute path on the node; must already exist (type Directory) and be
+      # writable by the pod's user. Pin the pod with nodeSelector/affinity.
+      path: ""
+    persistentVolumeClaim:
+      # Use an existing claim; otherwise the chart creates <fullname>-stt-models.
+      existingClaim: ""
+      size: 10Gi
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+  # Seconds for the process to answer /healthz after start. Model loading does
+  # not delay /healthz; /readyz turns 200 once the model is loaded, so a first
+  # download is bounded by `helm --wait --timeout`, not by this probe.
+  startupTimeoutSeconds: 120
+  # Additional container env entries (Kubernetes EnvVar objects).
+  extraEnv: []
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 8Gi
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL

@@ -1,0 +1,12 @@
+stt:
+  enabled: true
+  gpus: 2
+  gpuResourceName: amd.com/gpu
+  resources:
+    limits:
+      memory: 12Gi
+  modelCache:
+    type: persistentVolumeClaim
+    persistentVolumeClaim:
+      size: 20Gi
+      storageClass: fast

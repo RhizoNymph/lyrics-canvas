@@ -19,6 +19,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [NLP: t-SNE Layout](./backend/nlp-tsne.md) | Dimensionality reduction for spatial clustering | `nlp/tsne_service.py` |
 | [NLP: Search](./backend/nlp-search.md) | ILIKE full-text search | `nlp/search_service.py` |
 | [Export](./backend/export.md) | Markdown, plain text, PDF generation | `export_service.py`, `export.py` |
+| [Voice Capture](./features/voice_capture.md) | Voice takes: upload, STT client, line assembly, append, recordings storage | `api/voice.py`, `services/voice/`, `recording_service.py` |
 
 ## Architecture Summary
 
@@ -31,21 +32,30 @@ app/
   models/
     base.py                         DeclarativeBase, TimestampMixin
     user.py / canvas.py / snippet.py / group.py / tag.py / embedding.py
+    recording.py                    SnippetRecording (voice-take audio), SplitMode
   schemas/
     auth.py / canvas.py / snippet.py / group.py / tag.py / nlp.py
     merge.py                        Merge request/response
     phonetics.py                    SnippetPhonetics (snippets.phonetics column)
     rhyme.py                        Rhyme suggest request/response
+    voice.py                        Voice-take meta (discriminated target), recording/take responses
   services/
     auth_service.py                 JWT + bcrypt + user CRUD
     canvas_service.py               Canvas CRUD + sharing + forking
     group_service.py                Group CRUD
     tag_service.py                  Tag CRUD + associations
-    snippet_service.py              Snippet CRUD + merge transaction (replace_with_merged)
+    snippet_service.py              Snippet CRUD + merge transaction (replace_with_merged, reparent hook)
+    snippet_content.py              Shared derivation: grid, phonetics, size (create + voice takes)
+    recording_service.py            Voice takes (create/append + recording, one transaction), recordings
     merge_service.py                Block merge rules (pure)
     export_service.py               Text/Markdown/PDF generation
     phonetics_service.py            Snippet phonetics + grid reconciliation + note units
     rhyme_suggest_service.py        Rhyme suggest: anchors, sources, rank, slot fit, page
+    voice/                          Voice takes
+      line_assembly.py              Pure: taps / auto split (pause, balance, rhyme) -> lines
+      engine_oracle.py              Syllables + end-rhyme scores from the phonetic engine
+      append.py                     Pure: append lines keeping the existing grid verbatim
+      audio.py / stt_client.py / errors.py   MIME + bounded read, STT HTTP client, typed errors
     phonetics/                      Phonetic engine (pure)
       types.py / errors.py / distance.py / syllables.py / dialect.py
       score.py / index.py / pronounce.py / resources.py / units.py
@@ -59,13 +69,13 @@ app/
       search_service.py             ILIKE text search
   api/
     deps.py                         Auth dependency injection
-    auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py
+    auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py
 scripts/
   backfill_phonetics.py             Fill snippets.phonetics for existing rows
   export_openapi.py                 Write docs/api/openapi.json (committed snapshot)
 ```
 
-## API Surface (33 endpoints)
+## API Surface (37 endpoints)
 
 | Area | Count | Auth |
 |------|-------|------|
@@ -76,6 +86,7 @@ scripts/
 | Tags | 5 (create, update, delete, link, unlink) | Bearer |
 | NLP | 6 | Mixed |
 | Export | 1 | Bearer |
+| Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
 | Health | 1 | Public |
 
 Every route the clients call declares a pydantic `response_model`; the generated OpenAPI document is
@@ -90,3 +101,4 @@ committed at [docs/api/openapi.json](./api/README.md) and a test fails when it d
 - **Ownership verification**: All CRUD checks Canvas.owner_id
 - **Typed responses**: response models keep the historical wire shape (`tests/test_response_shapes.py`); grids are emitted exactly as stored
 - **Server-side merge**: `POST /api/canvases/{id}/merge` replaces 2+ snippets in one transaction ([merge_blocks.md](./features/merge_blocks.md))
+- **Voice takes**: `POST /api/canvases/{id}/voice-takes` transcribes via the STT service (`STT_URL`) and creates or appends in one transaction; contract error codes in `detail.error` ([voice_capture.md](./features/voice_capture.md))

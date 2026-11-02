@@ -27,6 +27,9 @@ docker build -f frontend/Dockerfile.prod -t $REG/lyrics-canvas-frontend:$TAG \
   --build-arg VITE_GOOGLE_CLIENT_ID=<google client id or empty> frontend
 docker push $REG/lyrics-canvas-backend:$TAG
 docker push $REG/lyrics-canvas-frontend:$TAG
+# only with stt.enabled (CUDA 12 + cuDNN 9 runtime base, ~5 GB):
+docker build -t $REG/lyrics-canvas-stt:$TAG stt
+docker push $REG/lyrics-canvas-stt:$TAG
 ```
 
 `VITE_*` settings are compiled into the frontend bundle, so the Google client
@@ -111,6 +114,7 @@ Always pass the values file; never use `--reuse-values`.
 | `postgres.enabled` | `true` | Bundled single-replica pgvector StatefulSet with an 8Gi PVC. |
 | `postgres.auth.password` | generated | Kept across upgrades like the signing key. Or `postgres.auth.existingSecret`. |
 | `backup.enabled` | `false` | Nightly `pg_dump` CronJob `<fullname>-backup`; see [Backups](#backups). |
+| `stt.enabled` | `false` | Speech-to-text Deployment + ClusterIP Service `<fullname>-stt` (faster-whisper) and `STT_URL` on the backend. Defaults to `device: cuda` with `gpus: 1` (`gpuResourceName`, `runtimeClassName` when the node's default runtime is not NVIDIA's); `device: cpu`, `gpus: 0` for CPU int8. Model cache at `/models`: `modelCache.type` `emptyDir` / `hostPath` / `persistentVolumeClaim`. Never exposed by the Ingress. See `docs/features/stt_service.md`. |
 | `externalDatabase.url` | `""` | `postgresql+asyncpg://...` for a managed database when `postgres.enabled=false`. The database must allow `CREATE EXTENSION vector`. Or `externalDatabase.existingSecret`. |
 | `ingress.routeApiToBackend` | `true` | Adds a `/api` path straight to the backend Service. |
 | `ingress.hosts` | `[lyrics-canvas.local]` | One rule per host. An empty list renders a single host-less rule that matches any Host, bare IPs included; clients without SNI then get the controller's default certificate (see `docs/features/homelab_tls.md`). |
@@ -155,6 +159,11 @@ Notification routing is configured in Alertmanager, not in this chart. Details:
   egress to reach it unless the cache PVC is already warm.
 - The backend image bakes NLTK data for g2p_en at build time, so no network is
   needed for rhyme features.
+- With `stt.enabled`, the STT pod downloads its Whisper weights from
+  huggingface.co into `/models` on first start and is not Ready until they are
+  loaded; afterwards it loads from the cache without network access. Persist
+  `/models` (`stt.modelCache`) or every new pod downloads again, and keep
+  `helm --wait --timeout` long enough for the first download.
 - The bundled PostgreSQL is one replica. Enable `backup` for nightly dumps,
   or use `externalDatabase` with the provider's backups.
 
