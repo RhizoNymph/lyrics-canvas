@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,8 +57,10 @@ internal fun GridEditorScreen(
     actions: GridEditorActions,
     onDiscard: () -> Unit,
     modifier: Modifier = Modifier,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    topBarActions: @Composable RowScope.() -> Unit = {},
+    bottomPanel: @Composable () -> Unit = {},
 ) {
-    val snackbar = remember { SnackbarHostState() }
     val save = state.save
     LaunchedEffect(save) {
         if (save is SaveStatus.Failed) {
@@ -81,6 +84,7 @@ internal fun GridEditorScreen(
                 onSnippetTypeChange = actions::setSnippetType,
                 onDiscard = onDiscard,
                 onSave = actions::save,
+                extraActions = topBarActions,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -93,6 +97,7 @@ internal fun GridEditorScreen(
                 .imePadding(),
         ) {
             EditorRows(state, actions, Modifier.weight(1f))
+            bottomPanel()
             HintBar(state)
         }
     }

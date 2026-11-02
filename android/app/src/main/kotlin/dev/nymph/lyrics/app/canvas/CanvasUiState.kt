@@ -92,4 +92,7 @@ sealed interface CanvasEvent {
 
     /** A snackbar message. */
     data class Message(val text: String) : CanvasEvent
+
+    /** Scroll the list to this snippet's row (list mode; a voice take created it). */
+    data class RevealSnippet(val snippetId: SnippetId) : CanvasEvent
 }

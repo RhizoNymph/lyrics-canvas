@@ -26,6 +26,8 @@ import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
+import dev.nymph.lyrics.model.voice.VoiceTakeResponse
+import dev.nymph.lyrics.model.voice.VoiceTakeTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -326,6 +328,32 @@ class CanvasViewModel(
     fun replaceSnippet(snippet: Snippet) {
         updateReady { ready -> ready.copy(snippets = ready.snippets.map { if (it.id == snippet.id) snippet else it }) }
         resortList()
+    }
+
+    // ---- Voice takes ----
+
+    /**
+     * Where a voice take recorded on this screen goes: a new snippet at the centre of the viewport
+     * in canvas coordinates. List mode uses the same rule with the last canvas viewport (the
+     * viewport is kept while the list shows); before anything was laid out that is the viewport's
+     * origin (0, 0 for a canvas never panned). Null until the canvas is loaded.
+     */
+    fun voiceTarget(): VoiceTakeTarget.New? {
+        val ready = ready() ?: return null
+        val at = viewportCenter(ready.viewport, ready.viewSize)
+        return VoiceTakeTarget.New(at.x, at.y)
+    }
+
+    /** A voice take was stored: show the new snippet selected (and scrolled to in the list), or the appended one updated. */
+    fun onVoiceTakeSaved(response: VoiceTakeResponse) {
+        val snippet = response.snippet
+        if (!response.created) {
+            replaceSnippet(snippet)
+            return
+        }
+        insert(snippet)
+        updateReady { it.copy(selection = Selection.of(setOf(snippet.id))) }
+        if (ready()?.mode is CanvasMode.SnippetList) _events.trySend(CanvasEvent.RevealSnippet(snippet.id))
     }
 
     private fun insert(snippet: Snippet) = updateReady { ready ->

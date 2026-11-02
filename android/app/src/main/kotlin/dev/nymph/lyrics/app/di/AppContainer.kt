@@ -16,11 +16,21 @@ import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.data.status.AlertsEndpoint
 import dev.nymph.lyrics.data.status.HttpStatusRepository
+import dev.nymph.lyrics.data.repository.HttpVoiceRepository
+import dev.nymph.lyrics.data.repository.VoiceRepository
+import dev.nymph.lyrics.app.voice.DataStoreVoiceSettings
+import dev.nymph.lyrics.app.voice.VoiceSettingsStore
+import dev.nymph.lyrics.app.voice.recorder.AudioRecorder
+import dev.nymph.lyrics.app.voice.recorder.MediaRecorderAudioRecorder
+import dev.nymph.lyrics.app.voice.recordings.AudioPlayer
+import dev.nymph.lyrics.app.voice.recordings.MediaAudioPlayer
+import java.io.File
 import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 
 private val Context.authDataStore by preferencesDataStore(name = "auth")
+private val Context.voiceDataStore by preferencesDataStore(name = "voice")
 
 /**
  * Manual dependency graph, one per process (see [dev.nymph.lyrics.app.LyricsApp]). ViewModels
@@ -31,7 +41,9 @@ class AppContainer(
     baseUrl: String = BuildConfig.API_BASE_URL,
     statusAlertsUrl: String = BuildConfig.STATUS_ALERTS_URL,
 ) {
-    val tokenStore: TokenStore = DataStoreTokenStore(context.applicationContext.authDataStore)
+    private val appContext: Context = context.applicationContext
+
+    val tokenStore: TokenStore = DataStoreTokenStore(appContext.authDataStore)
 
     private val okHttp = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -57,4 +69,26 @@ class AppContainer(
     val canvases: CanvasRepository = HttpCanvasRepository(api)
     val snippets: SnippetRepository = HttpSnippetRepository(api)
     val nlp: NlpRepository = HttpNlpRepository(api)
+
+    /**
+     * Voice takes wait for transcription (the backend allows the STT service 120 s), and upload
+     * up to 25 MiB, so they get their own, longer timeouts.
+     */
+    private val voiceHttp = okHttp.newBuilder()
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(150, TimeUnit.SECONDS)
+        .build()
+
+    val voice: VoiceRepository = HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health))
+
+    /** Silence auto-stop and other per-device voice settings. */
+    val voiceSettings: VoiceSettingsStore = DataStoreVoiceSettings(appContext.voiceDataStore)
+
+    /** Downloaded recording audio, played from here. */
+    val recordingsCacheDir: File = File(appContext.cacheDir, "recordings")
+
+    /** A recorder writing takes into the app cache (one per voice modal). */
+    fun newRecorder(): AudioRecorder = MediaRecorderAudioRecorder(appContext, File(appContext.cacheDir, "voice-takes"))
+
+    fun newAudioPlayer(): AudioPlayer = MediaAudioPlayer()
 }

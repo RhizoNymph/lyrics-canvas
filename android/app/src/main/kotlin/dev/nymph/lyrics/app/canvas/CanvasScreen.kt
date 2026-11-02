@@ -53,6 +53,12 @@ import dev.nymph.lyrics.app.di.ProcessScope
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
 import dev.nymph.lyrics.app.rhyme.ui.RhymePanel
 import dev.nymph.lyrics.app.ui.theme.Palette
+import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
+import dev.nymph.lyrics.app.voice.ui.voiceCaptureViewModel
+import dev.nymph.lyrics.logic.canvas.ViewSize
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.SnippetId
 import kotlinx.coroutines.launch
@@ -84,15 +90,23 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val voice = voiceCaptureViewModel(container, canvasId, key = "voice-canvas")
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
 
     LaunchedEffect(vm) {
         vm.events.collect { event ->
             when (event) {
                 is CanvasEvent.OpenEditor -> onOpenEditor(event.snippetId)
                 is CanvasEvent.Message -> scope.launch { snackbar.showSnackbar(event.text) }
+                is CanvasEvent.RevealSnippet -> {
+                    val index = (vm.state.value as? CanvasUiState.Ready)?.listRows?.indexOfFirst { it.id == event.snippetId } ?: -1
+                    if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                }
             }
         }
     }
+    LaunchedEffect(voice) { voice.saved.collect { vm.onVoiceTakeSaved(it.response) } }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.flushViewport() }
 
     val ready = state as? CanvasUiState.Ready
@@ -137,6 +151,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                         onBack = onBack,
                         onSetMode = vm::setMode,
                         onToggleRhymes = toggleRhymes,
+                        onRecord = if (ready != null) ({ vm.voiceTarget()?.let(voice::open) }) else null,
                     )
                 }
             },
@@ -152,7 +167,12 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                // Also reported in list mode, so a voice take there lands at the centre of the last canvas viewport.
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().onSizeChanged { px ->
+                        with(density) { vm.setViewSize(ViewSize(px.width.toDp().value.toDouble(), px.height.toDp().value.toDouble())) }
+                    },
+                ) {
                     when (val s = state) {
                         CanvasUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                         is CanvasUiState.Failed -> Column(
@@ -175,6 +195,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                                 selected = s.selection.ids,
                                 onTap = { id -> vm.onTap(id) },
                                 onLongPress = vm::onListLongPress,
+                                listState = listState,
                             )
                         }
                     }
@@ -195,6 +216,8 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
             }
         }
     }
+
+    VoiceCaptureHost(voice)
 
     if (confirmDelete) {
         val count = selection.ids.size

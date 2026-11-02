@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Connectivity callbacks for the status banner (probe at once on reconnect, offline at once). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Voice capture: dictate lines into a snippet (asked at runtime, with a rationale). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Cleartext is allowed only because the dev backend is plain HTTP on the LAN. -->
     <application
