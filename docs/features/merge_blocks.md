@@ -18,6 +18,8 @@ one implementation; the client only sends the selected ids and the mode and swap
 - Tags are the union of the originals' tags; the merged snippet takes the first block's type, grid mode,
   position and group.
 - All or nothing: create, tag links and deletes are one database transaction.
+- Voice recordings of the originals move to the merged snippet in the same transaction
+  ([voice_capture.md](./voice_capture.md)).
 - One undo step for the whole merge (local state only).
 
 ## Non-scope
@@ -116,7 +118,9 @@ UI (context menu item | toolbar button | Ctrl/Cmd+Shift+V/H)
        grid_data = merged.grid.model_dump(mode="json")   (unset cell fields are not emitted)
        phonetics = compute_snippet_phonetics(raw_text, grid_data, None); width/height = _compute_size
        snippet_service.replace_with_merged        ONE transaction:
-         add merged snippet (with union Tag rows) -> flush -> delete each original -> commit
+         add merged snippet (with union Tag rows) -> flush
+         -> reparent: recording_service.reassign_recordings (UPDATE snippet_recordings SET snippet_id = merged)
+         -> delete each original -> commit
          SQLAlchemyError -> rollback -> MergePersistError                                     (500)
        re-fetch merged snippet with tags -> MergeResponse { snippet, deleted_ids }
   <- canvasStore
@@ -154,7 +158,9 @@ transaction a merge either fully happens or does not happen.
 | `backend/app/api/merge.py` | `POST /api/canvases/{canvas_id}/merge`: loads sources, merges, computes phonetics and size, maps typed errors to 404/422/500 |
 | `backend/app/schemas/merge.py` | `MergeMode` (enum), `MergeRequest` (de-dup + two-distinct validator), `MergeResponse` |
 | `backend/app/services/merge_service.py` | Pure: `MergeSource`, `MergedSnippet`, `order_by_position`, `text_lines`, `word_count`, `lines_of`, `count_syllables`, `with_count`, `fit_to_mode`, `union_tag_ids`, `merge_vertical`, `merge_horizontal`, `merge_snippets`; errors `MergeError`, `TooFewSnippetsError`, `MergeSourcesNotFoundError`, `MergePersistError` |
-| `backend/app/services/snippet_service.py` | `get_canvas_snippets(db, canvas_id, owner_id, ids)`, `replace_with_merged(db, canvas_id, fields, tags, originals)` |
+| `backend/app/services/snippet_service.py` | `get_canvas_snippets(db, canvas_id, owner_id, ids)`, `replace_with_merged(db, canvas_id, fields, tags, originals, *, reparent=None)`, `Reparent` |
+| `backend/app/services/recording_service.py` | `reassign_recordings(db, merged_id, original_ids)`, passed as `reparent` by the merge route |
+| `backend/tests/voice/test_merge_recordings.py` | reparent runs between insert and deletes; failure rolls back; route passes `reassign_recordings` |
 | `backend/app/schemas/snippet.py` | `FaithfulModel`, `GridCellModel`, `GridLineModel`, `GridDataModel` (extras kept, only present keys emitted), `SnippetResponse` |
 | `backend/tests/test_merge_service.py` | Pure rules; cases mirror the deleted frontend `grid`, `order`, `mergeVertical`, `mergeHorizontal` tests |
 | `backend/tests/test_merge_route.py` | Route with the snippet service faked: order, fields, tags, phonetics, 404/422/500, response shape |
@@ -180,8 +186,9 @@ transaction a merge either fully happens or does not happen.
 
 ## Invariants and constraints
 
-- All or nothing: the merged snippet, its tag links and the deletion of every original commit together
-  in one transaction; any failure (missing id, validation, database error) leaves the canvas unchanged.
+- All or nothing: the merged snippet, its tag links, the move of the originals' recordings and the
+  deletion of every original commit together in one transaction; any failure (missing id, validation,
+  database error) leaves the canvas unchanged.
 - The client changes local state only after a successful response, and then only by the server's
   answer: the returned snippet is inserted and exactly `deleted_ids` are removed.
 - Exactly one undo state per successful merge, snapshotting the pre-merge snippets; none on failure.

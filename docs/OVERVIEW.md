@@ -68,6 +68,17 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
+### Voice Capture
+A record button (web toolbar and inline editor; Android canvas and editor top bars) opens a recording
+modal: a single tap anywhere means "next line", a double tap stops, and an optional silence timeout stops
+too. The audio goes to `POST /api/canvases/{id}/voice-takes`; the backend has a self-hosted
+faster-whisper STT service (cluster-internal) transcribe it, breaks the words into lines at the taps (or
+auto-splits by pause, syllable balance and end rhyme when there were none) and creates a new freestyle
+snippet or appends the lines to the snippet open in the editor, keeping its hand-arranged grid. The audio
+is stored with the snippet (`snippet_recordings`) for playback and deletion from the editor, follows the
+snippet into merges and is deleted with it. `STT_URL` empty turns the feature off. See
+[voice_capture.md](./features/voice_capture.md).
+
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
 while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
@@ -90,6 +101,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
+| [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -154,6 +166,8 @@ User 1──N Canvas 1──N Snippet N──M Tag
                    1──N Group ─┘ (via group_id)
                                │
                          SnippetEmbedding (1:1, Vector(384))
+                               │
+                         SnippetRecording (N:1, audio bytea; ON DELETE CASCADE, moved on merge)
 ```
 
 ## API Surface
@@ -167,8 +181,9 @@ User 1──N Canvas 1──N Snippet N──M Tag
 | Groups | 3 (CRUD) | Bearer |
 | NLP | 6 (syllabify, search, similar, tsne, rhymes, rhyme-suggest) | Mixed |
 | Export | 1 (text/md/pdf) | Bearer |
+| Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
 | Health | 1 | Public |
-| **Total** | **33 endpoints** | |
+| **Total** | **37 endpoints** | |
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -349,6 +364,21 @@ Features Index:
       - android/scripts/verify_release_apk.sh
     depends_on: [android_app]
     doc: docs/features/android_release.md
+  voice_capture:
+    description: Record lyrics by voice on web and Android (tap = next line, double tap = stop, optional silence auto-stop). POST /api/canvases/{id}/voice-takes (multipart audio + meta JSON with breaks_ms, duration_ms and a target discriminated on kind new|append) validates MIME and size (VOICE_MAX_UPLOAD_BYTES), checks ownership, sends the audio to the cluster-internal STT service (POST {STT_URL}/v1/transcribe, faster-whisper word timestamps; typed errors stt_disabled/stt_unavailable/stt_failed/empty_transcript), assembles lines in a pure module (taps split at the nearest inter-word midpoint, ties to the earlier boundary; otherwise a DP auto split scoring pause length over the median gap, syllable balance against a common target and engine end-rhyme bonus, or a single line), then in one transaction creates a freestyle snippet through the same derivation as POST /snippets or appends after the last line keeping existing grid lines verbatim (blank trailing line reused, phonetics and size recomputed, content_updated_at bumped) and stores the recording in snippet_recordings (bytea, transcript, split_mode taps|auto|single). Recordings are listed per snippet newest first, streamed with the stored Content-Type, deleted by id; they cascade with their snippet and move onto the merged snippet on merge. STT_URL empty disables the feature (503).
+    entry_points:
+      - backend/app/api/voice.py (POST /api/canvases/{canvas_id}/voice-takes, GET /api/snippets/{snippet_id}/recordings, GET /api/recordings/{recording_id}/audio, DELETE /api/recordings/{recording_id})
+      - backend/app/services/voice/ (line_assembly, engine_oracle, append, audio, stt_client, errors)
+      - backend/app/services/recording_service.py
+      - backend/app/services/snippet_content.py (derive_new_content, content_for, compute_size)
+      - backend/app/models/recording.py (SnippetRecording, SplitMode)
+      - backend/alembic/versions/004_snippet_recordings.py
+      - backend/app/schemas/voice.py
+      - stt/ (sibling branch feat/stt-service)
+      - frontend/ voice modal and recordings section (sibling branch feat/web-voice-capture)
+      - android/ voice modal and recordings section (sibling branch feat/android-voice-capture)
+    depends_on: [snippet_crud, merge_blocks, snippet_content_timestamp, rhyme_view, typed_api, grid_rearrange]
+    doc: docs/features/voice_capture.md
   android_health_banner:
     description: App-wide status banner in the Android client while it is in the foreground - polls GET /api/health (15 s, quick 3 s confirm, 5-60 s backoff while down) and counts 502/503/504 and IO errors of every regular ApiClient call through an observer; a pure debounced state machine (2 failures with one from a probe, offline at once, brief back online) shared in behaviour with the web client; polls GET /_status/alerts (frontend nginx origin, configured by -PstatusAlertsUrl when the API base is the backend directly) and shows firing alerts critical first; per-incident dismiss, expandable descriptions, live-region announcements.
     entry_points:
