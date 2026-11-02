@@ -45,7 +45,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering.
 
 ### Beat Grid
-Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)).
+Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)).
 
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are canvas-scoped color labels that can be attached to snippets and used as visibility filters — when a tag filter is active, only snippets with that tag are shown. Tags are assigned via a right-click context menu on snippets, which also supports inline tag creation (auto-assigned to the snippet), editing (name and color), and snippet deletion. Assigned tags appear as colored pill labels in the snippet header.
@@ -238,6 +238,17 @@ Features Index:
       - frontend/src/lib/grid/
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/grid_rearrange.md
+  editor_line_split_join:
+    description: In the web and Android grid editors, Enter splits the active row at the caret (text after the caret becomes a new row below), Backspace at caret 0 joins the row onto the previous one (one space at the seam), and on web Delete at the end pulls the next row up; split/joined rows lose arranged and are re-syllabified like typed text. Android detects Backspace at the start through a zero-width sentinel in the field.
+    entry_points:
+      - frontend/src/components/canvas/editorState.ts (splitRow, joinWithPrevious, joinWithNext, CaretRequest)
+      - frontend/src/components/canvas/editorKeys.ts
+      - frontend/src/components/canvas/InlineGridEditor.tsx (applyRowKey)
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/editor/EditorRowsState.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/LineFieldEdit.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/ui/ActiveLineField.kt
+    depends_on: [grid_rearrange, android_app]
+    doc: docs/features/editor_line_split_join.md
   snippet_content_timestamp:
     description: snippets.content_updated_at records when a snippet's content (text, type, grid) last changed, separately from updated_at which also moves on drags and resizes; returned on every SnippetResponse so list views can sort by last edited.
     entry_points:
