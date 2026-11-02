@@ -297,6 +297,78 @@ class IngressTest(unittest.TestCase):
         self.assertEqual(paths, ["/"])
 
 
+APP_SERVICES = {"lc-lyrics-canvas-backend", "lc-lyrics-canvas-frontend"}
+
+
+def ingress_backends(ing: dict) -> list[str]:
+    names = []
+    default = ing["spec"].get("defaultBackend")
+    if default:
+        names.append(default["service"]["name"])
+    for rule in ing["spec"]["rules"]:
+        for path in rule["http"]["paths"]:
+            names.append(path["backend"]["service"]["name"])
+    return names
+
+
+class IngressHostlessTest(unittest.TestCase):
+    """An empty ingress.hosts list renders one rule without a host, which
+    ingress-nginx serves from its catch-all server: any Host header, bare IPs
+    included."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("ingress-hostless.yaml")
+        cls.ing = cls.docs[("Ingress", "lc-lyrics-canvas")]
+
+    def test_single_rule_without_host(self) -> None:
+        rules = self.ing["spec"]["rules"]
+        self.assertEqual(len(rules), 1)
+        self.assertNotIn("host", rules[0])
+        paths = {p["path"]: p for p in rules[0]["http"]["paths"]}
+        self.assertEqual(list(paths), ["/api", "/"])
+        self.assertEqual(paths["/api"]["backend"]["service"]["name"], "lc-lyrics-canvas-backend")
+        self.assertEqual(paths["/"]["backend"]["service"]["name"], "lc-lyrics-canvas-frontend")
+        for p in paths.values():
+            self.assertEqual(p["pathType"], "Prefix")
+
+    def test_tls_entry_without_hosts(self) -> None:
+        self.assertEqual(self.ing["spec"]["tls"], [{"secretName": "lyrics-tls"}])
+        self.assertEqual(self.ing["spec"]["ingressClassName"], "public")
+
+    def test_no_cors_origins_without_hosts(self) -> None:
+        # The SPA calls /api on its own origin, so no CORS origin is needed.
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
+        env = env_map(container(dep["spec"]["template"], "backend"))
+        self.assertEqual(env["CORS_ORIGINS"]["value"], "[]")
+
+    def test_api_route_can_be_disabled(self) -> None:
+        docs = render("ingress-hostless.yaml", ingress__routeApiToBackend="false")
+        rule = docs[("Ingress", "lc-lyrics-canvas")]["spec"]["rules"][0]
+        self.assertEqual([p["path"] for p in rule["http"]["paths"]], ["/"])
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "ingress-hostless.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class IngressBackendsTest(unittest.TestCase):
+    """Ingress only ever routes to the app's frontend and backend Services;
+    internal components (such as a speech-to-text service) are never exposed."""
+
+    def test_only_app_services_routed(self) -> None:
+        for values in (("ingress.yaml",), ("ingress-hostless.yaml",), (str(ENVIRONMENTS / "homelab.yaml"),)):
+            with self.subTest(values=values):
+                docs = render(*values)
+                ings = [doc for (kind, _), doc in docs.items() if kind == "Ingress"]
+                self.assertEqual(len(ings), 1)
+                backends = ingress_backends(ings[0])
+                self.assertTrue(backends)
+                self.assertLessEqual(set(backends), APP_SERVICES)
+                for name in backends:
+                    self.assertNotRegex(name, r"stt|whisper")
+
+
 class ExternalDatabaseTest(unittest.TestCase):
     def test_external_url_in_secret(self) -> None:
         docs = render("external-db.yaml")
@@ -606,6 +678,47 @@ class HomelabEnvironmentTest(unittest.TestCase):
         self.assertEqual(env["ALERTS_NAMESPACE"]["value"], NAMESPACE)
 
 
+class HomelabIngressTest(unittest.TestCase):
+    """HTTPS for the web app (microphone access needs a secure context) via the
+    microk8s ingress addon; see docs/features/homelab_tls.md."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(str(ENVIRONMENTS / "homelab.yaml"))
+        cls.ing = cls.docs[("Ingress", "lc-lyrics-canvas")]
+
+    def test_public_class_and_hostless_rule(self) -> None:
+        self.assertEqual(self.ing["spec"]["ingressClassName"], "public")
+        rules = self.ing["spec"]["rules"]
+        self.assertEqual(len(rules), 1)
+        self.assertNotIn("host", rules[0])
+
+    def test_tls_secret_from_issue_script(self) -> None:
+        self.assertEqual(self.ing["spec"]["tls"], [{"secretName": "lyrics-canvas-tls"}])
+        script = REPO_ROOT / "deploy" / "homelab" / "tls" / "issue-cert.sh"
+        if not script.exists():
+            self.skipTest("deploy/homelab/tls not present (chart-only checkout)")
+        text = script.read_text()
+        self.assertIn("SECRET=${LYRICS_TLS_SECRET-lyrics-canvas-tls}", text)
+        self.assertIn("NAMESPACE=${LYRICS_NAMESPACE-lyrics-canvas}", text)
+
+    def test_upload_and_timeout_annotations(self) -> None:
+        ann = self.ing["metadata"]["annotations"]
+        self.assertEqual(ann["nginx.ingress.kubernetes.io/proxy-body-size"], "26m")
+        self.assertGreaterEqual(int(ann["nginx.ingress.kubernetes.io/proxy-read-timeout"]), 120)
+        self.assertGreaterEqual(int(ann["nginx.ingress.kubernetes.io/proxy-send-timeout"]), 120)
+        self.assertEqual(ann["nginx.ingress.kubernetes.io/force-ssl-redirect"], "true")
+
+    def test_api_goes_straight_to_backend(self) -> None:
+        paths = {p["path"]: p for p in self.ing["spec"]["rules"][0]["http"]["paths"]}
+        self.assertEqual(paths["/api"]["backend"]["service"]["name"], "lc-lyrics-canvas-backend")
+        self.assertEqual(paths["/"]["backend"]["service"]["name"], "lc-lyrics-canvas-frontend")
+
+    def test_node_port_kept_for_plain_http_clients(self) -> None:
+        svc = self.docs[("Service", "lc-lyrics-canvas-frontend")]["spec"]
+        self.assertEqual((svc["type"], svc["ports"][0]["nodePort"]), ("NodePort", 32443))
+
+
 class CommittedValuesSafetyTest(unittest.TestCase):
     def test_environments_exist(self) -> None:
         self.assertTrue(list(ENVIRONMENTS.glob("*.yaml")), "no environment values files found")
@@ -619,6 +732,15 @@ class CommittedValuesSafetyTest(unittest.TestCase):
                     (None, ""),
                     f"{path.name} sets {'.'.join(secret)}; put it in a .secret.yaml file",
                 )
+
+    def test_no_key_material_in_committed_values(self) -> None:
+        # TLS values only name a Secret; certificates and keys never live in git.
+        for path in committed_values_files():
+            text = path.read_text()
+            self.assertNotIn("-----BEGIN", text, path.name)
+            values = yaml.safe_load(text) or {}
+            for entry in lookup_path(values, ("ingress", "tls")) or []:
+                self.assertEqual(set(entry) - {"secretName", "hosts"}, set(), path.name)
 
     def test_secret_overrides_are_gitignored(self) -> None:
         if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
@@ -643,6 +765,12 @@ class SchemaTest(unittest.TestCase):
         self.assert_rejected("backend.service.type=Bogus")
         self.assert_rejected("ingress.hosts[0]=1")
         self.assert_rejected("postgres.persistence.size=big")
+
+    def test_rejects_tls_entry_without_secret_name(self) -> None:
+        self.assert_rejected("ingress.tls[0].hosts[0]=lyrics.example.com")
+        self.assert_rejected("ingress.tls[0].secretName=-leading-dash")
+        self.assert_rejected("ingress.tls[0].secretName=Bad_Name")
+        self.assert_rejected("ingress.tls[0].secretName=x", "ingress.tls[0].key=abc")
 
     def test_rejects_node_port_out_of_range(self) -> None:
         self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=8080")
@@ -1439,6 +1567,301 @@ class HomelabBackupTest(unittest.TestCase):
         self.assertEqual(env_map(container(pod, "backup"))["BACKUP_RETAIN"]["value"], "14")
         self.assertEqual(container(pod, "backup")["image"], "pgvector/pgvector:pg16")
         self.assertNotIn(("PersistentVolumeClaim", BACKUP), self.docs)
+
+
+# --------------------------------------------------------------------- stt
+
+STT = "lc-lyrics-canvas-stt"
+STT_DEPLOYMENT = ("Deployment", STT)
+STT_SERVICE = ("Service", STT)
+
+
+def stt_pod(docs: dict) -> dict:
+    return docs[STT_DEPLOYMENT]["spec"]["template"]
+
+
+def backend_env(docs: dict) -> dict[str, dict]:
+    return env_map(container(docs[("Deployment", "lc-lyrics-canvas-backend")]["spec"]["template"], "backend"))
+
+
+def helm_test_script(docs: dict) -> str:
+    pod = docs[("Pod", "lc-lyrics-canvas-test-connection")]
+    c = pod["spec"]["containers"][0]
+    return " ".join(c["command"] + c.get("args", []))
+
+
+class SttDisabledTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render()
+
+    def test_nothing_rendered_by_default(self) -> None:
+        self.assertEqual([k for k in self.docs if "stt" in k[1]], [])
+
+    def test_backend_has_no_stt_url(self) -> None:
+        self.assertNotIn("STT_URL", backend_env(self.docs))
+
+    def test_helm_test_skips_stt(self) -> None:
+        self.assertNotIn("stt", helm_test_script(self.docs))
+
+
+class SttEnabledTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("stt.yaml")
+        cls.pod = stt_pod(cls.docs)
+        cls.c = container(cls.pod, "stt")
+
+    def test_resources_rendered(self) -> None:
+        self.assertIn(STT_DEPLOYMENT, self.docs)
+        self.assertIn(STT_SERVICE, self.docs)
+        self.assertNotIn(("PersistentVolumeClaim", f"{STT}-models"), self.docs)
+
+    def test_service_is_cluster_ip_only(self) -> None:
+        svc = self.docs[STT_SERVICE]["spec"]
+        self.assertEqual(svc["type"], "ClusterIP")
+        self.assertEqual(svc["ports"], [{"name": "http", "port": 8000, "targetPort": "http", "protocol": "TCP"}])
+        self.assertNotIn("nodePort", svc["ports"][0])
+
+    def test_selector_labels_match(self) -> None:
+        dep = self.docs[STT_DEPLOYMENT]
+        selector = dep["spec"]["selector"]["matchLabels"]
+        self.assertEqual(selector["app.kubernetes.io/component"], "stt")
+        for k, v in selector.items():
+            self.assertEqual(self.pod["metadata"]["labels"][k], v)
+        self.assertEqual(self.docs[STT_SERVICE]["spec"]["selector"], selector)
+
+    def test_single_replica_recreate(self) -> None:
+        spec = self.docs[STT_DEPLOYMENT]["spec"]
+        self.assertEqual(spec["replicas"], 1)
+        self.assertEqual(spec["strategy"], {"type": "Recreate"})
+
+    def test_image_defaults_to_app_version(self) -> None:
+        chart = yaml.safe_load((SOURCE_CHART / "Chart.yaml").read_text())
+        self.assertEqual(self.c["image"], f"ghcr.io/rhizonymph/lyrics-canvas-stt:{chart['appVersion']}")
+        self.assertEqual(self.c["ports"][0]["containerPort"], 8000)
+
+    def test_default_env(self) -> None:
+        env = {k: v.get("value") for k, v in env_map(self.c).items()}
+        self.assertEqual(env["STT_MODEL"], "large-v3-turbo")
+        self.assertEqual(env["STT_DEVICE"], "cuda")
+        self.assertEqual(env["STT_PORT"], "8000")
+        self.assertEqual(env["STT_BEAM_SIZE"], "5")
+        self.assertEqual(env["STT_MAX_UPLOAD_BYTES"], "26214400")
+        self.assertEqual(env["STT_OFFLINE"], "false")
+        self.assertEqual(env["STT_LOG_LEVEL"], "info")
+        self.assertEqual(env["HF_HOME"], "/models")
+        self.assertEqual(env["STT_MODEL_CACHE_DIR"], "/models/hub")
+        self.assertEqual(env["HOME"], "/tmp")
+        for absent in ("STT_COMPUTE_TYPE", "STT_DEFAULT_LANGUAGE", "HF_HUB_OFFLINE"):
+            self.assertNotIn(absent, env)
+
+    def test_gpu_requested_and_limited(self) -> None:
+        res = self.c["resources"]
+        self.assertEqual(res["limits"], {"nvidia.com/gpu": 1, "memory": "8Gi"})
+        self.assertEqual(res["requests"], {"nvidia.com/gpu": 1, "cpu": "500m", "memory": "2Gi"})
+        self.assertNotIn("runtimeClassName", self.pod["spec"])
+
+    def test_probes(self) -> None:
+        self.assertEqual(self.c["startupProbe"]["httpGet"]["path"], "/healthz")
+        self.assertEqual(self.c["startupProbe"]["periodSeconds"] * self.c["startupProbe"]["failureThreshold"], 120)
+        self.assertEqual(self.c["livenessProbe"]["httpGet"]["path"], "/healthz")
+        self.assertEqual(self.c["readinessProbe"]["httpGet"]["path"], "/readyz")
+        for probe in ("startupProbe", "livenessProbe", "readinessProbe"):
+            self.assertEqual(self.c[probe]["httpGet"]["port"], "http", probe)
+
+    def test_volumes_and_read_only_root(self) -> None:
+        volumes = {v["name"]: v for v in self.pod["spec"]["volumes"]}
+        self.assertEqual(volumes["models"], {"name": "models", "emptyDir": {}})
+        self.assertEqual(volumes["tmp"], {"name": "tmp", "emptyDir": {}})
+        mounts = {m["name"]: m["mountPath"] for m in self.c["volumeMounts"]}
+        self.assertEqual(mounts, {"models": "/models", "tmp": "/tmp"})
+        self.assertTrue(self.c["securityContext"]["readOnlyRootFilesystem"])
+        self.assertFalse(self.c["securityContext"]["allowPrivilegeEscalation"])
+        self.assertEqual(self.c["securityContext"]["capabilities"], {"drop": ["ALL"]})
+        psc = self.pod["spec"]["securityContext"]
+        self.assertEqual((psc["runAsNonRoot"], psc["runAsUser"], psc["runAsGroup"]), (True, 10001, 10001))
+
+    def test_uses_service_account(self) -> None:
+        self.assertEqual(self.pod["spec"]["serviceAccountName"], "lc-lyrics-canvas")
+
+    def test_backend_gets_stt_url(self) -> None:
+        self.assertEqual(backend_env(self.docs)["STT_URL"]["value"], "http://lc-lyrics-canvas-stt:8000")
+
+    def test_helm_test_checks_stt_readiness(self) -> None:
+        self.assertIn("lc-lyrics-canvas-stt:8000/readyz", helm_test_script(self.docs))
+
+    def test_never_routed_by_ingress(self) -> None:
+        docs = render("ingress.yaml", "stt.yaml")
+        ing = docs[("Ingress", "lc-lyrics-canvas")]
+        services = {
+            p["backend"]["service"]["name"] for r in ing["spec"]["rules"] for p in r["http"]["paths"]
+        }
+        self.assertEqual(services, {"lc-lyrics-canvas-backend", "lc-lyrics-canvas-frontend"})
+        fe = container(docs[("Deployment", "lc-lyrics-canvas-frontend")]["spec"]["template"], "frontend")
+        self.assertNotIn("stt", yaml.safe_dump(fe["env"]))
+
+    def test_fullname_override(self) -> None:
+        docs = render("stt.yaml", fullnameOverride="lyr")
+        self.assertIn(("Deployment", "lyr-stt"), docs)
+        backend = container(docs[("Deployment", "lyr-backend")]["spec"]["template"], "backend")
+        self.assertEqual(env_map(backend)["STT_URL"]["value"], "http://lyr-stt:8000")
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "stt.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class SttFullValuesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("stt-full.yaml")
+        cls.pod = stt_pod(cls.docs)
+        cls.c = container(cls.pod, "stt")
+
+    def test_image_and_port(self) -> None:
+        self.assertEqual(self.c["image"], "registry.local/lc-stt:v9")
+        self.assertEqual(self.c["imagePullPolicy"], "Always")
+        self.assertEqual(self.docs[STT_SERVICE]["spec"]["ports"][0]["port"], 9000)
+        self.assertEqual(self.c["ports"][0]["containerPort"], 8000)
+        self.assertEqual(backend_env(self.docs)["STT_URL"]["value"], "http://lc-lyrics-canvas-stt:9000")
+
+    def test_env(self) -> None:
+        env = {k: v.get("value") for k, v in env_map(self.c).items()}
+        self.assertEqual(env["STT_MODEL"], "Systran/faster-whisper-small")
+        self.assertEqual(env["STT_DEVICE"], "cpu")
+        self.assertEqual(env["STT_COMPUTE_TYPE"], "int8_float32")
+        self.assertEqual(env["STT_DEFAULT_LANGUAGE"], "en")
+        self.assertEqual(env["STT_BEAM_SIZE"], "2")
+        self.assertEqual(env["STT_MAX_UPLOAD_BYTES"], "1048576")
+        self.assertEqual(env["STT_LOG_LEVEL"], "debug")
+        self.assertEqual(env["STT_OFFLINE"], "true")
+        self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(env["STT_CPU_THREADS"], "8")
+
+    def test_no_gpu_resources_on_cpu(self) -> None:
+        res = self.c["resources"]
+        self.assertEqual(res, {"requests": {"cpu": "2", "memory": "1Gi"}, "limits": {"memory": "4Gi"}})
+
+    def test_hostpath_cache(self) -> None:
+        volumes = {v["name"]: v for v in self.pod["spec"]["volumes"]}
+        self.assertEqual(volumes["models"]["hostPath"], {"path": "/srv/models/whisper", "type": "Directory"})
+
+    def test_scheduling_and_metadata(self) -> None:
+        spec = self.pod["spec"]
+        self.assertEqual(spec["runtimeClassName"], "kata")
+        self.assertEqual(spec["nodeSelector"], {"pool": "cpu"})
+        self.assertEqual(spec["tolerations"][0]["value"], "stt")
+        self.assertIn("nodeAffinity", spec["affinity"])
+        self.assertEqual(self.pod["metadata"]["annotations"], {"team": "voice"})
+        self.assertEqual(self.pod["metadata"]["labels"]["tier"], "stt")
+        self.assertEqual(spec["securityContext"]["runAsUser"], 2000)
+        self.assertEqual(spec["securityContext"]["runAsGroup"], 10001)
+        self.assertFalse(self.c["securityContext"]["readOnlyRootFilesystem"])
+
+    def test_startup_timeout(self) -> None:
+        probe = self.c["startupProbe"]
+        self.assertEqual(probe["periodSeconds"] * probe["failureThreshold"], 60)
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "stt-full.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class SttPvcTest(unittest.TestCase):
+    def test_chart_managed_claim(self) -> None:
+        docs = render("stt-pvc.yaml")
+        pvc = docs[("PersistentVolumeClaim", f"{STT}-models")]
+        self.assertEqual(pvc["metadata"]["annotations"]["helm.sh/resource-policy"], "keep")
+        self.assertEqual(pvc["spec"]["resources"]["requests"]["storage"], "20Gi")
+        self.assertEqual(pvc["spec"]["storageClassName"], "fast")
+        self.assertEqual(pvc["spec"]["accessModes"], ["ReadWriteOnce"])
+        volumes = {v["name"]: v for v in stt_pod(docs)["spec"]["volumes"]}
+        self.assertEqual(volumes["models"]["persistentVolumeClaim"], {"claimName": f"{STT}-models"})
+
+    def test_custom_gpu_resource_merges_with_resources(self) -> None:
+        docs = render("stt-pvc.yaml")
+        res = container(stt_pod(docs), "stt")["resources"]
+        self.assertEqual(res["limits"], {"amd.com/gpu": 2, "memory": "12Gi"})
+        self.assertEqual(res["requests"], {"amd.com/gpu": 2, "cpu": "500m", "memory": "2Gi"})
+        self.assertNotIn("nvidia.com/gpu", res["limits"])
+
+    def test_existing_claim(self) -> None:
+        docs = render("stt-pvc.yaml", stt__modelCache__persistentVolumeClaim__existingClaim="whisper-cache")
+        self.assertNotIn(("PersistentVolumeClaim", f"{STT}-models"), docs)
+        volumes = {v["name"]: v for v in stt_pod(docs)["spec"]["volumes"]}
+        self.assertEqual(volumes["models"]["persistentVolumeClaim"], {"claimName": "whisper-cache"})
+
+    def test_no_claim_when_disabled(self) -> None:
+        docs = render("stt-pvc.yaml", stt__enabled="false")
+        self.assertNotIn(("PersistentVolumeClaim", f"{STT}-models"), docs)
+
+
+class SttValidationTest(unittest.TestCase):
+    def assert_rejected(self, *sets: str, message: str = "") -> None:
+        args = ["template", RELEASE, str(CHART), "--set", "stt.enabled=true"]
+        for s in sets:
+            args += ["--set", s]
+        result = helm(*args)
+        self.assertNotEqual(result.returncode, 0, "expected rejection for " + ", ".join(sets))
+        if message:
+            self.assertIn(message, result.stderr)
+
+    def test_cuda_requires_gpu(self) -> None:
+        self.assert_rejected("stt.gpus=0", message="stt.gpus >= 1")
+
+    def test_cpu_without_gpu_renders(self) -> None:
+        result = helm("template", RELEASE, str(CHART), "--set", "stt.enabled=true", "--set", "stt.device=cpu",
+                      "--set", "stt.gpus=0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_hostpath_requires_path(self) -> None:
+        self.assert_rejected("stt.modelCache.type=hostPath")
+        self.assert_rejected("stt.modelCache.type=hostPath", "stt.modelCache.hostPath.path=relative/dir")
+
+    def test_rejects_bad_values(self) -> None:
+        self.assert_rejected("stt.device=tpu")
+        self.assert_rejected("stt.computeType=float8")
+        self.assert_rejected("stt.gpus=-1")
+        self.assert_rejected("stt.modelCache.type=nfs")
+        self.assert_rejected("stt.defaultLanguage=English")
+        self.assert_rejected("stt.runtimeClassName=Bad_Class")
+        self.assert_rejected("stt.maxUploadBytes=0")
+        self.assert_rejected("stt.logLevel=loud")
+        self.assert_rejected("stt.model=two words")
+
+    def test_rejects_unknown_keys(self) -> None:
+        self.assert_rejected("stt.replicaCount=2")
+        self.assert_rejected("stt.service.type=NodePort")
+        self.assert_rejected("stt.ingress.enabled=true")
+
+
+class HomelabSttTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(str(ENVIRONMENTS / "homelab.yaml"))
+        cls.pod = stt_pod(cls.docs)
+        cls.c = container(cls.pod, "stt")
+
+    def test_image_from_cluster_registry(self) -> None:
+        self.assertEqual(self.c["image"], "localhost:32000/lyrics-canvas-stt:dev")
+
+    def test_gpu_on_node1(self) -> None:
+        spec = self.pod["spec"]
+        self.assertEqual(spec["nodeSelector"], {"kubernetes.io/hostname": "node1"})
+        self.assertEqual(spec["runtimeClassName"], "nvidia")
+        self.assertEqual(self.c["resources"]["limits"]["nvidia.com/gpu"], 1)
+        self.assertEqual(env_map(self.c)["STT_DEVICE"]["value"], "cuda")
+        self.assertEqual(env_map(self.c)["STT_MODEL"]["value"], "large-v3-turbo")
+
+    def test_model_cache_on_node1_disk(self) -> None:
+        volumes = {v["name"]: v for v in self.pod["spec"]["volumes"]}
+        self.assertEqual(volumes["models"]["hostPath"], {"path": "/home/nymph/models/whisper", "type": "Directory"})
+        psc = self.pod["spec"]["securityContext"]
+        self.assertEqual((psc["runAsUser"], psc["runAsGroup"]), (1000, 1000))
+
+    def test_backend_wired(self) -> None:
+        self.assertEqual(backend_env(self.docs)["STT_URL"]["value"], "http://lc-lyrics-canvas-stt:8000")
 
 
 if __name__ == "__main__":

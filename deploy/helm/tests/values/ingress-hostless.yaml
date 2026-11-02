@@ -1,0 +1,7 @@
+# Host-less (catch-all) rule: requests for any Host, including bare IPs.
+ingress:
+  enabled: true
+  className: public
+  hosts: []
+  tls:
+    - secretName: lyrics-tls

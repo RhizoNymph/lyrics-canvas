@@ -175,7 +175,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `QueryFromSelection.kt` | `selectedSnippets`, `anchorSnippets`, `anchorsFromSelection` |
 | | | `RhymeQuery.kt` | request-building rules of `rhymeStore.ts`: `SlotMode`, `RhymeSources`, `RhymeQueryParams`, `RhymeSelection`, sealed `RhymeQueryPlan` (`Skip` / `Query`, both carrying pruned exclusions and ranges), `planRhymeQuery`, `pruneExclusions`, `pruneRanges`, `slotFromFirstAnchor`, `derivedFromFor`, `materializeRequest` |
 | | | `RhymeError.kt` | `RhymeErrorKind`, `RhymeOperation`, `RhymeError`, `toRhymeError(ApiError, op)` |
-| | `dev.nymph.lyrics.logic.editor` | `EditorRowsState.kt` | `EditorRowsState` (internal constructor), `initEditorState`, `gridLineForRow`, `setActiveRow`, `typeLine`, `insertRow`, `deleteRow`, `moveChunkInRow`, `insertRestInRow`, `removeCellsInRow`, `reorderRows`, `mergeSyllabified`, `needsSyllabify`, `rawTextForSave` |
+| | `dev.nymph.lyrics.logic.editor` | `EditorRowsState.kt` | `EditorRowsState` (internal constructor), `CaretRequest`, `initEditorState`, `gridLineForRow`, `setActiveRow`, `typeLine`, `insertRow`, `deleteRow`, `splitRow`, `joinWithPrevious`, `joinWithNext`, `moveChunkInRow`, `insertRestInRow`, `removeCellsInRow`, `reorderRows`, `mergeSyllabified`, `needsSyllabify`, `rawTextForSave` |
 | | `dev.nymph.lyrics.logic.canvas` | `Viewport.kt` | `Point`, `ViewSize`, `MIN_ZOOM`/`MAX_ZOOM`, `clampZoom`, `Viewport` (`worldToScreen`, `screenToWorld`, `zoomAbout`, `scaleAbout`, `panBy`, `toState`, `Viewport.from(ViewportState?)`), `viewportCenter` |
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
 | | | `MergeError.kt` | sealed `MergeError` (`TooFewSnippets`, `NotFound`, `Invalid`, `Server`, `Network`, `Unknown`), `toMergeError` |
@@ -214,14 +214,15 @@ Paths under `app/src/main/kotlin/dev/nymph/lyrics/app/editor/`. Details, flows a
 |---|---|
 | `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier)` (the canvas/editor seam); one ViewModel per visit; `onSaved` once on `SaveStatus.Saved` |
 | `GridEditorViewModel.kt` | `GridEditorViewModel(snippet, nlp, snippets)` (`StateFlow<EditorUiState>`, implements `GridEditorActions`), `SYLLABIFY_DEBOUNCE_MS`, `saveRequest`, `selectionIsAllRests` |
-| `GridEditorActions.kt` | `GridEditorActions`: the screen's intents (type, rows, selection, chunk ops, reorder, save) |
+| `GridEditorActions.kt` | `GridEditorActions`: the screen's intents (type, rows incl. `splitRow` / `backspaceAtStart`, selection, chunk ops, reorder, save) |
+| `LineFieldEdit.kt` | Zero-width sentinel model of the active row's field: `LINE_FIELD_SENTINEL`, `LineFieldState`, `LineFieldEdit`, `interpretLineFieldChange`, `enterSplit` (line split/join, `docs/features/editor_line_split_join.md`) |
 | `EditorUiState.kt` | `EditorUiState` (core `EditorRowsState` + selection, extend mode, snippet type, save status, syllabify error; derived `rowLines`), sealed `SaveStatus` |
 | `CellSelection.kt` | `CellSelection` (never empty; `of` / `cell`), `SelectionEdge`, `tapSelection`, `resizeSelection`, `indexAfterReorder` |
 | `DragGeometry.kt` | Pure gesture geometry: `CellMetrics`, `cellIndexAt`, `cellIndexClamped`, `dropGapAt` (core `gapFromX`), `handleAt`, `edgeAutoScrollDelta`, `RowSpan`, `reorderTargetIndex` |
-| `ui/GridEditorScreen.kt`, `ui/EditorTopBar.kt`, `ui/EditorRow.kt`, `ui/CellStrip.kt`, `ui/RowToolbar.kt`, `ui/ActiveLineField.kt`, `ui/EditorDimens.kt` | Compose screen: top bar, reorderable rows, cell strip gestures (tap, handles, long-press chunk drag, drop indicator, edge auto-scroll), chunk toolbar, active-row field above the IME |
+| `ui/GridEditorScreen.kt`, `ui/EditorTopBar.kt`, `ui/EditorRow.kt`, `ui/CellStrip.kt`, `ui/RowToolbar.kt`, `ui/ActiveLineField.kt`, `ui/EditorDimens.kt` | Compose screen: top bar, reorderable rows, cell strip gestures (tap, handles, long-press chunk drag, drop indicator, edge auto-scroll), chunk toolbar, active-row field above the IME (Enter splits at the caret, Backspace at the start joins onto the previous row) |
 
 Tests (`app/src/test/.../editor/`): `GridEditorViewModelTest` (fake repositories), `CellSelectionTest`,
-`DragGeometryTest`.
+`DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`.
 
 ### Core data / control flow
 

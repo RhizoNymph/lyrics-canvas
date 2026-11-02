@@ -1,8 +1,8 @@
 # Homelab Deploy
 
 `deploy/homelab/deploy.sh` deploys the committed tree to the home microk8s
-cluster in one command: it builds the backend and frontend images on a build
-host, pushes them to the microk8s registry addon tagged with the short commit
+cluster in one command: it builds the backend, frontend and stt images on a
+build host, pushes them to the microk8s registry addon tagged with the short commit
 SHA, and runs `helm upgrade --install` with
 `deploy/helm/environments/homelab.yaml`, then `helm test`.
 
@@ -14,7 +14,13 @@ deploy/homelab/deploy.sh --rebuild     # rebuild and push even if the tag exists
 ```
 
 The app is then at `http://10.1.1.69:32443`. The node names (node0, node1,
-node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs.
+node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs. The same
+release also enables an Ingress on the microk8s ingress addon, so after the
+one-time TLS setup in [homelab_tls.md](./homelab_tls.md)
+(`deploy/homelab/tls/issue-cert.sh` plus the ingress default certificate) the
+web app is at `https://10.1.1.69/` and `https://100.64.0.4/` (tailnet), which
+browsers need for microphone access. The printed URL stays the NodePort one,
+which needs no setup.
 
 ## Scope
 
@@ -27,9 +33,10 @@ node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs.
 - Shipping exactly the committed tree (`git archive HEAD`) to a per-run
   directory under `~` on the build host, removed on exit, including on failure
   and on INT/TERM.
-- Building both images with `docker build --network host` and pushing them,
+- Building the three images (backend, frontend, stt) with
+  `docker build --network host` and pushing them,
   skipping an image whose tag is already in the registry unless `--rebuild`.
-- `helm upgrade --install` with the homelab values file and the two image
+- `helm upgrade --install` with the homelab values file and the three image
   tags, `--wait --timeout 10m`, `--atomic` when the release already exists,
   then `helm test`, then printing the URL and the deployed revision.
 - Structured `key=value` log lines on stderr and one exit code per failure
@@ -43,6 +50,10 @@ node2) are ssh aliases on the laptop, not DNS names, so URLs use IPs.
   in `git archive HEAD`; generated credentials are kept across upgrades by the
   chart. Pass it with a manual helm run if ever needed.
 - Pruning old image tags from the registry, CI, other clusters.
+- TLS certificates and the ingress default certificate: created once by
+  `deploy/homelab/tls/issue-cert.sh` ([homelab_tls.md](./homelab_tls.md)).
+  Deploying before that works; the Ingress then serves ingress-nginx's fake
+  certificate until the Secret and default certificate exist.
 - Running anything locally beyond `git` and `ssh` (no local docker, kubectl or
   helm).
 
@@ -59,7 +70,7 @@ trap cleanup EXIT
 ssh true  ------------------------------> (exit 4 if unreachable)
 git archive HEAD | ssh -----------------> mkdir -p ~/lyrics-canvas-deploy/<TAG>-<pid>
                                           tar -xf - -C <dir>          (exit 5)
-for backend, frontend:
+for backend, frontend, stt:
   unless --rebuild: ssh ---------------> curl localhost:32000/v2/<repo>/tags/list
                                           200 + "<TAG>" in body -> present
                                           200 without it, 404   -> absent
@@ -71,8 +82,12 @@ ssh ------------------------------------> microk8s helm3 status <release>   (exi
 ssh ------------------------------------> microk8s helm3 upgrade --install <release> <dir>/<chart>
                                             -n <ns> --create-namespace -f <dir>/<values>
                                             --set backend.image.tag=<TAG> --set frontend.image.tag=<TAG>
+                                            --set stt.image.tag=<TAG>
                                             --wait --timeout 10m [--atomic]  (exit 8)
-ssh ------------------------------------> microk8s helm3 test <release> -n <ns> --logs   (exit 9)
+ssh ------------------------------------> microk8s helm3 test <release> -n <ns> --timeout 5m
+  on failure: ssh ----------------------> microk8s kubectl logs -n <ns>
+                                            -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=test
+                                            --all-containers --tail=200            (then exit 9)
 ssh ------------------------------------> microk8s helm3 status <release>   -> REVISION
 print "Deployed <release> revision N (tag TAG): http://<app host>:<port>"
 EXIT trap: ssh ------------------------> rm -rf ~/lyrics-canvas-deploy/<TAG>-<pid>
@@ -100,6 +115,28 @@ would generate a new password that no longer matches. So the script checks
 A failing `helm test` does not roll back: the pods are already ready, and the
 error line includes the `helm3 rollback` command.
 
+### Why no `helm test --logs`
+
+The chart's test pod has `helm.sh/hook-delete-policy:
+before-hook-creation,hook-succeeded`, so Helm deletes it the moment it
+succeeds. `helm test --logs` then tries to read logs from a pod that no longer
+exists and exits non-zero, which made every successful deploy end with exit
+code 9. The script runs `helm test` without `--logs`; only when the test fails
+(the pod is kept) does it print the pod's logs with `kubectl logs` by label.
+A failure to fetch them is logged (`event=helm.test_logs_unavailable`) and the
+exit code stays 9.
+
+### The stt image
+
+The stt image is built and tagged like the others on every new commit, whether
+or not `stt/` changed, and whether or not the values enable STT. Its CUDA base
+(`nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04`, a few GB) is pulled once and
+cached by node0's docker; afterwards a rebuild is the small app layers, and the
+push only uploads layers the registry does not have. The first deploy with STT
+enabled also downloads the Whisper weights in the pod (see
+[stt_service.md](stt_service.md)); the node1 directory
+`/home/nymph/models/whisper` must exist beforehand.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -112,7 +149,7 @@ error line includes the `helm3 rollback` command.
 | `LYRICS_APP_HOST` | `10.1.1.69` | Host in the printed URL. |
 | `LYRICS_APP_PORT` | `32443` | Frontend NodePort in the printed URL. |
 | `LYRICS_REGISTRY` | `localhost:32000` | Registry as seen from the build host. |
-| `LYRICS_BACKEND_REPO` / `LYRICS_FRONTEND_REPO` | `lyrics-canvas-backend` / `lyrics-canvas-frontend` | Image repositories; must match the values file. |
+| `LYRICS_BACKEND_REPO` / `LYRICS_FRONTEND_REPO` / `LYRICS_STT_REPO` | `lyrics-canvas-backend` / `lyrics-canvas-frontend` / `lyrics-canvas-stt` | Image repositories; must match the values file. |
 | `LYRICS_HELM_TIMEOUT` / `LYRICS_HELM_TEST_TIMEOUT` | `10m` / `5m` | Helm timeouts. |
 | `LYRICS_REMOTE_BASE` | `lyrics-canvas-deploy` | Parent of the build directory, relative to `~`. |
 | `LYRICS_VITE_GOOGLE_CLIENT_ID` | empty | `VITE_GOOGLE_CLIENT_ID` frontend build arg. |
@@ -135,10 +172,11 @@ error line includes the `helm3 rollback` command.
 
 | File | Role |
 |------|------|
-| `deploy/homelab/deploy.sh` | The script. Functions per phase: `parse_args`, `validate_config`, `preflight_git`, `preflight_ssh`, `ship_tree`, `images` / `ensure_image` / `image_state` / `build_image`, `helm_deploy`, `helm_test`, `report`; `remote` / `remote_stdin` / `shell_join` for ssh; `log` / `die` for structured logs; `cleanup` on EXIT. |
+| `deploy/homelab/deploy.sh` | The script. Functions per phase: `parse_args`, `validate_config`, `preflight_git`, `preflight_ssh`, `ship_tree`, `images` / `ensure_image` / `image_state` / `build_image`, `helm_deploy`, `helm_test` (no `--logs`; kubectl logs on failure), `report`; `remote` / `remote_stdin` / `shell_join` for ssh; `log` / `die` for structured logs; `cleanup` on EXIT. |
 | `deploy/homelab/tests/test_deploy_script.py` | `unittest` suite (stdlib only). Each test makes a throwaway git repo containing a copy of the script, runs it with the ssh stub first on PATH, and asserts on the recorded remote commands, exit codes and logs. Also checks the script's registry defaults against `homelab.yaml`, that no tracked doc shows a `http://nodeN` URL, `bash -n`, and `shellcheck` when installed. |
 | `deploy/homelab/tests/stubs/ssh` | Recording ssh stand-in: logs flags, host, remote command and saved stdin per call to `$STUB_SSH_LOG`; answers from regex rules in `$STUB_SSH_RULES`. |
-| `deploy/helm/environments/homelab.yaml` | Values the script deploys with; its `dev` tags are only the fallback for a manual helm run. |
+| `deploy/helm/environments/homelab.yaml` | Values the script deploys with; its `dev` tags are only the fallback for a manual helm run. Enables the HTTPS Ingress (see [homelab_tls.md](./homelab_tls.md)). |
+| `deploy/homelab/tls/issue-cert.sh` | Separate one-time/yearly script for the local CA, server certificate and `lyrics-canvas-tls` Secret; not called by `deploy.sh`. |
 
 Run the tests with `python3 deploy/homelab/tests/test_deploy_script.py`.
 
@@ -147,7 +185,7 @@ Run the tests with `python3 deploy/homelab/tests/test_deploy_script.py`.
 - The deployed images are built from exactly the commit their tag names:
   only `git archive HEAD` is shipped, never the working tree, and the tag is
   that commit's SHA.
-- Values always come from `-f <values file>` plus the two `--set` image tags;
+- Values always come from `-f <values file>` plus the three `--set` image tags;
   the script never passes `--reuse-values` (or `--reset-values`), so a value
   removed from `homelab.yaml` is removed from the release.
 - No remote command runs under `--dry-run`; every remote command goes through
@@ -164,5 +202,7 @@ Run the tests with `python3 deploy/homelab/tests/test_deploy_script.py`.
   a longer or shorter SHA never counts as present. It does not know the build
   args an image was built with: after changing
   `LYRICS_VITE_GOOGLE_CLIENT_ID` for an already built commit, use `--rebuild`.
+- A passing `helm test` never fails the run; `helm test` is never called with
+  `--logs`.
 - `LYRICS_REGISTRY/LYRICS_*_REPO` must name the same images as the values
   file's `image.repository`; the test suite checks the defaults.

@@ -2,7 +2,7 @@
 # One-command deploy of the committed tree to the home microk8s cluster.
 #
 # Ships `git archive HEAD` to a build host over ssh, builds and pushes the
-# backend and frontend images tagged with the short commit SHA to the
+# backend, frontend and stt images tagged with the short commit SHA to the
 # microk8s registry addon, then runs `helm upgrade --install` with the
 # homelab values file and `helm test`. See docs/features/homelab_deploy.md.
 #
@@ -31,6 +31,7 @@ APP_PORT=${LYRICS_APP_PORT:-32443}
 REGISTRY=${LYRICS_REGISTRY:-localhost:32000}
 BACKEND_REPO=${LYRICS_BACKEND_REPO:-lyrics-canvas-backend}
 FRONTEND_REPO=${LYRICS_FRONTEND_REPO:-lyrics-canvas-frontend}
+STT_REPO=${LYRICS_STT_REPO:-lyrics-canvas-stt}
 HELM_TIMEOUT=${LYRICS_HELM_TIMEOUT:-10m}
 HELM_TEST_TIMEOUT=${LYRICS_HELM_TEST_TIMEOUT:-5m}
 REMOTE_BASE=${LYRICS_REMOTE_BASE-lyrics-canvas-deploy}
@@ -73,6 +74,7 @@ Environment (default):
   LYRICS_REGISTRY               registry as seen from the build host ($REGISTRY)
   LYRICS_BACKEND_REPO           backend image repository ($BACKEND_REPO)
   LYRICS_FRONTEND_REPO          frontend image repository ($FRONTEND_REPO)
+  LYRICS_STT_REPO               speech-to-text image repository ($STT_REPO)
   LYRICS_HELM_TIMEOUT           helm upgrade --timeout ($HELM_TIMEOUT)
   LYRICS_HELM_TEST_TIMEOUT      helm test --timeout ($HELM_TEST_TIMEOUT)
   LYRICS_REMOTE_BASE            build directory parent, relative to ~ on the build host ($REMOTE_BASE)
@@ -315,6 +317,7 @@ images() {
   ensure_image frontend "$FRONTEND_REPO" \
     -f "$REMOTE_DIR/frontend/Dockerfile.prod" \
     --build-arg "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID"
+  ensure_image stt "$STT_REPO"
 }
 
 release_exists() {
@@ -332,6 +335,7 @@ helm_deploy() {
     -f "$REMOTE_DIR/$VALUES"
     --set "backend.image.tag=$TAG"
     --set "frontend.image.tag=$TAG"
+    --set "stt.image.tag=$TAG"
     --wait --timeout "$HELM_TIMEOUT"
   )
   # --atomic rolls a failed upgrade back to the last good revision. It is left
@@ -349,11 +353,20 @@ helm_deploy() {
       "rolled_back=$atomic"
 }
 
+# No `--logs`: the test pod is deleted as soon as it succeeds
+# (hook-delete-policy hook-succeeded), so helm's log fetch would fail after a
+# passing test. A failed test pod is kept, and its logs are fetched here.
 helm_test() {
-  remote "$(shell_join microk8s helm3 test "$RELEASE" -n "$NAMESPACE" --logs --timeout "$HELM_TEST_TIMEOUT")" ||
-    die "$EXIT_HELM_TEST" helm.test_failed "release=$RELEASE" "namespace=$NAMESPACE" \
-      hint="new revision is live; roll back with: microk8s helm3 rollback $RELEASE -n $NAMESPACE"
-  log info helm.test_passed "release=$RELEASE"
+  if remote "$(shell_join microk8s helm3 test "$RELEASE" -n "$NAMESPACE" --timeout "$HELM_TEST_TIMEOUT")"; then
+    log info helm.test_passed "release=$RELEASE"
+    return 0
+  fi
+  local selector="app.kubernetes.io/instance=$RELEASE,app.kubernetes.io/component=test"
+  log warn helm.test_logs "release=$RELEASE" "selector=$selector"
+  remote "$(shell_join microk8s kubectl logs -n "$NAMESPACE" -l "$selector" --all-containers --tail=200)" ||
+    log warn helm.test_logs_unavailable "release=$RELEASE" "selector=$selector"
+  die "$EXIT_HELM_TEST" helm.test_failed "release=$RELEASE" "namespace=$NAMESPACE" \
+    hint="new revision is live; roll back with: microk8s helm3 rollback $RELEASE -n $NAMESPACE"
 }
 
 report() {
