@@ -179,14 +179,16 @@ async def test_audio_and_delete_are_owner_only(db):
     stranger, _ = await make_owner(db)
     snippet = await add_snippet(db, canvas, "cat")
     _, row = await recording_service.append_with_recording(db, canvas, owner, snippet.id, lines=["one"], recording=take())
+    # Read ids before the service calls: a commit or rollback expires the ORM objects.
+    recording_id, snippet_id = row.id, snippet.id
     with pytest.raises(RecordingNotFoundError):
-        await recording_service.get_audio(db, row.id, stranger)
+        await recording_service.get_audio(db, recording_id, stranger)
     with pytest.raises(RecordingNotFoundError):
-        await recording_service.delete_recording(db, row.id, stranger)
-    await recording_service.delete_recording(db, row.id, owner)
+        await recording_service.delete_recording(db, recording_id, stranger)
+    await recording_service.delete_recording(db, recording_id, owner)
     with pytest.raises(RecordingNotFoundError):
-        await recording_service.delete_recording(db, row.id, owner)
-    assert await recording_count(db, snippet.id) == 0
+        await recording_service.delete_recording(db, recording_id, owner)
+    assert await recording_count(db, snippet_id) == 0
 
 
 async def test_deleting_a_snippet_or_canvas_cascades_to_recordings(db):
