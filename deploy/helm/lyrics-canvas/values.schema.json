@@ -179,6 +179,81 @@
         "affinity": { "type": "object" }
       }
     },
+    "stt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/image" },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "port": { "$ref": "#/definitions/port" } }
+        },
+        "model": { "type": "string", "minLength": 1, "pattern": "^\\S+$" },
+        "device": { "type": "string", "enum": ["cuda", "cpu"] },
+        "computeType": {
+          "type": "string",
+          "enum": ["", "default", "auto", "int8", "int8_float32", "int8_float16", "int8_bfloat16", "int16", "float16", "bfloat16", "float32"]
+        },
+        "gpus": { "type": "integer", "minimum": 0 },
+        "gpuResourceName": { "type": "string", "pattern": "^[A-Za-z0-9.-]+/[A-Za-z0-9._-]+$" },
+        "runtimeClassName": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9.]*[a-z0-9])?)?$" },
+        "defaultLanguage": { "type": "string", "pattern": "^([a-z]{2,3})?$" },
+        "beamSize": { "type": "integer", "minimum": 1 },
+        "maxUploadBytes": { "type": "integer", "minimum": 1 },
+        "offline": { "type": "boolean" },
+        "logLevel": { "type": "string", "enum": ["debug", "info", "warning", "error"] },
+        "modelCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["emptyDir", "hostPath", "persistentVolumeClaim"] },
+            "hostPath": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "path": { "type": "string", "pattern": "^(/.*)?$" } }
+            },
+            "persistentVolumeClaim": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "existingClaim": { "type": "string" },
+                "size": { "$ref": "#/definitions/quantity" },
+                "storageClass": { "type": "string" },
+                "accessModes": { "$ref": "#/definitions/accessModes" }
+              }
+            }
+          }
+        },
+        "startupTimeoutSeconds": { "type": "integer", "minimum": 5 },
+        "extraEnv": { "type": "array", "items": { "$ref": "#/definitions/envVar" } },
+        "resources": { "$ref": "#/definitions/resources" },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "podSecurityContext": { "type": "object" },
+        "securityContext": { "type": "object" },
+        "nodeSelector": { "$ref": "#/definitions/stringMap" },
+        "tolerations": { "type": "array", "items": { "type": "object" } },
+        "affinity": { "type": "object" }
+      },
+      "if": {
+        "required": ["enabled", "modelCache"],
+        "properties": {
+          "enabled": { "const": true },
+          "modelCache": { "properties": { "type": { "const": "hostPath" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "modelCache": {
+            "required": ["hostPath"],
+            "properties": { "hostPath": { "required": ["path"], "properties": { "path": { "minLength": 1 } } } }
+          }
+        }
+      }
+    },
     "postgres": {
       "type": "object",
       "additionalProperties": false,

@@ -1,0 +1,23 @@
+{{- $s := .Values.stt }}
+{{- if and $s.enabled (eq $s.modelCache.type "persistentVolumeClaim") (not $s.modelCache.persistentVolumeClaim.existingClaim) }}
+{{- $c := $s.modelCache.persistentVolumeClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "lyrics-canvas.stt.claimName" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stt
+  annotations:
+    # Re-downloading the weights is slow; keep them across uninstalls.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml $c.accessModes | nindent 4 }}
+  {{- if $c.storageClass }}
+  storageClassName: {{ $c.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $c.size | quote }}
+{{- end }}

@@ -45,6 +45,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-frontend" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "lyrics-canvas.stt.fullname" -}}
+{{- printf "%s-stt" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "lyrics-canvas.postgres.fullname" -}}
 {{- printf "%s-postgres" (include "lyrics-canvas.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
@@ -161,6 +165,19 @@ entry.
 
 {{- define "lyrics-canvas.backend.url" -}}
 {{- printf "http://%s:%d" (include "lyrics-canvas.backend.fullname" .) (int .Values.backend.service.port) }}
+{{- end }}
+
+{{/*
+In-cluster STT base URL for the backend's STT_URL. Only meaningful with
+stt.enabled; the STT Service is ClusterIP and never reachable from outside.
+*/}}
+{{- define "lyrics-canvas.stt.url" -}}
+{{- printf "http://%s:%d" (include "lyrics-canvas.stt.fullname" .) (int .Values.stt.service.port) }}
+{{- end }}
+
+{{/* Claim backing the STT model cache when stt.modelCache.type=persistentVolumeClaim. */}}
+{{- define "lyrics-canvas.stt.claimName" -}}
+{{- default (printf "%s-models" (include "lyrics-canvas.stt.fullname" .)) .Values.stt.modelCache.persistentVolumeClaim.existingClaim }}
 {{- end }}
 
 {{- define "lyrics-canvas.frontend.url" -}}

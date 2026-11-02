@@ -1,0 +1,161 @@
+{{- if .Values.stt.enabled }}
+{{- $s := .Values.stt }}
+{{- if and (eq $s.device "cuda") (lt (int $s.gpus) 1) }}
+{{- fail "stt.device=cuda requires stt.gpus >= 1 (or set stt.device=cpu)" }}
+{{- end }}
+{{- if and (eq $s.modelCache.type "hostPath") (not $s.modelCache.hostPath.path) }}
+{{- fail "stt.modelCache.hostPath.path is required when stt.modelCache.type=hostPath" }}
+{{- end }}
+{{- $startupPeriod := 5 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lyrics-canvas.stt.fullname" . }}
+  labels:
+    {{- include "lyrics-canvas.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stt
+spec:
+  # One replica holding the model (and usually the only GPU). Recreate so an
+  # upgrade never waits for a second GPU or a second mount of the cache.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "lyrics-canvas.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: stt
+  template:
+    metadata:
+      labels:
+        {{- include "lyrics-canvas.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: stt
+        {{- with $s.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $s.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "lyrics-canvas.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "lyrics-canvas.serviceAccountName" . }}
+      {{- with $s.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with $s.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: stt
+          image: {{ include "lyrics-canvas.image" (dict "image" $s.image "default" .Chart.AppVersion) }}
+          imagePullPolicy: {{ $s.image.pullPolicy }}
+          {{- with $s.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: STT_PORT
+              value: "8000"
+            - name: STT_MODEL
+              value: {{ $s.model | quote }}
+            - name: STT_DEVICE
+              value: {{ $s.device | quote }}
+            {{- with $s.computeType }}
+            - name: STT_COMPUTE_TYPE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $s.defaultLanguage }}
+            - name: STT_DEFAULT_LANGUAGE
+              value: {{ . | quote }}
+            {{- end }}
+            - name: STT_BEAM_SIZE
+              value: {{ $s.beamSize | quote }}
+            - name: STT_MAX_UPLOAD_BYTES
+              value: {{ int64 $s.maxUploadBytes | quote }}
+            - name: STT_LOG_LEVEL
+              value: {{ $s.logLevel | quote }}
+            - name: STT_OFFLINE
+              value: {{ $s.offline | quote }}
+            {{- if $s.offline }}
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            {{- end }}
+            - name: HF_HOME
+              value: /models
+            - name: STT_MODEL_CACHE_DIR
+              value: /models/hub
+            # The root filesystem is read-only; libraries that write under
+            # $HOME (onnxruntime, Hub state) get the scratch volume.
+            - name: HOME
+              value: /tmp
+            {{- with $s.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: {{ $startupPeriod }}
+            failureThreshold: {{ div (add (int $s.startupTimeoutSeconds) (sub $startupPeriod 1)) $startupPeriod }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          # Not ready until the model is loaded (first start: downloaded). A
+          # failing readiness probe never restarts the pod.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+          {{- $resources := deepCopy (default dict $s.resources) }}
+          {{- if gt (int $s.gpus) 0 }}
+          {{- /* merge mutates its first argument: build a fresh dict for each. */}}
+          {{- $_ := set $resources "limits" (merge (dict $s.gpuResourceName (int $s.gpus)) (default dict $resources.limits)) }}
+          {{- $_ := set $resources "requests" (merge (dict $s.gpuResourceName (int $s.gpus)) (default dict $resources.requests)) }}
+          {{- end }}
+          {{- with $resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: models
+          {{- if eq $s.modelCache.type "hostPath" }}
+          # type Directory: the directory must already exist on the node.
+          hostPath:
+            path: {{ $s.modelCache.hostPath.path | quote }}
+            type: Directory
+          {{- else if eq $s.modelCache.type "persistentVolumeClaim" }}
+          persistentVolumeClaim:
+            claimName: {{ include "lyrics-canvas.stt.claimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with $s.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $s.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $s.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

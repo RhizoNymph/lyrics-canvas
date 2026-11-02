@@ -99,6 +99,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
+| [STT Service](./features/stt_service.md) | `stt/`: cluster-internal faster-whisper service (`POST /v1/transcribe` with word timestamps), its CUDA image and `stt.*` chart component on node1's GPU |
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
@@ -154,7 +155,8 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | Rhymes | pronouncing (CMU dict), g2p-en, wordfreq | Phonetic engine: pronunciation, near-rhyme scoring, rhyme index |
 | Export | reportlab, markdown | PDF/MD/TXT generation |
 | Containerization | Docker Compose | 3-service dev environment |
-| Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB |
+| Deployment | Helm chart (`deploy/helm/lyrics-canvas`) | Kubernetes: backend + nginx frontend + pgvector StatefulSet or external DB + optional STT service |
+| Speech-to-text | faster-whisper (CTranslate2, large-v3-turbo) in `stt/` | Word-timestamped transcripts for voice capture; CUDA on the homelab GPU, CPU int8 for dev |
 | Alerting | PrometheusRule (prometheus-operator) + kube-state-metrics | Availability and backup alerts for a release; routing in Alertmanager |
 | Homelab deploy | `deploy/homelab/deploy.sh` (bash over ssh) | One-command build, push and helm deploy of HEAD to the home microk8s cluster |
 
@@ -339,7 +341,7 @@ Features Index:
     depends_on: [helm_deployment]
     doc: docs/features/alerting.md
   homelab_deploy:
-    description: One-command deploy of the committed tree to the home microk8s cluster - refuses a dirty tree (unless --allow-dirty, which still ships HEAD only), tags images with the 12-char commit SHA, ships git archive HEAD over ssh to a per-run dir under ~ on the build host (removed by an EXIT trap), builds backend and frontend with docker build --network host and pushes to localhost:32000 unless the tag is already in the registry (--rebuild / --skip-build), then helm upgrade --install with -f homelab.yaml and both --set image tags (--atomic for an existing release, never --reuse-values), helm test, and prints the URL (http://10.1.1.69:32443) and revision; --dry-run prints every remote command without ssh; key=value logs and one exit code per failure class.
+    description: One-command deploy of the committed tree to the home microk8s cluster - refuses a dirty tree (unless --allow-dirty, which still ships HEAD only), tags images with the 12-char commit SHA, ships git archive HEAD over ssh to a per-run dir under ~ on the build host (removed by an EXIT trap), builds backend, frontend and stt with docker build --network host and pushes to localhost:32000 unless the tag is already in the registry (--rebuild / --skip-build), then helm upgrade --install with -f homelab.yaml and the backend, frontend and stt --set image tags (--atomic for an existing release, never --reuse-values), helm test (without --logs; the test pod's logs are fetched with kubectl only when it fails), and prints the URL (http://10.1.1.69:32443) and revision; --dry-run prints every remote command without ssh; key=value logs and one exit code per failure class.
     entry_points:
       - deploy/homelab/deploy.sh
       - deploy/homelab/tests/test_deploy_script.py
@@ -365,7 +367,7 @@ Features Index:
     depends_on: [android_app]
     doc: docs/features/android_release.md
   voice_capture:
-    description: Record lyrics by voice on web and Android (tap = next line, double tap = stop, optional silence auto-stop). POST /api/canvases/{id}/voice-takes (multipart audio + meta JSON with breaks_ms, duration_ms and a target discriminated on kind new|append) validates MIME and size (VOICE_MAX_UPLOAD_BYTES), checks ownership, sends the audio to the cluster-internal STT service (POST {STT_URL}/v1/transcribe, faster-whisper word timestamps; typed errors stt_disabled/stt_unavailable/stt_failed/empty_transcript), assembles lines in a pure module (taps split at the nearest inter-word midpoint, ties to the earlier boundary; otherwise a DP auto split scoring pause length over the median gap, syllable balance against a common target and engine end-rhyme bonus, or a single line), then in one transaction creates a freestyle snippet through the same derivation as POST /snippets or appends after the last line keeping existing grid lines verbatim (blank trailing line reused, phonetics and size recomputed, content_updated_at bumped) and stores the recording in snippet_recordings (bytea, transcript, split_mode taps|auto|single). Recordings are listed per snippet newest first, streamed with the stored Content-Type, deleted by id; they cascade with their snippet and move onto the merged snippet on merge. STT_URL empty disables the feature (503).
+    description: Record lyrics by voice on web and Android (tap = next line, double tap = stop, optional silence auto-stop). POST /api/canvases/{id}/voice-takes (multipart audio + meta JSON with breaks_ms, duration_ms and a target discriminated on kind new|append) validates MIME and size (VOICE_MAX_UPLOAD_BYTES), checks ownership, sends the audio to the cluster-internal STT service (POST {STT_URL}/v1/transcribe, faster-whisper word timestamps; typed errors stt_disabled/stt_unavailable/stt_failed/empty_transcript), assembles lines in a pure module (a tap in a pause splits there, a tap in a word's first half splits before it and in its second half after it; otherwise a DP auto split scoring pause length over the median gap, syllable balance against a common target and engine end-rhyme bonus, or a single line), then in one transaction creates a freestyle snippet through the same derivation as POST /snippets or appends after the last line keeping existing grid lines verbatim (blank trailing line reused, phonetics and size recomputed, content_updated_at bumped) and stores the recording in snippet_recordings (bytea, transcript, split_mode taps|auto|single). Recordings are listed per snippet newest first, streamed with the stored Content-Type, deleted by id; they cascade with their snippet and move onto the merged snippet on merge. STT_URL empty disables the feature (503).
     entry_points:
       - backend/app/api/voice.py (POST /api/canvases/{canvas_id}/voice-takes, GET /api/snippets/{snippet_id}/recordings, GET /api/recordings/{recording_id}/audio, DELETE /api/recordings/{recording_id})
       - backend/app/services/voice/ (line_assembly, engine_oracle, append, audio, stt_client, errors)
@@ -374,11 +376,21 @@ Features Index:
       - backend/app/models/recording.py (SnippetRecording, SplitMode)
       - backend/alembic/versions/004_snippet_recordings.py
       - backend/app/schemas/voice.py
-      - stt/ (sibling branch feat/stt-service)
       - frontend/ voice modal and recordings section (sibling branch feat/web-voice-capture)
       - android/ voice modal and recordings section (sibling branch feat/android-voice-capture)
-    depends_on: [snippet_crud, merge_blocks, snippet_content_timestamp, rhyme_view, typed_api, grid_rearrange]
+    depends_on: [snippet_crud, merge_blocks, snippet_content_timestamp, rhyme_view, typed_api, grid_rearrange, stt_service]
     doc: docs/features/voice_capture.md
+  stt_service:
+    description: Cluster-internal speech-to-text service (stt/, FastAPI + faster-whisper) for voice capture. POST /v1/transcribe (multipart audio, optional language and initial_prompt) returns language, duration_ms and ordered word timestamps in ms (word_timestamps + VAD); typed errors undecodable_audio 400, audio_too_large 413, invalid_request 422, model_not_ready 503, transcription_failed 500. /healthz is up at once, /readyz flips when the background model load (cache-first, downloads once, retried with backoff) finishes. Own CUDA 12/cuDNN 9 image; chart component stt.* (default off) with a ClusterIP Service never routed by ingress/nginx, GPU resources, runtime class, model cache emptyDir/hostPath/PVC, Recreate strategy, STT_URL on the backend; homelab runs it on node1's RTX 3090 with the weights in a node1 hostPath.
+    entry_points:
+      - stt/src/stt_service/app.py (create_app, POST /v1/transcribe, /healthz, /readyz)
+      - stt/src/stt_service/main.py (stt-service)
+      - stt/src/stt_service/whisper.py
+      - stt/Dockerfile
+      - deploy/helm/lyrics-canvas/templates/stt/
+      - deploy/helm/environments/homelab.yaml (stt)
+    depends_on: [helm_deployment, homelab_deploy]
+    doc: docs/features/stt_service.md
   android_health_banner:
     description: App-wide status banner in the Android client while it is in the foreground - polls GET /api/health (15 s, quick 3 s confirm, 5-60 s backoff while down) and counts 502/503/504 and IO errors of every regular ApiClient call through an observer; a pure debounced state machine (2 failures with one from a probe, offline at once, brief back online) shared in behaviour with the web client; polls GET /_status/alerts (frontend nginx origin, configured by -PstatusAlertsUrl when the API base is the backend directly) and shows firing alerts critical first; per-incident dismiss, expandable descriptions, live-region announcements.
     entry_points:
