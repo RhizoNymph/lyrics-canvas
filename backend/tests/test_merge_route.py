@@ -47,8 +47,8 @@ class FakeStore:
             return []
         return [self.available[str(i)] for i in snippet_ids if str(i) in self.available]
 
-    async def replace_with_merged(self, db, canvas_id, fields, tags, originals):
-        self.replace_calls.append(SimpleNamespace(canvas_id=canvas_id, fields=dict(fields), tags=list(tags), originals=list(originals)))
+    async def replace_with_merged(self, db, canvas_id, fields, tags, originals, **kwargs):
+        self.replace_calls.append(SimpleNamespace(canvas_id=canvas_id, fields=dict(fields), tags=list(tags), originals=list(originals), kwargs=kwargs))
         if self.fail_with:
             raise self.fail_with
         return fake_snippet(canvas_id, fields["raw_text"], **fields, tags=list(tags))

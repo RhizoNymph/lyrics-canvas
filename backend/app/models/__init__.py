@@ -5,6 +5,7 @@ from app.models.snippet import Snippet, SnippetType, GridMode
 from app.models.group import Group
 from app.models.tag import Tag, snippet_tags
 from app.models.embedding import SnippetEmbedding
+from app.models.recording import SnippetRecording, SplitMode
 
 __all__ = [
     "Base",
@@ -17,4 +18,6 @@ __all__ = [
     "Tag",
     "snippet_tags",
     "SnippetEmbedding",
+    "SnippetRecording",
+    "SplitMode",
 ]
