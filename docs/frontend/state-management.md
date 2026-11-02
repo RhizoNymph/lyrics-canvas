@@ -53,6 +53,7 @@ The primary store managing all canvas data and interactions.
 | `canvasId` | `string \| null` | null | Active canvas |
 | `canvasTitle` | string | '' | |
 | `viewport` | `{ x, y, zoom }` | `{ 0, 0, 1 }` | Pan/zoom |
+| `canvasViewSize` | `ViewSize \| null` | null | Canvas element size, set by `CanvasViewport` on mount/resize; kept in list view (voice capture's "last canvas viewport") |
 | `snippets` | `Map<string, Snippet>` | empty | O(1) lookup |
 | `groups` | `Map<string, Group>` | empty | O(1) lookup |
 | `tags` | `Map<string, Tag>` | empty | O(1) lookup |
@@ -71,6 +72,7 @@ The primary store managing all canvas data and interactions.
 |--------|---------|-------|
 | `loadCanvas(id)` | `GET /api/canvases/{id}` | Populates all Maps, restores viewport |
 | `setViewport(v)` | None | Local only |
+| `setCanvasViewSize(w, h)` | None | Local only |
 
 ### Snippet Operations
 
@@ -79,6 +81,7 @@ The primary store managing all canvas data and interactions.
 | `addSnippet(x, y, type)` | `POST /api/canvases/{id}/snippets` | Pushes undo state |
 | `addSnippetFromText(text, x, y, derived_from?)` | `POST /api/canvases/{id}/snippets` | Body `{ raw_text, position_x, position_y, snippet_type: 'freestyle', derived_from }`; inserts the returned snippet, pushes undo state, returns it (`null` when no canvas is loaded). Used by the rhyme sidebar's Materialize |
 | `updateSnippet(id, data)` | `PUT /api/snippets/{id}` | Pushes undo state |
+| `applySnippet(snippet)` | None | Upsert a snippet the server already returned (voice take), pushes undo state; ignored for another canvas |
 | `deleteSnippet(id)` | `DELETE /api/snippets/{id}` | Pushes undo state |
 | `moveSnippet(id, x, y)` | None | Local only (optimistic) |
 | `commitPositions()` | `PATCH /api/snippets/batch-position` | Sends all positions |
@@ -200,6 +203,26 @@ Full description in [rhyme-view.md](./rhyme-view.md).
 | `dismissed` | `ReadonlySet<string>` | `dismiss(key)`; pruned to the shown keys on every `setHealth`/`setAlerts` |
 
 Started by `useStatusMonitoring()` in `App`. Full description in [health_banner.md](../features/health_banner.md).
+
+---
+
+## voiceStore
+
+**File:** `src/stores/voiceStore.ts`
+**Hook:** `useVoiceStore`
+
+| Field / action | Notes |
+|----------------|-------|
+| `request` | `{ canvasId, target: CaptureTarget } \| null`: the open recorder modal; target fixed at open |
+| `silenceSeconds` | `SilenceSeconds` (0/2/3/5/8/10), loaded from `localStorage` (guarded), default 0 |
+| `recordingsRevision` | Bumped on every stored take; the editor's recordings list refetches |
+| `revealSnippetId` | New snippet the list view should scroll to; cleared by `clearReveal(id)` |
+| `openRecorder(env?)` | Typed `OpenRecorderResult`; refuses `insecure_context`, `unsupported`, `no_canvas`, `already_open` |
+| `closeRecorder()` | Closes the modal (the dialog's session releases the mic on unmount) |
+| `setSilenceSeconds(s)` | Persists (failures logged) and applies in memory |
+| `completeTake(result)` | `canvasStore.applySnippet`; new -> select (+ reveal in list view); append -> `editorBridge(id).reload(snippet)` |
+
+Full description in [web_voice_capture.md](../features/web_voice_capture.md).
 
 ---
 

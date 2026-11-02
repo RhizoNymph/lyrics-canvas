@@ -116,6 +116,7 @@ Main editing view that orchestrates all canvas editing components.
 
 - On mount: `canvasStore.loadCanvas(id)` -- navigates home on error
 - Registers keyboard listeners, cleans up on unmount
+- On unmount (or canvas change): `voiceStore.closeRecorder()`, so a recorder never reopens on the next canvas
 
 ### Keyboard Shortcuts
 
@@ -126,6 +127,10 @@ Main editing view that orchestrates all canvas editing components.
 | Ctrl+F / Cmd+F | `uiStore.setSearchModalOpen(true)` |
 | Ctrl+Shift+L / Cmd+Shift+L | `uiStore.toggleViewMode()` (canvas / list; ignored while typing or editing) |
 | Delete / Backspace | Delete selected snippets (ignored when focus is in an input, textarea, select, or when a snippet is being edited) |
+| Alt+Shift+R (Option+Shift+R) | `voiceStore.openRecorder()`: record by voice; works while typing in the editor (matched on `code === 'KeyR'`) |
+
+All page shortcuts are ignored while the voice recorder modal is open; the modal owns Space/Enter
+(next line) and Escape (cancel).
 
 ### Component Layout
 
@@ -144,6 +149,7 @@ Main editing view that orchestrates all canvas editing components.
 +--------------------------------------+-----------+
 | SearchModal (overlay)                             |
 | ExportDialog (overlay)                            |
+| VoiceCaptureModal (overlay, voiceStore.request)   |
 +--------------------------------------------------+
 ```
 

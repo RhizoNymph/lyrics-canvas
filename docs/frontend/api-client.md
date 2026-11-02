@@ -95,6 +95,22 @@ every status resolves.
 |--------|------|-------------|
 | `export(canvasId, format)` | POST `/api/canvases/{canvasId}/export` | `{ format }`, responseType: 'blob' |
 
+#### voiceApi
+
+Defined in `src/api/voice.ts` as `createVoiceApi(http)` (injected axios instance, so tests use a mock
+adapter) and bound in `client.ts` to the authenticated instance. Every method rejects with a
+`VoiceError` (`lib/voice/types.ts`; `kind` = contract code or `server_unavailable` / `network` /
+`aborted` / `not_found` / `http`).
+
+| Method | Path | Body/Params |
+|--------|------|-------------|
+| `createTake(canvasId, take, target, signal?)` | POST `/api/canvases/{canvasId}/voice-takes` | multipart: `audio` (Blob typed with the recorder mime, filename by container) + `meta` JSON `{ breaks_ms, duration_ms, target }`; explicit `Content-Type: multipart/form-data` so the instance's JSON default does not serialise the FormData; returns `VoiceTakeResponse` |
+| `listRecordings(snippetId, signal?)` | GET `/api/snippets/{snippetId}/recordings` | returns `RecordingResponse[]`, newest first |
+| `fetchAudio(recordingId, signal?)` | GET `/api/recordings/{recordingId}/audio` | `responseType: 'blob'`, bearer token from the interceptor |
+| `deleteRecording(recordingId)` | DELETE `/api/recordings/{recordingId}` | 204 |
+
+See [web_voice_capture.md](../features/web_voice_capture.md).
+
 ---
 
 ## Type System

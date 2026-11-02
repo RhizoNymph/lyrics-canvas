@@ -4,6 +4,7 @@ import type { Snippet, Group, Tag, CanvasDetail, SnippetType, GridMode, MergeRes
 import type { DerivedFrom } from '@/types/rhyme';
 import { MergeError, toMergeError } from '@/lib/merge';
 import type { MergeMode, MergeResult } from '@/lib/merge';
+import type { ViewSize } from '@/lib/rhyme/geometry';
 
 interface Viewport {
   x: number;
@@ -18,6 +19,8 @@ interface CanvasState {
 
   // Viewport
   viewport: Viewport;
+  /** Size of the canvas element when CanvasViewport last measured it; null until the canvas is shown. */
+  canvasViewSize: ViewSize | null;
 
   // Data
   snippets: Map<string, Snippet>;
@@ -45,12 +48,15 @@ interface CanvasState {
   // Actions
   loadCanvas: (id: string) => Promise<void>;
   setViewport: (v: Partial<Viewport>) => void;
+  setCanvasViewSize: (width: number, height: number) => void;
 
   // Snippet actions
   addSnippet: (position_x: number, position_y: number, snippet_type?: SnippetType) => Promise<void>;
   /** Create a snippet from text (rhyme-view promotion). Resolves null when no canvas is loaded. */
   addSnippetFromText: (text: string, x: number, y: number, derived_from?: DerivedFrom) => Promise<Snippet | null>;
   updateSnippet: (id: string, data: Partial<Snippet>) => Promise<void>;
+  /** Insert or replace a snippet the server returned (e.g. a voice take), with an undo snapshot. */
+  applySnippet: (snippet: Snippet) => void;
   deleteSnippet: (id: string) => Promise<void>;
   moveSnippet: (id: string, x: number, y: number) => void;
   commitPositions: () => Promise<void>;
@@ -97,6 +103,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasId: null,
   canvasTitle: '',
   viewport: { x: 0, y: 0, zoom: 1 },
+  canvasViewSize: null,
   snippets: new Map(),
   groups: new Map(),
   tags: new Map(),
@@ -135,6 +142,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ viewport: { ...state.viewport, ...v } }));
   },
 
+  setCanvasViewSize: (width, height) => set({ canvasViewSize: { width, height } }),
+
   addSnippet: async (position_x, position_y, snippet_type = 'freestyle') => {
     const { canvasId, snippets } = get();
     if (!canvasId) return;
@@ -170,6 +179,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const updated: Snippet = res.data;
     const next = new Map(snippets);
     next.set(id, updated);
+    get().pushUndoState();
+    set({ snippets: next });
+  },
+
+  applySnippet: (snippet) => {
+    if (snippet.canvas_id !== get().canvasId) return;
+    const next = new Map(get().snippets);
+    next.set(snippet.id, snippet);
     get().pushUndoState();
     set({ snippets: next });
   },

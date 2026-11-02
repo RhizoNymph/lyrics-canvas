@@ -10,6 +10,9 @@ import RhymeSidebar from '@/components/sidebar/RhymeSidebar';
 import SimilarityPanel from '@/components/sidebar/SimilarityPanel';
 import SearchModal from '@/components/modals/SearchModal';
 import ExportDialog from '@/components/modals/ExportDialog';
+import VoiceCaptureModal from '@/components/voice/VoiceCaptureModal';
+import { useVoiceStore } from '@/stores/voiceStore';
+import { isRecordShortcut } from '@/lib/voice/keys';
 import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 
 export default function CanvasPage() {
@@ -23,6 +26,8 @@ export default function CanvasPage() {
     if (id) {
       loadCanvas(id).catch(() => navigate('/'));
     }
+    // Leaving the canvas closes the recorder (its session releases the mic on unmount).
+    return () => useVoiceStore.getState().closeRecorder();
   }, [id]);
 
   // Keyboard shortcuts
@@ -33,9 +38,15 @@ export default function CanvasPage() {
       return useUIStore.getState().editingSnippetId !== null;
     };
     const handler = (e: KeyboardEvent) => {
+      // The recording modal owns the keyboard while open (Space/Enter = next line, Esc = cancel).
+      if (useVoiceStore.getState().request !== null) return;
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (ctrl && e.shiftKey && key === 'l') {
+      if (isRecordShortcut(e)) {
+        // Alt+Shift+R: record by voice (appends to the open editor, else a new snippet). Works while typing.
+        e.preventDefault();
+        useVoiceStore.getState().openRecorder();
+      } else if (ctrl && e.shiftKey && key === 'l') {
         // Toggle canvas / list view
         if (typingOrEditing(e)) return;
         e.preventDefault();
@@ -83,6 +94,7 @@ export default function CanvasPage() {
       </div>
       <SearchModal />
       <ExportDialog />
+      <VoiceCaptureModal />
     </div>
   );
 }

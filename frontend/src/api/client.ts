@@ -3,6 +3,7 @@ import { apiHealthChannel } from '@/lib/health/channel';
 import { installHealthInterceptors } from '@/lib/health/interceptors';
 import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
+import { createVoiceApi } from './voice';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -123,5 +124,8 @@ export const exportApi = {
   export: (canvasId: string, format: string) =>
     api.post(`/api/canvases/${canvasId}/export`, { format }, { responseType: 'blob' }),
 };
+
+// ---- Voice takes and recordings (see api/voice.ts) ----
+export const voiceApi = createVoiceApi(api);
 
 export default api;

@@ -65,6 +65,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
 - **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
+- **Voice capture (web)**: The toolbar `Record` button, the `Rec` button in the open editor, or Alt+Shift+R opens a full-screen recorder. A tap or Space/Enter starts the next line, a double tap stops, and auto-stop after N seconds of silence is optional. The take is uploaded and transcribed server-side. It becomes a new snippet at the viewport centre, or is appended to the snippet open in the editor (whose pending edits are saved first). The audio is kept and can be played or deleted from the editor's Recordings section. Needs HTTPS. See [web_voice_capture.md](./features/web_voice_capture.md) and the cross-cutting [voice_capture.md](./features/voice_capture.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -104,6 +105,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
+| [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop), upload to voice-takes, editor recordings list |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -426,4 +428,18 @@ Features Index:
       - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/status/
     depends_on: [android_app, android_release]
     doc: docs/features/android_health_banner.md
+  web_voice_capture:
+    description: Web client for voice takes (contract in docs/features/voice_capture.md). The toolbar Record button (canvas and list view), the Rec button in the inline editor, or Alt+Shift+R opens a full-screen recorder modal. A pointerdown or Space/Enter is a line break, timed at the first tap and committed after 300 ms. A second tap within 300 ms stops and drops that break. An optional energy-VAD silence auto-stop (minimum-statistics noise floor, arms after speech; off/2/3/5/8/10 s per viewer in localStorage) can also end the take. Built from pure tested reducers (recorder machine, gestures, VAD, playback) driven by a DOM-free VoiceSession, plus a thin MediaRecorder/AnalyserNode adapter (webm/opus, else mp4). Uploads the take as multipart to POST /api/canvases/{id}/voice-takes. With the editor open it saves the editor first, appends, and reloads the editor rows from the response; otherwise it creates a snippet at the viewport centre (list view - the last canvas viewport or 0,0), selects it and scrolls to it. Contract error codes map to typed errors with Retry (same blob), Save audio and Discard. The editor's Recordings section lists, plays (bearer-token blob URLs) and deletes takes. Disabled with "Recording needs HTTPS" outside secure contexts.
+    entry_points:
+      - frontend/src/lib/voice/
+      - frontend/src/api/voice.ts (createVoiceApi; client.ts voiceApi)
+      - frontend/src/stores/voiceStore.ts
+      - frontend/src/components/voice/
+      - frontend/src/components/canvas/editorBridge.ts
+      - frontend/src/components/canvas/InlineGridEditor.tsx (Rec button, RecordingsSection, bridge)
+      - frontend/src/components/toolbar/Toolbar.tsx (Record button)
+      - frontend/src/components/pages/CanvasPage.tsx (Alt+Shift+R, VoiceCaptureModal)
+      - frontend/src/components/list/ListView.tsx (reveal new snippet)
+    depends_on: [voice_capture, list_mode, grid_rearrange, snippet_crud, health_banner]
+    doc: docs/features/web_voice_capture.md
 ```

@@ -27,6 +27,9 @@ import {
 } from './editorState';
 import type { EditorRowsState } from './editorState';
 import { rowKeyAction } from './editorKeys';
+import { registerEditorBridge } from './editorBridge';
+import RecordButton from '@/components/voice/RecordButton';
+import RecordingsSection from '@/components/voice/RecordingsSection';
 
 const SYLLABIFY_DEBOUNCE_MS = 300;
 
@@ -79,6 +82,8 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const isSaving = useRef(false);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+  const snippetTypeRef = useRef(snippetType);
+  snippetTypeRef.current = snippetType;
 
   const setActiveRow = useCallback((row: number) => setRows((prev) => setActiveRowState(prev, row)), []);
 
@@ -132,9 +137,32 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     }
   }, [snippetType, snippetId, updateSnippet, closeEditor]);
 
-  // Click-outside
+  // Voice capture: save pending edits without closing, and take the rows of a server-appended snippet.
+  useEffect(
+    () =>
+      registerEditorBridge(snippetId, {
+        flush: async () => {
+          const current = rowsRef.current;
+          await updateSnippet(snippetId, {
+            raw_text: rawTextForSave(current),
+            grid_data: current.gridData,
+            snippet_type: snippetTypeRef.current,
+          });
+        },
+        reload: (next) => {
+          setRows(initEditorState(next.raw_text, next.grid_data));
+          setSelection(null);
+          setSnippetType(next.snippet_type);
+        },
+      }),
+    [snippetId, updateSnippet],
+  );
+
+  // Click-outside (the record buttons and the recording modal keep the editor open)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('[data-keep-editor-open]')) return;
       if (editorRef.current && !editorRef.current.contains(e.target as Node)) {
         save();
       }
@@ -394,6 +422,19 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
           <option value="hook">HOOK</option>
           <option value="freestyle">FREESTYLE</option>
         </select>
+        <span style={{ flex: 1 }} />
+        <RecordButton
+          variant="editor"
+          style={{
+            background: 'rgba(0,0,0,0.3)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: 4,
+            padding: '1px 6px',
+            fontSize: 10 * s,
+            cursor: 'pointer',
+          }}
+        />
       </div>
 
       {/* Grid body (inline: wide enough for the longest row, scrolls sideways inside the row) */}
@@ -505,6 +546,8 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
             : 'click a syllable to select · double-click to edit text · ▲▼ move line · enter splits · ⌫ at start joins'}
         </div>
       </div>
+
+      <RecordingsSection snippetId={snippetId} scale={s} />
     </div>
   );
 }

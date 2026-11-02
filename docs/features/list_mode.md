@@ -46,7 +46,8 @@ against the same contract; platform differences are noted per item.
 
 ### Non-scope
 
-- Creating snippets from the list (use the canvas: double-click).
+- Creating snippets from the list by hand (use the canvas: double-click). Voice capture can create one
+  from the list; it is selected and scrolled into view (see [web_voice_capture.md](./web_voice_capture.md)).
 - Reordering snippets by hand, and sort orders other than last-edited.
 - Moving, resizing, grouping and t-SNE (canvas-only spatial features).
 - Virtualising long lists.
