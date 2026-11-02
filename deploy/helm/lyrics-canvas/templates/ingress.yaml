@@ -18,25 +18,15 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
+    {{- if .Values.ingress.hosts }}
     {{- range .Values.ingress.hosts }}
     - host: {{ . | quote }}
       http:
-        paths:
-          {{- if $.Values.ingress.routeApiToBackend }}
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "lyrics-canvas.backend.fullname" $ }}
-                port:
-                  number: {{ $.Values.backend.service.port }}
-          {{- end }}
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "lyrics-canvas.frontend.fullname" $ }}
-                port:
-                  number: {{ $.Values.frontend.service.port }}
+        {{- include "lyrics-canvas.ingress.paths" $ | nindent 8 }}
+    {{- end }}
+    {{- else }}
+    {{- /* No hosts: one catch-all rule, matched for any Host header (bare IPs included). */}}
+    - http:
+        {{- include "lyrics-canvas.ingress.paths" . | nindent 8 }}
     {{- end }}
 {{- end }}

@@ -313,9 +313,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
+            "required": ["secretName"],
             "properties": {
-              "secretName": { "type": "string" },
-              "hosts": { "type": "array", "items": { "type": "string" } }
+              "secretName": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+              },
+              "hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } }
             }
           }
         },

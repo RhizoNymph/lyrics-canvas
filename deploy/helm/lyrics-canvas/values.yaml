@@ -245,10 +245,17 @@ externalDatabase:
 ingress:
   enabled: false
   className: ""
+  # e.g. nginx.ingress.kubernetes.io/proxy-body-size: 26m for voice uploads.
   annotations: {}
+  # One rule per host. An empty list renders a single rule without a host,
+  # matched for any Host header, bare IPs included (the controller's catch-all
+  # server).
   hosts:
     - lyrics-canvas.local
-  # Standard Ingress TLS entries: [{secretName: ..., hosts: [...]}].
+  # Standard Ingress TLS entries: [{secretName: ..., hosts: [...]}]; the
+  # Secret (kubernetes.io/tls) is created outside the chart. Clients that send
+  # no SNI (https://<ip>/) get the controller's default certificate instead,
+  # see docs/features/homelab_tls.md.
   tls: []
   # Send /api straight to the backend Service; otherwise every request goes to
   # the frontend, whose nginx proxies /api itself.

@@ -193,3 +193,28 @@ entry.
 {{- define "lyrics-canvas.backup.claimName" -}}
 {{- default (include "lyrics-canvas.backup.fullname" .) .Values.backup.destination.persistentVolumeClaim.existingClaim }}
 {{- end }}
+
+{{/*
+Ingress paths shared by every rule: /api straight to the backend (unless
+disabled), everything else to the frontend. Only these two Services are ever
+routed; internal components stay unexposed.
+*/}}
+{{- define "lyrics-canvas.ingress.paths" -}}
+paths:
+  {{- if .Values.ingress.routeApiToBackend }}
+  - path: /api
+    pathType: Prefix
+    backend:
+      service:
+        name: {{ include "lyrics-canvas.backend.fullname" . }}
+        port:
+          number: {{ .Values.backend.service.port }}
+  {{- end }}
+  - path: /
+    pathType: Prefix
+    backend:
+      service:
+        name: {{ include "lyrics-canvas.frontend.fullname" . }}
+        port:
+          number: {{ .Values.frontend.service.port }}
+{{- end }}

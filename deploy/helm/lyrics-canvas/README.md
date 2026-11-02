@@ -113,6 +113,8 @@ Always pass the values file; never use `--reuse-values`.
 | `backup.enabled` | `false` | Nightly `pg_dump` CronJob `<fullname>-backup`; see [Backups](#backups). |
 | `externalDatabase.url` | `""` | `postgresql+asyncpg://...` for a managed database when `postgres.enabled=false`. The database must allow `CREATE EXTENSION vector`. Or `externalDatabase.existingSecret`. |
 | `ingress.routeApiToBackend` | `true` | Adds a `/api` path straight to the backend Service. |
+| `ingress.hosts` | `[lyrics-canvas.local]` | One rule per host. An empty list renders a single host-less rule that matches any Host, bare IPs included; clients without SNI then get the controller's default certificate (see `docs/features/homelab_tls.md`). |
+| `ingress.tls` | `[]` | `[{secretName, hosts}]`; `secretName` is required and names a `kubernetes.io/tls` Secret created outside the chart. |
 | `global.imagePullSecrets` | `[]` | Applied to every pod. |
 | `monitoring.prometheusRule.enabled` | `false` | Renders a `PrometheusRule` with alerts for this release (see below). |
 

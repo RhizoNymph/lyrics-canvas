@@ -297,6 +297,78 @@ class IngressTest(unittest.TestCase):
         self.assertEqual(paths, ["/"])
 
 
+APP_SERVICES = {"lc-lyrics-canvas-backend", "lc-lyrics-canvas-frontend"}
+
+
+def ingress_backends(ing: dict) -> list[str]:
+    names = []
+    default = ing["spec"].get("defaultBackend")
+    if default:
+        names.append(default["service"]["name"])
+    for rule in ing["spec"]["rules"]:
+        for path in rule["http"]["paths"]:
+            names.append(path["backend"]["service"]["name"])
+    return names
+
+
+class IngressHostlessTest(unittest.TestCase):
+    """An empty ingress.hosts list renders one rule without a host, which
+    ingress-nginx serves from its catch-all server: any Host header, bare IPs
+    included."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render("ingress-hostless.yaml")
+        cls.ing = cls.docs[("Ingress", "lc-lyrics-canvas")]
+
+    def test_single_rule_without_host(self) -> None:
+        rules = self.ing["spec"]["rules"]
+        self.assertEqual(len(rules), 1)
+        self.assertNotIn("host", rules[0])
+        paths = {p["path"]: p for p in rules[0]["http"]["paths"]}
+        self.assertEqual(list(paths), ["/api", "/"])
+        self.assertEqual(paths["/api"]["backend"]["service"]["name"], "lc-lyrics-canvas-backend")
+        self.assertEqual(paths["/"]["backend"]["service"]["name"], "lc-lyrics-canvas-frontend")
+        for p in paths.values():
+            self.assertEqual(p["pathType"], "Prefix")
+
+    def test_tls_entry_without_hosts(self) -> None:
+        self.assertEqual(self.ing["spec"]["tls"], [{"secretName": "lyrics-tls"}])
+        self.assertEqual(self.ing["spec"]["ingressClassName"], "public")
+
+    def test_no_cors_origins_without_hosts(self) -> None:
+        # The SPA calls /api on its own origin, so no CORS origin is needed.
+        dep = self.docs[("Deployment", "lc-lyrics-canvas-backend")]
+        env = env_map(container(dep["spec"]["template"], "backend"))
+        self.assertEqual(env["CORS_ORIGINS"]["value"], "[]")
+
+    def test_api_route_can_be_disabled(self) -> None:
+        docs = render("ingress-hostless.yaml", ingress__routeApiToBackend="false")
+        rule = docs[("Ingress", "lc-lyrics-canvas")]["spec"]["rules"][0]
+        self.assertEqual([p["path"] for p in rule["http"]["paths"]], ["/"])
+
+    def test_lint(self) -> None:
+        result = helm("lint", str(CHART), "--strict", "-f", str(VALUES / "ingress-hostless.yaml"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class IngressBackendsTest(unittest.TestCase):
+    """Ingress only ever routes to the app's frontend and backend Services;
+    internal components (such as a speech-to-text service) are never exposed."""
+
+    def test_only_app_services_routed(self) -> None:
+        for values in (("ingress.yaml",), ("ingress-hostless.yaml",), (str(ENVIRONMENTS / "homelab.yaml"),)):
+            with self.subTest(values=values):
+                docs = render(*values)
+                ings = [doc for (kind, _), doc in docs.items() if kind == "Ingress"]
+                self.assertEqual(len(ings), 1)
+                backends = ingress_backends(ings[0])
+                self.assertTrue(backends)
+                self.assertLessEqual(set(backends), APP_SERVICES)
+                for name in backends:
+                    self.assertNotRegex(name, r"stt|whisper")
+
+
 class ExternalDatabaseTest(unittest.TestCase):
     def test_external_url_in_secret(self) -> None:
         docs = render("external-db.yaml")
@@ -606,6 +678,47 @@ class HomelabEnvironmentTest(unittest.TestCase):
         self.assertEqual(env["ALERTS_NAMESPACE"]["value"], NAMESPACE)
 
 
+class HomelabIngressTest(unittest.TestCase):
+    """HTTPS for the web app (microphone access needs a secure context) via the
+    microk8s ingress addon; see docs/features/homelab_tls.md."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = render(str(ENVIRONMENTS / "homelab.yaml"))
+        cls.ing = cls.docs[("Ingress", "lc-lyrics-canvas")]
+
+    def test_public_class_and_hostless_rule(self) -> None:
+        self.assertEqual(self.ing["spec"]["ingressClassName"], "public")
+        rules = self.ing["spec"]["rules"]
+        self.assertEqual(len(rules), 1)
+        self.assertNotIn("host", rules[0])
+
+    def test_tls_secret_from_issue_script(self) -> None:
+        self.assertEqual(self.ing["spec"]["tls"], [{"secretName": "lyrics-canvas-tls"}])
+        script = REPO_ROOT / "deploy" / "homelab" / "tls" / "issue-cert.sh"
+        if not script.exists():
+            self.skipTest("deploy/homelab/tls not present (chart-only checkout)")
+        text = script.read_text()
+        self.assertIn("SECRET=${LYRICS_TLS_SECRET-lyrics-canvas-tls}", text)
+        self.assertIn("NAMESPACE=${LYRICS_NAMESPACE-lyrics-canvas}", text)
+
+    def test_upload_and_timeout_annotations(self) -> None:
+        ann = self.ing["metadata"]["annotations"]
+        self.assertEqual(ann["nginx.ingress.kubernetes.io/proxy-body-size"], "26m")
+        self.assertGreaterEqual(int(ann["nginx.ingress.kubernetes.io/proxy-read-timeout"]), 120)
+        self.assertGreaterEqual(int(ann["nginx.ingress.kubernetes.io/proxy-send-timeout"]), 120)
+        self.assertEqual(ann["nginx.ingress.kubernetes.io/force-ssl-redirect"], "true")
+
+    def test_api_goes_straight_to_backend(self) -> None:
+        paths = {p["path"]: p for p in self.ing["spec"]["rules"][0]["http"]["paths"]}
+        self.assertEqual(paths["/api"]["backend"]["service"]["name"], "lc-lyrics-canvas-backend")
+        self.assertEqual(paths["/"]["backend"]["service"]["name"], "lc-lyrics-canvas-frontend")
+
+    def test_node_port_kept_for_plain_http_clients(self) -> None:
+        svc = self.docs[("Service", "lc-lyrics-canvas-frontend")]["spec"]
+        self.assertEqual((svc["type"], svc["ports"][0]["nodePort"]), ("NodePort", 32443))
+
+
 class CommittedValuesSafetyTest(unittest.TestCase):
     def test_environments_exist(self) -> None:
         self.assertTrue(list(ENVIRONMENTS.glob("*.yaml")), "no environment values files found")
@@ -619,6 +732,15 @@ class CommittedValuesSafetyTest(unittest.TestCase):
                     (None, ""),
                     f"{path.name} sets {'.'.join(secret)}; put it in a .secret.yaml file",
                 )
+
+    def test_no_key_material_in_committed_values(self) -> None:
+        # TLS values only name a Secret; certificates and keys never live in git.
+        for path in committed_values_files():
+            text = path.read_text()
+            self.assertNotIn("-----BEGIN", text, path.name)
+            values = yaml.safe_load(text) or {}
+            for entry in lookup_path(values, ("ingress", "tls")) or []:
+                self.assertEqual(set(entry) - {"secretName", "hosts"}, set(), path.name)
 
     def test_secret_overrides_are_gitignored(self) -> None:
         if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
@@ -643,6 +765,12 @@ class SchemaTest(unittest.TestCase):
         self.assert_rejected("backend.service.type=Bogus")
         self.assert_rejected("ingress.hosts[0]=1")
         self.assert_rejected("postgres.persistence.size=big")
+
+    def test_rejects_tls_entry_without_secret_name(self) -> None:
+        self.assert_rejected("ingress.tls[0].hosts[0]=lyrics.example.com")
+        self.assert_rejected("ingress.tls[0].secretName=-leading-dash")
+        self.assert_rejected("ingress.tls[0].secretName=Bad_Name")
+        self.assert_rejected("ingress.tls[0].secretName=x", "ingress.tls[0].key=abc")
 
     def test_rejects_node_port_out_of_range(self) -> None:
         self.assert_rejected("frontend.service.type=NodePort", "frontend.service.nodePort=8080")
