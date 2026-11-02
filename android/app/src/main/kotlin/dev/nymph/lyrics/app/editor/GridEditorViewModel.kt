@@ -8,6 +8,7 @@ import dev.nymph.lyrics.logic.editor.EditorRowsState
 import dev.nymph.lyrics.logic.editor.deleteRow
 import dev.nymph.lyrics.logic.editor.insertRestInRow
 import dev.nymph.lyrics.logic.editor.insertRow
+import dev.nymph.lyrics.logic.editor.joinWithPrevious
 import dev.nymph.lyrics.logic.editor.mergeSyllabified
 import dev.nymph.lyrics.logic.editor.moveChunkInRow
 import dev.nymph.lyrics.logic.editor.needsSyllabify
@@ -15,6 +16,7 @@ import dev.nymph.lyrics.logic.editor.rawTextForSave
 import dev.nymph.lyrics.logic.editor.removeCellsInRow
 import dev.nymph.lyrics.logic.editor.reorderRows
 import dev.nymph.lyrics.logic.editor.setActiveRow
+import dev.nymph.lyrics.logic.editor.splitRow
 import dev.nymph.lyrics.logic.editor.typeLine
 import dev.nymph.lyrics.logic.grid.moveTargetFromGap
 import dev.nymph.lyrics.model.Snippet
@@ -104,6 +106,24 @@ class GridEditorViewModel(
     override fun insertRowAfter(row: Int) = update { it.copy(rows = insertRow(it.rows, row), selection = null) }
 
     override fun deleteRow(row: Int) = update { it.copy(rows = deleteRow(it.rows, row), selection = null) }
+
+    override fun splitRow(row: Int, text: String, caret: Int) = update { s ->
+        if (row !in s.rows.lines.indices) return@update s
+        val typed = if (s.rows.lines[row] == text) s.rows else typeLine(s.rows, row, text)
+        s.copy(rows = splitRow(typed, row, caret), selection = null)
+    }
+
+    /** As the web: an empty row is deleted when another row exists; otherwise a non-first row joins up. */
+    override fun backspaceAtStart(row: Int) = update { s ->
+        val lines = s.rows.lines
+        val next = when {
+            row !in lines.indices -> return@update s
+            lines[row].isEmpty() && lines.size > 1 -> deleteRow(s.rows, row)
+            row > 0 -> joinWithPrevious(s.rows, row)
+            else -> return@update s
+        }
+        s.copy(rows = next, selection = null)
+    }
 
     override fun setSnippetType(type: SnippetType) = update { it.copy(snippetType = type) }
 

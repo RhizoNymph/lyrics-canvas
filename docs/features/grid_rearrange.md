@@ -16,6 +16,9 @@ first guess; this feature lets the writer fix where things land.
   with a selection).
 - Rows laid out by hand are **arranged**: the debounced API syllabify never overwrites them. Typing into
   an arranged row discards its arrangement (expected; the text changed).
+- Line breaks are fixed from the keyboard (Enter splits at the caret, Backspace at the start joins onto
+  the row above, Delete at the end pulls the next row up): see
+  [Editor Line Split / Join](./editor_line_split_join.md). Split and joined rows lose `arranged`.
 - Save sends `raw_text` rebuilt from the grid for arranged rows (typed text for the rest) together with
   `grid_data`; the backend keeps the layout and recomputes phonetics from them (grid stress wins).
 
@@ -53,6 +56,8 @@ pointer-up                 -> moveTargetFromGap(gap, start, end) -> `to` or null
 ▲▼ / Alt+arrows            -> reorderRows(state, from, to): rows carry text, grid line, arranged flag;
                               activeRow and selection follow their line
 typing                     -> typeLine: local estimate, arranged cleared for that row
+Enter / Backspace at 0 /   -> rowKeyAction (editorKeys.ts) -> splitRow / joinWithPrevious / joinWithNext /
+Delete at end                 deleteRow; caret placed from state.caret (editor_line_split_join.md)
 300 ms after text change   -> POST /api/nlp/syllabify (skipped when every non-blank row is arranged)
                            -> mergeSyllabified: unarranged rows take the first unconsumed result line
                               with the same text; arranged rows and rows whose text changed keep theirs
@@ -72,7 +77,8 @@ save (click-outside / Esc) -> updateSnippet({ raw_text: rawTextForSave(state), g
 | `frontend/src/lib/grid/dropIndex.ts` | `gapFromX`, `moveTargetFromGap` (drag geometry) |
 | `frontend/src/lib/grid/localSyllabify.ts` | `localSyllabifyLine` and the vowel-group estimate (moved out of the editor) |
 | `frontend/src/lib/grid/index.ts` | Barrel |
-| `frontend/src/components/canvas/editorState.ts` | `EditorRowsState` and the pure reducers: `initEditorState`, `gridLineForRow`, `setActiveRow`, `typeLine`, `insertRow`, `deleteRow`, `moveChunkInRow`, `insertRestInRow`, `removeCellsInRow`, `reorderRows`, `mergeSyllabified`, `needsSyllabify`, `rawTextForSave` |
+| `frontend/src/components/canvas/editorState.ts` | `EditorRowsState` (incl. `caret: CaretRequest`) and the pure reducers: `initEditorState`, `gridLineForRow`, `setActiveRow`, `typeLine`, `insertRow`, `deleteRow`, `splitRow`, `joinWithPrevious`, `joinWithNext`, `moveChunkInRow`, `insertRestInRow`, `removeCellsInRow`, `reorderRows`, `mergeSyllabified`, `needsSyllabify`, `rawTextForSave` |
+| `frontend/src/components/canvas/editorKeys.ts` | `rowKeyAction`: what Enter / Backspace / Delete in a row input mean (split, join, delete empty) |
 | `frontend/src/components/canvas/useChunkDrag.ts` | Pointer logic for a chunk drag: capture, 4 px threshold, drop gap, `consumeDrag` to swallow the trailing click |
 | `frontend/src/components/canvas/GridRow.tsx` | One row's cells strip: selection highlight, drag handlers, drop indicator, `+· − ▲ ▼` buttons; exports `ROW_CONTROLS_WIDTH` |
 | `frontend/src/components/canvas/InlineGridEditor.tsx` | Orchestration: row state, selection state, debounced syllabify, keyboard, save |
@@ -92,7 +98,7 @@ Every `lib/grid` module and `editorState.ts` has a sibling `*.test.ts` (vitest).
   `word` when present and the concatenated syllables otherwise, and the rebuilt text's `split()` positions
   match the re-based `word_index`es.
 - Arranged rows survive the debounce: `mergeSyllabified` never touches a row in `arranged`; only
-  `typeLine` clears the flag. Rows loaded from a saved grid whose text still matches start arranged, so a
+  `typeLine` (and a split or join that changes the row's text) clears the flag. Rows loaded from a saved grid whose text still matches start arranged, so a
   saved layout survives reopening the editor.
 - A chunk move is a no-op (same state object) when it would not move anything; `moveTargetFromGap` returns
   null for drops inside or at either edge of the chunk.

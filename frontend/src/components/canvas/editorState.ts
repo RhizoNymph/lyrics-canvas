@@ -6,6 +6,11 @@
  * have no grid line. `gridData` is null when no row is non-blank. Rows in
  * `arranged` were laid out by hand (or loaded from a saved grid) and are never
  * replaced by a syllabify result until their text is typed again.
+ *
+ * `caret` asks the view to put the caret of row `caret.row` at `caret.offset` when it focuses
+ * that row. Structural edits (insert, delete, split, join) issue a fresh object every time, so the
+ * view can react to identity; typing, grid edits and syllabify merges keep it, and focusing another
+ * row or reordering clears it (the caret then goes to the end of the row, the default).
  */
 import type { GridData, GridLine } from '@/types';
 import { attachWords, insertRest, localSyllabifyLine, moveChunk, removeCell, withRebuiltText } from '@/lib/grid';
@@ -15,7 +20,15 @@ export interface EditorRowsState {
   gridData: GridData | null;
   arranged: ReadonlySet<number>;
   activeRow: number;
+  caret: CaretRequest | null;
 }
+
+export interface CaretRequest {
+  readonly row: number;
+  readonly offset: number;
+}
+
+const caretAt = (row: number, offset: number): CaretRequest => ({ row, offset });
 
 interface Row {
   text: string;
@@ -33,14 +46,14 @@ function toRows(state: EditorRowsState): Row[] {
   });
 }
 
-function fromRows(rows: Row[], activeRow: number): EditorRowsState {
+function fromRows(rows: Row[], activeRow: number, caret: CaretRequest | null): EditorRowsState {
   const lines = rows.map((r) => r.text);
   const gridLines = rows.flatMap((r) => (r.grid ? [r.grid] : []));
   const arranged = new Set<number>();
   rows.forEach((r, i) => {
     if (r.arranged && r.grid) arranged.add(i);
   });
-  return { lines, gridData: gridLines.length > 0 ? { lines: gridLines } : null, arranged, activeRow };
+  return { lines, gridData: gridLines.length > 0 ? { lines: gridLines } : null, arranged, activeRow, caret };
 }
 
 /** Build the state from a snippet's text and saved grid; matching saved lines are kept and pinned. */
@@ -57,7 +70,7 @@ export function initEditorState(rawText: string, savedGrid: GridData | null): Ed
     }
     return { text, grid: localSyllabifyLine(text), arranged: false };
   });
-  return fromRows(rows, rawText ? -1 : 0);
+  return fromRows(rows, rawText ? -1 : 0, null);
 }
 
 export function gridLineForRow(state: EditorRowsState, row: number): GridLine | null {
@@ -68,7 +81,7 @@ export function gridLineForRow(state: EditorRowsState, row: number): GridLine | 
 }
 
 export function setActiveRow(state: EditorRowsState, activeRow: number): EditorRowsState {
-  return state.activeRow === activeRow ? state : { ...state, activeRow };
+  return state.activeRow === activeRow ? state : { ...state, activeRow, caret: null };
 }
 
 /** The user typed into a row: its grid becomes a local estimate and it is no longer arranged. */
@@ -76,23 +89,97 @@ export function typeLine(state: EditorRowsState, row: number, text: string): Edi
   const rows = toRows(state);
   if (row < 0 || row >= rows.length) return state;
   rows[row] = { text, grid: text.trim() ? localSyllabifyLine(text) : null, arranged: false };
-  return fromRows(rows, state.activeRow);
+  return fromRows(rows, state.activeRow, state.caret);
+}
+
+const BLANK: Row = { text: '', grid: null, arranged: false };
+
+function edited(text: string): Row {
+  return { text, grid: text.trim() ? localSyllabifyLine(text) : null, arranged: false };
 }
 
 /** Insert a blank row after `afterRow` and make it active. */
 export function insertRow(state: EditorRowsState, afterRow: number): EditorRowsState {
   const rows = toRows(state);
-  rows.splice(afterRow + 1, 0, { text: '', grid: null, arranged: false });
-  return fromRows(rows, afterRow + 1);
+  rows.splice(afterRow + 1, 0, BLANK);
+  return fromRows(rows, afterRow + 1, caretAt(afterRow + 1, 0));
 }
 
-/** Remove a row (keeping at least one) and activate the row above. */
+/** Remove a row (keeping at least one) and activate the row above, caret at its end. */
 export function deleteRow(state: EditorRowsState, row: number): EditorRowsState {
   const rows = toRows(state);
   if (row < 0 || row >= rows.length) return state;
-  if (rows.length === 1) return fromRows([{ text: '', grid: null, arranged: false }], 0);
+  if (rows.length === 1) return fromRows([BLANK], 0, caretAt(0, 0));
   rows.splice(row, 1);
-  return fromRows(rows, Math.max(0, row - 1));
+  const active = Math.max(0, row - 1);
+  return fromRows(rows, active, caretAt(active, rows[active].text.length));
+}
+
+/**
+ * Enter at `caret` in `row`: the text before stays (trailing whitespace trimmed), the text after
+ * becomes a new row directly below (leading whitespace trimmed), which becomes active with the
+ * caret at its start. Both halves are re-estimated and lose `arranged`. With only whitespace after
+ * the caret this is `insertRow` (the row is untouched); with only whitespace before it, a blank
+ * row opens above and the row moves down unchanged (keeping its grid and `arranged`).
+ */
+export function splitRow(state: EditorRowsState, row: number, caret: number): EditorRowsState {
+  const rows = toRows(state);
+  const current = rows[row];
+  if (!current) return state;
+  const at = Math.min(Math.max(caret, 0), current.text.length);
+  const before = current.text.slice(0, at);
+  const after = current.text.slice(at);
+  if (!after.trim()) return insertRow(state, row);
+  if (!before.trim()) {
+    rows.splice(row, 1, BLANK, { ...current, text: after.trimStart() });
+  } else {
+    rows.splice(row, 1, edited(before.trimEnd()), edited(after.trimStart()));
+  }
+  return fromRows(rows, row + 1, caretAt(row + 1, 0));
+}
+
+/**
+ * Join row `upper + 1` onto `upper`, with one space between unless either side is blank or
+ * already has whitespace at the seam. A blank side contributes nothing: the other row is kept
+ * as is (grid and `arranged` included). Otherwise the joined row is re-estimated and loses
+ * `arranged`. Returns the rows and the seam offsets (before / after the separator).
+ */
+function join(state: EditorRowsState, upper: number): { rows: Row[]; seam: number; joinPoint: number } | null {
+  const rows = toRows(state);
+  const top = rows[upper];
+  const bottom = rows[upper + 1];
+  if (upper < 0 || !top || !bottom) return null;
+  let merged: Row;
+  let seam: number;
+  let joinPoint: number;
+  if (!bottom.text.trim()) {
+    merged = top;
+    seam = joinPoint = top.text.length;
+  } else if (!top.text.trim()) {
+    merged = bottom;
+    seam = joinPoint = 0;
+  } else {
+    const sep = /\s$/.test(top.text) || /^\s/.test(bottom.text) ? '' : ' ';
+    merged = edited(top.text + sep + bottom.text);
+    seam = top.text.length;
+    joinPoint = seam + sep.length;
+  }
+  rows.splice(upper, 2, merged);
+  return { rows, seam, joinPoint };
+}
+
+/** Backspace at caret 0 of `row`: join it onto the row above; caret at the join point. */
+export function joinWithPrevious(state: EditorRowsState, row: number): EditorRowsState {
+  const joined = join(state, row - 1);
+  if (!joined) return state;
+  return fromRows(joined.rows, row - 1, caretAt(row - 1, joined.joinPoint));
+}
+
+/** Delete at the end of `row`: join the row below onto it; the caret stays where it was. */
+export function joinWithNext(state: EditorRowsState, row: number): EditorRowsState {
+  const joined = join(state, row);
+  if (!joined) return state;
+  return fromRows(joined.rows, row, caretAt(row, joined.seam));
 }
 
 function updateGrid(state: EditorRowsState, row: number, fn: (line: GridLine) => GridLine): EditorRowsState {
@@ -103,7 +190,7 @@ function updateGrid(state: EditorRowsState, row: number, fn: (line: GridLine) =>
   if (next === current.grid) return state;
   const grid = withRebuiltText(next);
   rows[row] = { text: grid.raw_text, grid, arranged: true };
-  return fromRows(rows, state.activeRow);
+  return fromRows(rows, state.activeRow, state.caret);
 }
 
 /** Move cells `[start, end)` of a row so the chunk starts at `to` (see `moveChunk`). */
@@ -135,7 +222,7 @@ export function reorderRows(state: EditorRowsState, from: number, to: number): E
   if (activeRow === from) activeRow = to;
   else if (from < activeRow && activeRow <= to) activeRow -= 1;
   else if (to <= activeRow && activeRow < from) activeRow += 1;
-  return fromRows(rows, activeRow);
+  return fromRows(rows, activeRow, null);
 }
 
 /**
@@ -154,7 +241,7 @@ export function mergeSyllabified(state: EditorRowsState, result: GridData): Edit
     consumed.add(match);
     return { ...row, grid: attachWords(result.lines[match]) };
   });
-  return fromRows(next, state.activeRow);
+  return fromRows(next, state.activeRow, state.caret);
 }
 
 /** True when some non-blank row still wants an API syllabification. */
