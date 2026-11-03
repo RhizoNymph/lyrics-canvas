@@ -317,7 +317,8 @@ raw text with the existing overrides as the base; a text change recomputes from 
   "limit": 40,                  // max 100
   "offset": 0,
   "weights": {"vowel": 1.0, "coda": 0.6, "onset": 0.25},          // or null
-  "dialect": {"rules": [{"kind": "final_merge", "source": ["IH","NG"], "target": ["IH","N"]}]}  // or null
+  "dialect": {"rules": [{"kind": "final_merge", "source": ["IH","NG"], "target": ["IH","N"]}]},  // or null
+  "tag_filter": "type:hook & !draft"  // or null: notes source only uses matching snippets (docs/features/tag_expressions.md)
 }
 // response
 {

@@ -11,7 +11,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [Authentication](./backend/auth.md) | JWT tokens, bcrypt hashing, user model, login/register | `auth_service.py`, `deps.py`, `auth.py` |
 | [Database & Models](./backend/database.md) | Async PostgreSQL, ORM models, Alembic migrations | `database.py`, `models/`, `alembic/` |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippet operations, sharing, forking | `canvas_service.py`, `canvases.py` |
-| [Groups & Tags](./backend/groups-tags.md) | Group containers, tag labels, snippet-tag associations | `group_service.py`, `tag_service.py` |
+| [Groups & Tags](./backend/groups-tags.md) | Group containers, user-wide tag labels, snippet-tag associations, tag presets ([tag_expressions](./features/tag_expressions.md)) | `group_service.py`, `tag_service.py`, `tag_preset_service.py`, `tag_expr/` |
 | [NLP: Phonetic Engine](./backend/nlp-phonetics.md) | Pronunciation, dialect map, near-rhyme scoring, rhyme index, snippet phonetics, backfill | `phonetics/`, `phonetics_service.py`, `scripts/backfill_phonetics.py` |
 | [NLP: Syllabifier](./backend/nlp-syllabifier.md) | Engine-backed syllabification into the beat grid | `nlp/syllabifier.py` |
 | [NLP: Rhymes](./backend/nlp-rhymes.md) | Rhyme suggest endpoint (ranking, slot fit, paging) and the legacy lookup | `rhyme_suggest_service.py`, `nlp/rhyme_service.py` |
@@ -33,6 +33,7 @@ app/
     base.py                         DeclarativeBase, TimestampMixin
     user.py / canvas.py / snippet.py / group.py / tag.py / embedding.py
     recording.py                    SnippetRecording (voice-take audio), SplitMode
+    tag_preset.py                   TagPreset (saved tag expressions)
   schemas/
     auth.py / canvas.py / snippet.py / group.py / tag.py / nlp.py
     merge.py                        Merge request/response
@@ -43,7 +44,10 @@ app/
     auth_service.py                 JWT + bcrypt + user CRUD
     canvas_service.py               Canvas CRUD + sharing + forking
     group_service.py                Group CRUD
-    tag_service.py                  Tag CRUD + associations
+    tag_service.py                  User-wide tag CRUD + associations; rename rewrites presets
+    tag_preset_service.py           Tag expression preset CRUD
+    tag_values.py / tag_errors.py   Validated names/colors/expressions; typed tag error codes
+    tag_expr/                       Tag expression language (pure): lexer, parser, ast, format, evaluate, rename
     snippet_service.py              Snippet CRUD + merge transaction (replace_with_merged, reparent hook)
     snippet_content.py              Shared derivation: grid, phonetics, size (create + voice takes)
     recording_service.py            Voice takes (create/append + recording, one transaction), recordings
@@ -70,12 +74,13 @@ app/
   api/
     deps.py                         Auth dependency injection
     auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py
+    tag_presets.py / tag_errors.py  Preset routes; tag error envelope
 scripts/
   backfill_phonetics.py             Fill snippets.phonetics for existing rows
   export_openapi.py                 Write docs/api/openapi.json (committed snapshot)
 ```
 
-## API Surface (37 endpoints)
+## API Surface (42 endpoints)
 
 | Area | Count | Auth |
 |------|-------|------|
@@ -83,7 +88,8 @@ scripts/
 | Canvases | 8 | Bearer (shared is public) |
 | Snippets | 5 (create, update, delete, batch position, merge) | Bearer |
 | Groups | 3 | Bearer |
-| Tags | 5 (create, update, delete, link, unlink) | Bearer |
+| Tags | 6 (list, create, update, delete, link, unlink) | Bearer |
+| Tag presets | 4 (list, create, update, delete) | Bearer |
 | NLP | 6 | Mixed |
 | Export | 1 | Bearer |
 | Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |

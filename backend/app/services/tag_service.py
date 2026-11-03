@@ -115,7 +115,8 @@ async def update_tag(
     in the same transaction; if any rewritten preset would exceed the length limit, nothing changes."""
     tag = await _owned_tag(db, tag_id, owner_id)
     rewritten = 0
-    if name is not None and name != tag.name:
+    renamed = name is not None and name != tag.name
+    if name is not None and renamed:
         if await _name_taken(db, owner_id, name, except_id=tag.id):
             raise TagNameTakenError(f"a tag named {name!r} already exists")
         rewritten = await _rewrite_presets(db, owner_id, tag.name, name)
@@ -123,7 +124,7 @@ async def update_tag(
     if color is not None:
         tag.color = color
     await _commit_or_name_taken(db, tag.name)
-    logger.info("tag.updated user_id=%s tag_id=%s renamed=%s presets_rewritten=%d", owner_id, tag_id, name is not None, rewritten)
+    logger.info("tag.updated user_id=%s tag_id=%s renamed=%s presets_rewritten=%d", owner_id, tag_id, renamed, rewritten)
     return await _summary(db, tag_id)
 
 
