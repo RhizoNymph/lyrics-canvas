@@ -16,6 +16,7 @@ export const TAG_SERVER_ERROR_CODES = [
   'invalid_tag_name',
   'invalid_color',
   'invalid_preset_name',
+  'preset_expression_too_long',
 ] as const;
 
 /** `detail.error` values the tag and preset endpoints return. */
@@ -102,6 +103,7 @@ const MESSAGES: Record<TagApiErrorKind, string> = {
   invalid_tag_name: 'Tag names are 1 to 100 characters without control characters',
   invalid_color: 'Colors are #rrggbb',
   invalid_preset_name: 'Preset names are 1 to 100 characters without control characters',
+  preset_expression_too_long: "Renaming would make a preset's expression too long; pick a shorter name",
   not_found: 'Not found',
   validation: 'The request was rejected',
   network: 'Could not reach the server',
