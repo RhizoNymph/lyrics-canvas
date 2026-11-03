@@ -21,6 +21,8 @@ from app.services.nlp.embedding_service import compute_embedding
 from app.services import rhyme_suggest_service
 from app.services.phonetics.errors import DialectRuleError, PronunciationError, RhymeQueryError
 from app.services.rhyme_suggest_service import CanvasNotFoundError, SnippetNotFoundError
+from app.services.tag_expr import TagExpressionError
+from app.api.tag_errors import expression_http_error
 
 router = APIRouter(tags=["nlp"])
 
@@ -147,5 +149,8 @@ async def rhyme_suggest(
         return await rhyme_suggest_service.suggest(req, str(user.id), repo)
     except (CanvasNotFoundError, SnippetNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TagExpressionError as exc:
+        # {"error": "invalid_tag_expression", "message", "expression_error": {code, position, message}}
+        raise expression_http_error(exc) from exc
     except (RhymeQueryError, DialectRuleError, PronunciationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
