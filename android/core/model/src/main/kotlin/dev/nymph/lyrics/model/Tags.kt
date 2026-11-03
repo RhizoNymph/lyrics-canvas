@@ -111,6 +111,9 @@ enum class TagErrorCode(val wire: String) {
 
     /** 422: like [INVALID_TAG_NAME], for a preset. */
     INVALID_PRESET_NAME("invalid_preset_name"),
+
+    /** 409: renaming the tag would push one of the user's presets past the expression length limit. */
+    PRESET_EXPRESSION_TOO_LONG("preset_expression_too_long"),
     ;
 
     companion object {

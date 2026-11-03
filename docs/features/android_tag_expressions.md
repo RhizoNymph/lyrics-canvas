@@ -14,7 +14,7 @@ expression, server-side presets, and the rhyme sheet's "Only my lines matching" 
 - **Model / API** (`:core:model`, `:core:data`): `Tag` (embedded `{id, name, color}`), `UserTag`
   (`GET /api/tags`: `{id, name, color, snippet_count, created_at}`), tag CRUD, link
   (`POST /api/snippets/{id}/tags?tag_id=`) and unlink, preset CRUD (`/api/tag-presets`),
-  `RhymeSuggestRequest.tagFilter` (`tag_filter`), `CanvasDetail` without `tags`, the nine tag error
+  `RhymeSuggestRequest.tagFilter` (`tag_filter`), `CanvasDetail` without `tags`, the ten tag error
   codes (`TagErrorCode`) and `detail.expression_error` (`ExpressionErrorBody`).
 - **Tag picker** (bottom sheet) from the selection bar (canvas and list mode) and the editor's top bar:
   searchable checklist with coloured pills; tapping a row links / unlinks at once on every picked

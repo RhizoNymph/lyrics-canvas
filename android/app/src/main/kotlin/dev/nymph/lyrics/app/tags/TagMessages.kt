@@ -24,6 +24,7 @@ fun TagError.userMessage(): String = when (this) {
         TagErrorCode.INVALID_TAG_NAME -> "The server rejected this tag name."
         TagErrorCode.INVALID_COLOR -> "The server rejected this colour."
         TagErrorCode.INVALID_PRESET_NAME -> "The server rejected this preset name."
+        TagErrorCode.PRESET_EXPRESSION_TOO_LONG -> "Renaming would make a preset's filter too long. Use a shorter name."
     }
     TagError.SessionExpired -> SESSION_EXPIRED
     is TagError.Http -> message

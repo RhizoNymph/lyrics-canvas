@@ -65,9 +65,10 @@ class TagDtoTest {
     fun `tag error codes parse`() {
         assertEquals(TagErrorCode.TAG_NAME_TAKEN, TagErrorCode.parse("tag_name_taken"))
         assertEquals(TagErrorCode.INVALID_PRESET_NAME, TagErrorCode.parse("invalid_preset_name"))
+        assertEquals(TagErrorCode.PRESET_EXPRESSION_TOO_LONG, TagErrorCode.parse("preset_expression_too_long"))
         assertNull(TagErrorCode.parse("nope"))
         assertNull(TagErrorCode.parse(null))
-        assertEquals(9, TagErrorCode.entries.size)
+        assertEquals(10, TagErrorCode.entries.size)
     }
 
     @Test
