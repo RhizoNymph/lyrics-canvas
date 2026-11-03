@@ -2,7 +2,6 @@ from pydantic import BaseModel
 
 from app.schemas.group import GroupResponse
 from app.schemas.snippet import SnippetResponse
-from app.schemas.tag import TagResponse
 
 
 class CanvasCreate(BaseModel):
@@ -32,7 +31,6 @@ class CanvasResponse(BaseModel):
 class CanvasDetailResponse(CanvasResponse):
     snippets: list[SnippetResponse] = []
     groups: list[GroupResponse] = []
-    tags: list[TagResponse] = []
 
 
 class ShareResponse(BaseModel):

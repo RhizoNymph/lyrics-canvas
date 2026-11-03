@@ -8,7 +8,7 @@ from app.schemas.canvas import CanvasCreate, CanvasUpdate, CanvasResponse, Canva
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 from app.schemas.snippet import GridDataModel, SnippetResponse
 from app.schemas.group import GroupResponse
-from app.schemas.tag import TagResponse
+from app.schemas.tag import SnippetTagResponse
 from app.services import canvas_service
 
 router = APIRouter(prefix="/api/canvases", tags=["canvases"])
@@ -27,8 +27,8 @@ def _canvas_response(canvas) -> CanvasResponse:
     )
 
 
-def _tag_response(t) -> TagResponse:
-    return TagResponse(id=str(t.id), canvas_id=str(t.canvas_id), name=t.name, color=t.color)
+def _snippet_tag_response(t) -> SnippetTagResponse:
+    return SnippetTagResponse(id=str(t.id), name=t.name, color=t.color)
 
 
 def _snippet_response(s) -> SnippetResponse:
@@ -48,7 +48,7 @@ def _snippet_response(s) -> SnippetResponse:
         height=s.height,
         z_index=s.z_index,
         group_id=str(s.group_id) if s.group_id else None,
-        tags=[_tag_response(t) for t in (s.tags or [])],
+        tags=[_snippet_tag_response(t) for t in (s.tags or [])],
         phonetics=SnippetPhonetics.model_validate(s.phonetics) if s.phonetics is not None else None,
         derived_from=DerivedFromModel.model_validate(s.derived_from) if s.derived_from is not None else None,
         created_at=str(s.created_at),
@@ -74,7 +74,6 @@ def _canvas_detail_response(canvas) -> CanvasDetailResponse:
         **_canvas_response(canvas).model_dump(),
         snippets=[_snippet_response(s) for s in canvas.snippets],
         groups=[_group_response(g) for g in canvas.groups],
-        tags=[_tag_response(t) for t in canvas.tags],
     )
 
 

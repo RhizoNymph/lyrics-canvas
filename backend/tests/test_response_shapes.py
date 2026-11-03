@@ -17,7 +17,8 @@ from app.db.database import get_db
 from app.main import app
 from app.services import canvas_service, group_service, snippet_service, tag_service
 from app.services.nlp.syllabifier import syllabify_text
-from tests.route_fakes import fake_canvas, fake_group, fake_snippet, fake_tag
+from app.services.tag_service import TagSummary
+from tests.route_fakes import CREATED, fake_canvas, fake_group, fake_snippet, fake_tag
 
 USER_ID = uuid.uuid4()
 CANVAS_ID = uuid.uuid4()
@@ -54,7 +55,8 @@ def legacy_snippet(s) -> dict:
         "height": s.height,
         "z_index": s.z_index,
         "group_id": str(s.group_id) if s.group_id else None,
-        "tags": [{"id": str(t.id), "name": t.name, "color": t.color, "canvas_id": str(t.canvas_id)} for t in (s.tags or [])],
+        # tags are user-wide now: embedded as {id, name, color} (docs/features/tag_expressions.md)
+        "tags": [{"id": str(t.id), "name": t.name, "color": t.color} for t in (s.tags or [])],
         "phonetics": s.phonetics,
         "derived_from": s.derived_from,
         "created_at": str(s.created_at),
@@ -76,7 +78,8 @@ def legacy_group(g) -> dict:
 
 
 def legacy_tag(t) -> dict:
-    return {"id": str(t.id), "canvas_id": str(t.canvas_id), "name": t.name, "color": t.color}
+    # TagResponse lost canvas_id and gained snippet_count and created_at with user-wide tags
+    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "created_at": str(t.created_at)}
 
 
 def legacy_detail(canvas) -> dict:
@@ -84,7 +87,6 @@ def legacy_detail(canvas) -> dict:
         **legacy_canvas(canvas),
         "snippets": [legacy_snippet(s) for s in canvas.snippets],
         "groups": [legacy_group(g) for g in canvas.groups],
-        "tags": [legacy_tag(t) for t in canvas.tags],
     }
 
 
@@ -106,6 +108,8 @@ def assert_same_wire(res, legacy) -> None:
 
 TAG_A = fake_tag("hook", CANVAS_ID, "#ff0000")
 TAG_B = fake_tag("draft", CANVAS_ID)
+TAG_A_SUMMARY = TagSummary(TAG_A.id, TAG_A.name, TAG_A.color, 2, CREATED)
+TAG_B_SUMMARY = TagSummary(TAG_B.id, TAG_B.name, TAG_B.color, 0, CREATED)
 RICH_GRID = {
     "lines": [
         {
@@ -290,22 +294,22 @@ def test_create_and_update_group(client, monkeypatch):
 
 
 def test_create_update_and_link_tag(client, monkeypatch):
-    async def fake_create(db, canvas_id, owner_id, name, color):
-        return TAG_A
+    async def fake_create(db, owner_id, name, color):
+        return TAG_A_SUMMARY
 
     async def fake_update(db, tag_id, owner_id, name, color):
-        return TAG_B
+        return TAG_B_SUMMARY
 
     async def fake_link(db, snippet_id, tag_id, owner_id):
-        return True
+        return None
 
     monkeypatch.setattr(tag_service, "create_tag", fake_create)
     monkeypatch.setattr(tag_service, "update_tag", fake_update)
     monkeypatch.setattr(tag_service, "add_tag_to_snippet", fake_link)
-    res = client.post(f"/api/canvases/{CANVAS_ID}/tags", json={"name": "hook"})
+    res = client.post("/api/tags", json={"name": "hook"})
     assert res.status_code == 201
-    assert_same_wire(res, legacy_tag(TAG_A))
-    assert_same_wire(client.put(f"/api/tags/{TAG_B.id}", json={"name": "draft"}), legacy_tag(TAG_B))
+    assert_same_wire(res, legacy_tag(TAG_A_SUMMARY))
+    assert_same_wire(client.put(f"/api/tags/{TAG_B.id}", json={"name": "draft"}), legacy_tag(TAG_B_SUMMARY))
     assert_same_wire(client.post(f"/api/snippets/{uuid.uuid4()}/tags", params={"tag_id": str(TAG_A.id)}), {"ok": True})
 
 
