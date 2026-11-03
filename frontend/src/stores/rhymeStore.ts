@@ -8,14 +8,14 @@ import { materializePosition } from '@/lib/rhyme/materializePosition';
 import type { ViewSize } from '@/lib/rhyme/geometry';
 import type { Snippet } from '@/types';
 import { toRhymeError } from '@/lib/rhyme/errors';
-import { RHYME_PAGE_SIZE } from '@/types/rhyme';
+import { RHYME_PAGE_SIZE, RhymeError } from '@/types/rhyme';
+import { format, parse, renameInText } from '@/lib/tagExpr';
 import type {
   AnchorRange,
   RhymeK,
   RhymeUnit,
   RhymeCandidate,
   RhymeSuggestRequest,
-  RhymeError,
   Slot,
   SourceName,
   DerivedFrom,
@@ -41,6 +41,11 @@ export interface RhymeState {
   slotMode: SlotMode;
   sources: { notes: boolean; dictionary: boolean };
   includeRare: boolean;
+  /**
+   * "Only my lines matching": a tag expression restricting the notes source. Kept across sessions like
+   * the other params. Empty = no restriction; invalid text blocks the query locally.
+   */
+  tagFilterText: string;
   anchors: RhymeUnit[];
   candidates: RhymeCandidate[];
   total: number;
@@ -67,6 +72,9 @@ export interface RhymeState {
   setSlotMode: (m: SlotMode) => void;
   toggleSource: (name: SourceName) => void;
   setIncludeRare: (v: boolean) => void;
+  setTagFilterText: (text: string) => void;
+  /** Follow a tag rename into the filter text (no-op when it does not mention the tag). */
+  renameTagInFilter: (from: string, to: string) => void;
   setViewSize: (width: number, height: number) => void;
   /** Debounced 150 ms by useRhymeQuery; replaces the candidate set (offset 0). */
   runQuery: () => Promise<void>;
@@ -159,11 +167,18 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     return pruned;
   };
 
-  /** Build the request for the current state, or null when nothing should be queried. */
-  const buildRequest = (offset: number): { request: RhymeSuggestRequest; slot: Slot | null } | null => {
+  /**
+   * Build the request for the current state, or null when nothing should be queried, or a blocking
+   * error when the tag filter does not parse (the server is never sent known-invalid input).
+   */
+  const buildRequest = (offset: number): { request: RhymeSuggestRequest; slot: Slot | null } | RhymeError | null => {
     const state = get();
     const canvas = useCanvasStore.getState();
     if (!state.active || !canvas.canvasId) return null;
+    const tagFilter = parse(state.tagFilterText);
+    if (!tagFilter.ok) {
+      return new RhymeError('invalid_tag_filter', 'query', `Tag filter: ${tagFilter.error.message}`, null, tagFilter.error);
+    }
     const excluded = pruneExclusions();
     const ranges = pruneRanges();
     const anchors = anchorsFromSelection(canvas.selectedSnippetIds, canvas.snippets, state.typedAnchor, excluded, ranges);
@@ -187,6 +202,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
         offset,
         weights: null,
         dialect: null,
+        ...(tagFilter.expr !== null ? { tag_filter: format(tagFilter.expr) } : {}),
       },
       slot,
     };
@@ -200,6 +216,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     slotMode: 'from-selection',
     sources: { notes: true, dictionary: true },
     includeRare: false,
+    tagFilterText: '',
     viewSize: { width: 800, height: 600 },
     ...cleared(),
 
@@ -239,11 +256,20 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     setSlotMode: (m) => set({ slotMode: m }),
     toggleSource: (name) => set((s) => ({ sources: { ...s.sources, [name]: !s.sources[name] } })),
     setIncludeRare: (v) => set({ includeRare: v }),
+    setTagFilterText: (text) => set({ tagFilterText: text }),
+    renameTagInFilter: (from, to) => {
+      const next = renameInText(get().tagFilterText, from, to);
+      if (next !== get().tagFilterText) set({ tagFilterText: next });
+    },
     setViewSize: (width, height) => set({ viewSize: { width, height } }),
 
     runQuery: async () => {
       const built = buildRequest(0);
       const seq = ++querySeq;
+      if (built instanceof RhymeError) {
+        set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: built });
+        return;
+      }
       if (!built) {
         if (get().active) {
           set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: null });
@@ -274,7 +300,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       const nextOffset = state.offset + RHYME_PAGE_SIZE;
       if (state.loading || nextOffset >= state.total) return;
       const built = buildRequest(nextOffset);
-      if (!built) return;
+      if (!built || built instanceof RhymeError) return;
       const seq = ++querySeq;
       set({ loading: true, error: null });
       try {
