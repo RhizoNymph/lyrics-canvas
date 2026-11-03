@@ -27,7 +27,7 @@ data class Canvas(
     @SerialName("updated_at") val updatedAt: String,
 )
 
-/** `GET /api/canvases/{id}`: the canvas plus everything on it. */
+/** `GET /api/canvases/{id}`: the canvas plus everything on it (tags are user-wide: `GET /api/tags`). */
 @Serializable
 data class CanvasDetail(
     val id: CanvasId,
@@ -40,7 +40,6 @@ data class CanvasDetail(
     @SerialName("updated_at") val updatedAt: String,
     val snippets: List<Snippet> = emptyList(),
     val groups: List<Group> = emptyList(),
-    val tags: List<Tag> = emptyList(),
 ) {
     /** The canvas header without its contents. */
     fun toCanvas(): Canvas = Canvas(id, ownerId, title, isPublic, shareToken, viewportState, createdAt, updatedAt)
@@ -58,15 +57,6 @@ data class CanvasUpdateRequest(
     val title: String? = null,
     @SerialName("is_public") val isPublic: Boolean? = null,
     @SerialName("viewport_state") val viewportState: ViewportState? = null,
-)
-
-/** A tag on a canvas; snippets carry the tags applied to them. */
-@Serializable
-data class Tag(
-    val id: TagId,
-    @SerialName("canvas_id") val canvasId: CanvasId,
-    val name: String,
-    val color: String,
 )
 
 /** A named group of snippets on a canvas. */

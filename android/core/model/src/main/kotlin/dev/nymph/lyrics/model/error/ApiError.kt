@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * Every way an API call can fail. Produced by `:core:data`'s ApiClient and mapped by
@@ -32,8 +33,16 @@ sealed interface ApiError {
         override val message: String get() = detail ?: "Not found"
     }
 
-    /** 400 or 422: the server rejected the request; pydantic messages are joined with "; ". */
-    data class Validation(val status: Int, val detail: String, override val code: String? = null) : ApiError {
+    /**
+     * 400 or 422: the server rejected the request; pydantic messages are joined with "; ".
+     * [expressionError] is the located error of an `invalid_tag_expression` rejection.
+     */
+    data class Validation(
+        val status: Int,
+        val detail: String,
+        override val code: String? = null,
+        val expressionError: ExpressionErrorBody? = null,
+    ) : ApiError {
         override val message: String get() = detail
     }
 
@@ -60,7 +69,7 @@ sealed interface ApiError {
             return when (status) {
                 401, 403 -> Unauthorized(status, detail)
                 404 -> NotFound(detail, code)
-                400, 422 -> Validation(status, detail ?: "Invalid request ($status)", code)
+                400, 422 -> Validation(status, detail ?: "Invalid request ($status)", code, expressionErrorFromBody(body))
                 else -> Server(status, detail, code)
             }
         }
@@ -85,6 +94,14 @@ sealed interface ApiError {
         /** The `error` code of a structured `{"detail": {"error": "<code>", ...}}` body, else null. */
         fun errorCodeFromBody(body: String?): String? = (detailElement(body) as? JsonObject)?.stringField("error")
 
+        /** `detail.expression_error` (`{code, position, message}`) of an expression rejection, else null. */
+        fun expressionErrorFromBody(body: String?): ExpressionErrorBody? {
+            val raw = (detailElement(body) as? JsonObject)?.get("expression_error") as? JsonObject ?: return null
+            val code = raw.stringField("code") ?: return null
+            val position = (raw["position"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull ?: return null
+            return ExpressionErrorBody(code, position, raw.stringField("message") ?: "")
+        }
+
         private fun detailElement(body: String?): JsonElement? {
             if (body.isNullOrBlank()) return null
             val root = try {
@@ -99,3 +116,6 @@ sealed interface ApiError {
             (get(name) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
     }
 }
+
+/** The server's located expression error; [position] is a code point offset into the sent expression. */
+data class ExpressionErrorBody(val code: String, val position: Int, val message: String)
