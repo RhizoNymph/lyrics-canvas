@@ -98,6 +98,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop), transcribed by the server into a new snippet or appended lines; recordings played back and deleted in the editor |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
+| [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
@@ -282,7 +283,7 @@ Features Index:
     depends_on: [snippet_crud, typed_api]
     doc: docs/features/snippet_content_timestamp.md
   list_mode:
-    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle, no tag filter yet.
+    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle; rows follow the filter bar's tag expression (android_tag_expressions).
     entry_points:
       - frontend/src/components/list/ (ListView, ListRow, GridPreview, useFrozenOrder)
       - frontend/src/lib/listMode/ (sortForList, applyFrozenOrder, listClick, view-mode persistence)
@@ -454,4 +455,17 @@ Features Index:
       - frontend/src/components/list/ListView.tsx (reveal new snippet)
     depends_on: [voice_capture, list_mode, grid_rearrange, snippet_crud, health_banner]
     doc: docs/features/web_voice_capture.md
+  android_tag_expressions:
+    description: Android client of tag expressions. :core:logic engine (lexer, parser, sealed AST, normalizing format, evaluate, rename, completion and tag insertion at the caret; code point positions; Python isspace whitespace) passing every vector of spec/tag_expression_vectors.json read in place by the test task. User-wide tags (GET/POST /api/tags, PUT/DELETE /api/tags/{id}, link POST /api/snippets/{id}/tags?tag_id=, unlink), presets CRUD (/api/tag-presets), tag_filter on the rhyme request, canvas detail without tags, typed errors for the nine tag codes plus detail.expression_error. Tag picker bottom sheet from the selection bar (canvas and list) and the editor - searchable tri-state checklist applied to every picked snippet at once, Create '<query>', rename / recolour / delete per tag. Filter bar above the canvas and list - expression field with live validation (marker + message), suggestion chips at the caret, tag pills inserting at the caret, clear, presets menu (apply, save as with inline 409, rename / overwrite / delete); an invalid text keeps the last valid filter; non-matching snippets are not drawn, hit, listed or selected; the applied text is remembered per canvas in DataStore. Rhyme sheet "Only my lines matching" (same field, presets, Use canvas filter) sent normalized as tag_filter, blocking the query locally when invalid and notes is on.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/tags/
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/Tags.kt
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/TagRepository.kt
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/TagPresetRepository.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/tags/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (TagCanvasPort)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/RhymeViewModel.kt (tag filter)
+      - spec/tag_expression_vectors.json
+    depends_on: [tag_expressions, android_app, list_mode, rhyme_view]
+    doc: docs/features/android_tag_expressions.md
 ```

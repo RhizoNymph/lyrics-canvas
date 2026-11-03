@@ -21,8 +21,8 @@ touch. Lives in `android/` of this repo.
 - Offline engine (CMU dict / scorer / g2p on device). The backend is required.
 - Hosting the backend. Dev builds point at the emulator host (`10.0.2.2:8000`) or a LAN IP via
   `-PapiBaseUrl=`.
-- Google sign-in (email/password only in v1), export, t-SNE, similarity, search, groups UI, tags editing
-  (tags are displayed and preserved, not edited).
+- Google sign-in (email/password only in v1), export, t-SNE, similarity, search, groups UI. (Tags:
+  [android_tag_expressions.md](./android_tag_expressions.md).)
 - Server-side undo. The app keeps the web client's local-only undo semantics: none in v1.
 
 ## Modules
@@ -164,7 +164,8 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `Grid.kt` | `GridCell` (`isRest`, `GridCell.REST`), `GridLine`, `GridData` (also the syllabify response) |
 | | | `LyricsJson.kt` | `LyricsJson` (`ignoreUnknownKeys`, `explicitNulls = false`, `encodeDefaults`) |
 | | | `Auth.kt` | `LoginRequest`, `RegisterRequest`, `TokenResponse`, `User` |
-| | | `Canvas.kt` | `Canvas`, `CanvasDetail` (+ `toCanvas()`), `ViewportState`, `CanvasCreateRequest`, `CanvasUpdateRequest`, `Tag`, `Group` |
+| | | `Canvas.kt` | `Canvas`, `CanvasDetail` (+ `toCanvas()`), `ViewportState`, `CanvasCreateRequest`, `CanvasUpdateRequest`, `Group` |
+| | | `Tags.kt` | `Tag` (embedded), `UserTag`, tag / preset requests, `TagPreset`, `TagPresetId`, `TagErrorCode` |
 | | | `Snippet.kt` | `Snippet` (phonetics as `JsonElement?` passthrough; `contentUpdatedAt` = `content_updated_at`), `SnippetType`, `GridMode`, `Provenance`, `DerivedFrom`, `SnippetCreateRequest`, `SnippetUpdateRequest`, `PositionUpdate`, `BatchPositionRequest`, `BatchPositionResponse` |
 | | | `Merge.kt` | `MergeMode`, `MergeRequest` (only via `MergeRequest.of`, null for < 2 distinct ids), `MergeResponse` |
 | | | `Nlp.kt` | `SyllabifyRequest` |
