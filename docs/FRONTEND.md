@@ -11,7 +11,8 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 | [Canvas Rendering](./frontend/canvas-rendering.md) | Pixi.js viewport, snippet cards, inline grid editor, context menu, grid background, group containers | `CanvasViewport`, `SnippetCard`, `SnippetContextMenu`, `InlineGridEditor`, `InfiniteGrid`, `GroupContainer` |
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing, grid modes, CMU integration | `BeatGridDisplay`, `BeatGridEditor` |
 | [Sidebars](./frontend/sidebars.md) | Rhyme sidebar, similarity analysis panel | `RhymeSidebar`, `SimilarityPanel` |
-| [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag filter pills | `Toolbar`, `TagFilterBar` |
+| [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag expression filter bar | `Toolbar`, `TagExpressionBar` |
+| [Web Tag Expressions](./features/web_tag_expressions.md) | User-wide tags, tag picker, expression filter with autocomplete, presets, rhyme notes filter | `lib/tagExpr/*`, `lib/tags/*`, `lib/tagFilter/*`, `tagStore`, `tagFilterStore`, `components/tags/*` |
 | [Modals](./frontend/modals.md) | Full-text search dialog, export format dialog | `SearchModal`, `ExportDialog` |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor | `App`, `LoginPage`, `RegisterPage`, `CanvasListPage`, `CanvasPage` |
 | [Rhyme Sidebar](./frontend/rhyme-view.md) | Engine-backed rhyme search list with materialize-to-canvas | `rhymeStore`, `RhymeSidebar`, `QueryControls`, `CandidateList`, `CandidateRow`, `lib/rhyme/*` |
@@ -39,7 +40,10 @@ src/
   lib/alerts/                       Alert payload validation, fetch result folding, poller
   lib/statusBanner/                 Health + alerts -> ordered, dismissible banner items
   lib/canvas/
-    visibility.ts                   Tag-filter visibility shared by canvas and list
+    visibility.ts                   Tag-expression visibility shared by canvas and list
+  lib/tagExpr/                      Tag expression language: lexer, parser, format, evaluate, rename, completion
+  lib/tags/                         Tag API errors, name rules, picker logic, embedded-tag patches, preset checks
+  lib/tagFilter/                    Filter bar reducer, per-canvas persistence, error marker, menu keys
   lib/voice/                        Voice capture: recorder machine, gestures, VAD, session, MediaRecorder adapter
   lib/listMode/
     order.ts                        Last-edited sort + frozen order while editing
@@ -57,7 +61,9 @@ src/
     authStore.ts                    Auth state + JWT persistence
     canvasStore.ts                  Canvas data + undo/redo + t-SNE
     uiStore.ts                      Panel visibility + editing state + view mode
-    rhymeStore.ts                   Rhyme sidebar session, query, materialize
+    rhymeStore.ts                   Rhyme sidebar session, query, materialize, notes tag filter
+    tagStore.ts                     User-wide tags and tag presets
+    tagFilterStore.ts               Canvas tag expression filter (persisted per canvas)
     statusStore.ts                  Backend health, cluster alerts, dismissed banner keys
     voiceStore.ts                   Recorder modal request, silence setting, take hand-off
   components/
@@ -67,7 +73,7 @@ src/
       gridConstants.ts              Beat-grid geometry constants
       gridDraw.ts                   Beat-grid drawing for SnippetCard
       gridCellText.ts               Cell label / tone / colours shared by gridDraw and GridPreview
-      SnippetContextMenu.tsx        Right-click tag assignment menu
+      SnippetContextMenu.tsx        Right-click menu: tag picker, merge, delete
       InlineGridEditor.tsx          Inline beat grid editor (canvas overlay or in a list row)
       editorBridge.ts               Flush / reload handle the open editor registers (voice capture)
       InfiniteGrid.tsx              Background grid
@@ -96,6 +102,12 @@ src/
       AlignmentTable.tsx            Aligned tail vs anchor
       rhymeColors.ts                Provenance colours
       sidebarStyles.ts              Sidebar width + shared styles
+      NotesTagFilter.tsx            "Only my lines matching" tag expression
+    tags/
+      TagExpressionInput.tsx        Expression field: validation, autocomplete, insert at caret
+      PresetPicker.tsx              Presets: apply, save, rename, overwrite, delete
+      TagPicker.tsx                 Context-menu tag checklist (multi-select aware)
+      tagStyles.ts                  Shared styles
     beatgrid/
       BeatGridDisplay.tsx           Read-only grid table
       BeatGridEditor.tsx            Full grid editing UI
@@ -104,7 +116,7 @@ src/
       SimilarityPanel.tsx           Similarity results panel
     toolbar/
       Toolbar.tsx                   Top control bar
-      TagFilterBar.tsx              Tag filter pills
+      TagExpressionBar.tsx          Tag expression filter bar
     modals/
       SearchModal.tsx               Full-text search
       ExportDialog.tsx              Export format selection

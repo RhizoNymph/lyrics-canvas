@@ -25,11 +25,15 @@ loading/error). The sidebar owns only the expanded row. `uiStore.rhymeSidebarOpe
 - Click a row to see the aligned tail against the anchor
 - Materialize creates a snippet on the canvas; Dismiss hides the row for the session
 - More loads the next 40
+- "Only my lines matching" (`NotesTagFilter`): a tag expression (same input, autocomplete and presets as the
+  canvas filter bar, plus "Use canvas filter") restricting the notes source; sent as `tag_filter`, never
+  sent while invalid (the list shows "Not searched: ..." instead). See
+  [web_tag_expressions.md](../features/web_tag_expressions.md)
 
 ### Layout
 
 Width: 380px fixed, full height of the canvas area. Header, query controls (search, chips, k, min score,
-slot, sources, rare words), status line with More, scrollable result rows.
+slot, sources, rare words, notes tag filter), status line with More, scrollable result rows.
 
 ---
 

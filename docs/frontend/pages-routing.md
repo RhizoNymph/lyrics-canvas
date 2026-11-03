@@ -115,6 +115,7 @@ Main editing view that orchestrates all canvas editing components.
 ### Lifecycle
 
 - On mount: `canvasStore.loadCanvas(id)` -- navigates home on error
+- On mount: `tagStore.load()` (user-wide tags and presets); per canvas id: `tagFilterStore.open(id)` restores that canvas's filter
 - Registers keyboard listeners, cleans up on unmount
 - On unmount (or canvas change): `voiceStore.closeRecorder()`, so a recorder never reopens on the next canvas
 
@@ -138,7 +139,7 @@ All page shortcuts are ignored while the voice recorder modal is open; the modal
 +--------------------------------------------------+
 | Toolbar                                           |
 +--------------------------------------------------+
-| TagFilterBar                                      |
+| TagExpressionBar (tag expression filter)          |
 +--------------------------------------+-----------+
 |                                      |           |
 | CanvasViewport or ListView (viewMode)| Rhyme     |

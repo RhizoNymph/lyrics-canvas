@@ -63,13 +63,14 @@ worldY = (clientY - containerTop) / zoom - viewport.y
 
 ### Tag Filtering
 
-When `activeTagFilters` is non-empty, only snippets whose tags intersect the filter set are rendered (`visibleSnippets` from `src/lib/canvas/visibility.ts`, shared with list mode). Groups are only rendered when they contain at least one visible snippet.
+When the canvas page's tag expression filter applies (`tagFilterStore.filter.applied` is non-null), only snippets it matches are rendered (`visibleSnippets` from `src/lib/canvas/visibility.ts`, shared with list mode; see [web_tag_expressions.md](../features/web_tag_expressions.md)). Groups are only rendered when they contain at least one visible snippet.
 
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `viewport`, `setViewport`, `snippets`, `groups`, `activeTagFilters`, `addSnippet`, `clearSelection`, `commitPositions` |
+| canvasStore | `viewport`, `setViewport`, `snippets`, `groups`, `addSnippet`, `clearSelection`, `commitPositions` |
+| tagFilterStore | `filter.applied` |
 | uiStore | `editingSnippetId`, `setEditingSnippet` |
 | rhymeStore | `setViewSize` (on resize; the viewport-centre fallback when materializing a candidate) |
 | canvasStore | `setCanvasViewSize` (on resize; voice capture's new-snippet position, also from list view) |
@@ -255,26 +256,27 @@ Click and double-click events call `stopPropagation()` to prevent canvas interac
 
 **File:** `src/components/canvas/SnippetContextMenu.tsx`
 
-Fixed-position HTML overlay (z-index 2000) rendered by CanvasViewport when `uiStore.contextMenu` is non-null. Provides tag assignment and snippet deletion via right-click.
+Fixed-position HTML overlay (z-index 2000) rendered by CanvasViewport when `uiStore.contextMenu` is non-null. Provides tag assignment, merge and snippet deletion via right-click.
 
 ### Features
 
-- **Tag list**: All canvas tags shown as checkable items (checkbox + color dot + name). Clicking toggles `addTagToSnippet` / `removeTagFromSnippet`.
-- **Tag editing**: Pencil icon (✎) or double-click a tag name to enter inline edit mode with color picker and name input. Saves on Enter or blur.
-- **Tag creation**: "New tag..." row expands to color picker + name input. Saves on Enter or blur, and **auto-assigns** the new tag to the current snippet. Color dots use `onMouseDown={e => e.preventDefault()}` to prevent stealing focus from the input.
+- **Tag picker** (`components/tags/TagPicker.tsx`, keyed by snippet id): a search field over the user's
+  tags (user-wide), each with a checkbox, color dot and snippet count. Clicking (or Enter on the
+  highlighted row) links/unlinks immediately. When the menu was opened on a member of a multi-selection
+  the toggle applies to the whole selection and the checkbox shows all / mixed (–) / none; a mixed tag
+  links where missing. "Create '<query>'" creates the tag and links it. ✎ edits name and color in place;
+  Delete (confirmed) removes the tag everywhere. Errors (e.g. `tag_name_taken`) show inline. See
+  [web_tag_expressions.md](../features/web_tag_expressions.md).
 - **Merge**: When 2+ snippets are selected and the right-clicked snippet is one of them, "Merge vertically" and "Merge horizontally" items appear above the delete option; each closes the menu and calls `canvasStore.mergeSelected(mode)` (see [merge_blocks.md](../features/merge_blocks.md)).
 - **Delete snippet**: Red "Delete snippet" option at the bottom.
-- **Click-outside**: Closes the menu. A cleanup effect flushes any pending tag create/edit when the menu closes.
-
-### Double-Fire Prevention
-
-Uses `createGuard` and `editGuard` refs to prevent duplicate saves when Enter triggers `handleCreateTag`/`handleSaveEdit` and then the input unmount triggers `onBlur` with the same handler. The cleanup effect on `contextMenu` change also checks these guards.
+- **Click-outside / Esc**: Closes the menu. Nothing is pending on close: tag edits save on Save/Enter only.
 
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `snippets`, `tags`, `selectedSnippetIds`, `addTagToSnippet`, `removeTagFromSnippet`, `createTag`, `updateTag`, `deleteSnippet`, `mergeSelected` |
+| canvasStore | `snippets`, `selectedSnippetIds`, `deleteSnippet`, `mergeSelected` (picker: `updateEmbeddedTags` via tagStore) |
+| tagStore | `tags`, `loadState`, `load`, `applyToggle`, `createTag`, `updateTag`, `deleteTag` (picker) |
 | uiStore | `contextMenu`, `closeContextMenu` |
 
 ---

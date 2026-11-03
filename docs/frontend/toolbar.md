@@ -1,6 +1,6 @@
 # Toolbar & Tag Filter
 
-Top-level control bars for canvas editing and tag management.
+Top-level control bars for canvas editing and the tag expression filter.
 
 ## Toolbar
 
@@ -70,43 +70,31 @@ server merge is one transaction, so a failure changed nothing). Clicking it call
 
 ---
 
-## TagFilterBar
+## TagExpressionBar
 
-**File:** `src/components/toolbar/TagFilterBar.tsx`
+**File:** `src/components/toolbar/TagExpressionBar.tsx`
 
-Horizontal tag pills below the toolbar for filtering and managing tags.
+The canvas page's tag filter, below the toolbar; it filters both the canvas and list mode. Full
+description in [web_tag_expressions.md](../features/web_tag_expressions.md); language in
+[tag_expressions.md](../features/tag_expressions.md).
 
-### State
+### Layout
 
-| State | Type | Purpose |
-|-------|------|---------|
-| `showCreate` | boolean | Inline creation form visibility |
-| `newName` | string | New tag name input |
-| `newColor` | string | Color picker value (default #6366f1) |
-
-### Tag Display
-
-Each tag is a pill-shaped button:
-
-| State | Background | Text |
-|-------|------------|------|
-| Active (filtered) | Tag's color | White |
-| Inactive | Dark (#2a2a4a) | Gray |
-
-### Interactions
-
-| Action | Effect |
-|--------|--------|
-| Click tag pill | Toggle tag filter (shows only snippets with that tag) |
-| Click x on tag | Delete tag |
-| Click "+ Tag" | Show inline create form |
-| Enter in name input | Create tag with name and color |
-
-### Visibility
-
-- Hidden entirely when no tags exist and create form is closed
-- Shows "+ Add Tag" minimally when no tags but not creating
+| Part | Behaviour |
+|------|-----------|
+| Expression field (`TagExpressionInput`) | Live validation (red border, message, marker at the error's code point; click the marker to move the caret there); autocomplete at the caret: tag names, `type:` values, `and`/`or` where an operator fits, `not`; arrows, Enter/Tab, Esc, Ctrl+Space |
+| Clear (✕) | `dispatch({type: 'clear'})` |
+| Presets ▾ (`PresetPicker`) | Apply a preset, Save as preset (name prompt, 409 inline), rename, overwrite with the current text, delete |
+| Count | `n of m shown` while a filter applies |
+| Stale line | When the text is invalid: "Not applied. Still filtering by ..." (the last valid text keeps applying) |
+| Tag pills | All of the user's tags (user-wide); click inserts the tag at the caret, joined with ` & ` where needed; pills mentioned by the applied filter are filled |
 
 ### Store Dependencies
 
-Uses `canvasStore`: `tags`, `activeTagFilters`, `toggleTagFilter`, `createTag`, `deleteTag`
+| Store | State/Actions Used |
+|-------|-------------------|
+| tagFilterStore | `filter` (`text`, `error`, `appliedText`, `applied`), `dispatch` |
+| tagStore | `tags`, `loadState`, `load`, presets (via `PresetPicker`) |
+| canvasStore | `snippets` (count) |
+
+Tags are created, renamed, recolored and deleted from the snippet context menu's tag picker, not here.
