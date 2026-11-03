@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasPort
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasView
+import dev.nymph.lyrics.app.tags.TagCanvasPort
 import dev.nymph.lyrics.app.ui.userMessage
 import dev.nymph.lyrics.data.repository.CanvasRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
@@ -16,6 +17,11 @@ import dev.nymph.lyrics.logic.canvas.hitTestScreen
 import dev.nymph.lyrics.logic.canvas.toMergeError
 import dev.nymph.lyrics.logic.canvas.viewportCenter
 import dev.nymph.lyrics.logic.list.ListOrder
+import dev.nymph.lyrics.logic.tags.TagFilter
+import dev.nymph.lyrics.logic.tags.withTagDeleted
+import dev.nymph.lyrics.logic.tags.withTagEdited
+import dev.nymph.lyrics.logic.tags.withTagLinked
+import dev.nymph.lyrics.logic.tags.withTagUnlinked
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.MergeMode
 import dev.nymph.lyrics.model.MergeRequest
@@ -24,6 +30,8 @@ import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
+import dev.nymph.lyrics.model.Tag
+import dev.nymph.lyrics.model.TagId
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.VoiceTakeResponse
@@ -59,6 +67,10 @@ const val CANVAS_MODE_KEY: String = "canvas_mode"
  * captured when the list is shown, reloaded, or an editor save comes back, so rows never move
  * under the user's finger; selection, merge and delete are shared with the canvas.
  *
+ * Tags ([TagCanvasPort]): the filter bar's filter hides non-matching snippets from both views
+ * ([CanvasUiState.Ready.visibleSnippets]) and deselects them; picker links, renames and deletes
+ * update the snippets' embedded tags.
+ *
  * @param persistScope outlives this ViewModel, so a viewport save started on leave completes
  * @param savedState keeps the canvas / list mode across configuration changes and process death
  */
@@ -69,7 +81,7 @@ class CanvasViewModel(
     private val persistScope: CoroutineScope,
     private val viewportSaveDelayMs: Long = VIEWPORT_SAVE_DELAY_MS,
     private val savedState: SavedStateHandle = SavedStateHandle(),
-) : ViewModel(), RhymeCanvasPort {
+) : ViewModel(), RhymeCanvasPort, TagCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
 
@@ -80,6 +92,9 @@ class CanvasViewModel(
     private val moveOrigins = mutableMapOf<SnippetId, Point>()
 
     private var lastSavedViewport: Viewport? = null
+
+    /** The filter in force, also before the canvas loads (the saved filter may arrive first). */
+    private var tagFilter: TagFilter = TagFilter.Everything
     private var viewportSaveJob: Job? = null
 
     init {
@@ -101,6 +116,7 @@ class CanvasViewModel(
                         viewport = viewport,
                         viewSize = ViewSize(0.0, 0.0),
                         mode = modeFor(savedModeKind(), detail.snippets),
+                        filter = tagFilter,
                     )
                 }
                 is ApiResult.Failure -> CanvasUiState.Failed(result.error.userMessage())
@@ -143,7 +159,7 @@ class CanvasViewModel(
     /** The topmost card under a screen point (dp). */
     fun hitTest(screen: Point): SnippetId? {
         val ready = ready() ?: return null
-        return hitTestScreen(ready.snippets, screen, ready.viewport)?.id
+        return hitTestScreen(ready.visibleSnippets, screen, ready.viewport)?.id
     }
 
     // ---- Camera ----
@@ -371,4 +387,30 @@ class CanvasViewModel(
     override fun currentRhymeView(): RhymeCanvasView? = _state.value.toRhymeView()
 
     override fun insertMaterialized(snippet: Snippet) = insert(snippet)
+
+    // ---- TagCanvasPort ----
+
+    override fun currentSnippets(): Map<SnippetId, Snippet> = ready()?.byId ?: emptyMap()
+
+    override fun setTagFilter(filter: TagFilter) {
+        tagFilter = filter
+        updateReady { ready ->
+            if (ready.filter == filter) return@updateReady ready
+            val next = ready.copy(filter = filter)
+            val shown = next.visibleSnippets.mapTo(HashSet()) { it.id }
+            next.copy(selection = Selection.of(ready.selection.ids.filterTo(LinkedHashSet()) { it in shown }))
+        }
+    }
+
+    private inline fun mapSnippet(id: SnippetId, change: (Snippet) -> Snippet) = updateReady { ready ->
+        ready.copy(snippets = ready.snippets.map { if (it.id == id) change(it) else it })
+    }
+
+    override fun onTagLinked(snippet: SnippetId, tag: Tag) = mapSnippet(snippet) { it.withTagLinked(tag) }
+
+    override fun onTagUnlinked(snippet: SnippetId, tag: TagId) = mapSnippet(snippet) { it.withTagUnlinked(tag) }
+
+    override fun onTagEdited(tag: Tag) = updateReady { it.copy(snippets = it.snippets.withTagEdited(tag)) }
+
+    override fun onTagDeleted(tag: TagId) = updateReady { it.copy(snippets = it.snippets.withTagDeleted(tag)) }
 }

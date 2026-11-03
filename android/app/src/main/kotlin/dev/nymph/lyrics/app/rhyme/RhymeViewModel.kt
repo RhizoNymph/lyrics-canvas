@@ -16,6 +16,8 @@ import dev.nymph.lyrics.logic.rhyme.materializeRequest
 import dev.nymph.lyrics.logic.rhyme.planRhymeQuery
 import dev.nymph.lyrics.logic.rhyme.toAnchorRect
 import dev.nymph.lyrics.logic.rhyme.toRhymeError
+import dev.nymph.lyrics.logic.tags.Completion
+import dev.nymph.lyrics.logic.tags.Suggestion
 import dev.nymph.lyrics.model.AnchorRange
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.RhymeK
@@ -112,7 +114,13 @@ class RhymeViewModel(
         sessionJob = null
         lastQueryKey = null
         session.update {
-            RhymeUiState(params = it.params, manualCount = it.manualCount, manualStress = it.manualStress, canvas = it.canvas)
+            RhymeUiState(
+                params = it.params,
+                manualCount = it.manualCount,
+                manualStress = it.manualStress,
+                canvas = it.canvas,
+                tagFilter = it.tagFilter,
+            )
         }
     }
 
@@ -133,7 +141,7 @@ class RhymeViewModel(
     private fun plan(input: PlanInput, offset: Int): RhymeQueryPlan {
         val c = input.controls
         val selection = RhymeSelection(input.selectedIds, input.selected, c.typedText, c.excluded, c.ranges, session.value.dismissed)
-        return planRhymeQuery(input.canvasId, c.params, selection, offset)
+        return planRhymeQuery(input.canvasId, c.params, selection, offset, c.tagFilter)
     }
 
     private fun currentPlan(offset: Int): RhymeQueryPlan? {
@@ -165,7 +173,8 @@ class RhymeViewModel(
 
     private suspend fun runPlan(plan: RhymeQueryPlan) {
         when (plan) {
-            is RhymeQueryPlan.Skip -> {
+            // Nothing to ask, or the tag filter is known-invalid (its field shows why): no request.
+            is RhymeQueryPlan.Skip, is RhymeQueryPlan.Blocked -> {
                 lastQueryKey = null
                 session.update {
                     it.pruned(plan).copy(anchors = emptyList(), candidates = emptyList(), total = 0, offset = 0, loading = false, error = null)
@@ -220,6 +229,22 @@ class RhymeViewModel(
     // ---- Controls ----
 
     fun setTypedText(text: String) = session.update { it.copy(typedText = text) }
+
+    // ---- "Only my lines matching" ----
+
+    /** Text and caret (code points) from the expression field. */
+    fun editTagFilter(text: String, caret: Int) = session.update { it.copy(tagFilter = it.tagFilter.edit(text, caret)) }
+
+    fun acceptTagFilterSuggestion(completion: Completion, suggestion: Suggestion) =
+        session.update { it.copy(tagFilter = it.tagFilter.accept(completion, suggestion)) }
+
+    /** A tag pill tap: insert at the caret, joined with `&`. */
+    fun insertTagFilterTag(name: String) = session.update { it.copy(tagFilter = it.tagFilter.insertTag(name)) }
+
+    /** A preset, or "Use canvas filter": replace the text. */
+    fun setTagFilterText(text: String) = session.update { it.copy(tagFilter = it.tagFilter.replaced(text)) }
+
+    fun clearTagFilter() = session.update { it.copy(tagFilter = it.tagFilter.cleared()) }
 
     fun excludeAnchor(id: SnippetId) = session.update { it.copy(excluded = it.excluded + id) }
 

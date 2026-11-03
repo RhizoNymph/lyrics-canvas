@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.editor
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -47,6 +48,8 @@ fun GridEditorRoute(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onSnippetChanged: (Snippet) -> Unit = {},
+    /** More top-bar actions from the host (the tag picker's "Tags"). */
+    extraTopBarActions: @Composable RowScope.() -> Unit = {},
 ) {
     // One ViewModel per visit: survives rotation (saveable key), fresh when the editor is reopened,
     // even if the host keeps one ViewModelStore across visits.
@@ -104,6 +107,7 @@ fun GridEditorRoute(
         modifier = modifier,
         snackbar = snackbar,
         topBarActions = {
+            extraTopBarActions()
             TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
         },
         bottomPanel = { RecordingsSection(recordingsState, recordings) },

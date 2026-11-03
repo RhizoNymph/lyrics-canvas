@@ -69,7 +69,7 @@ fun snippet(
     contentUpdatedAt = contentUpdatedAt,
 )
 
-fun tag(name: String, color: String = "#ff0000"): Tag = Tag(TagId("t-$name"), CANVAS_ID, name, color)
+fun tag(name: String, color: String = "#ff0000"): Tag = Tag(TagId("t-$name"), name, color)
 
 /** "the cat sat" / "on the mat": two lines with word indexes. */
 fun catSnippet(id: String = "s1", x: Double = 100.0, y: Double = 50.0): Snippet = snippet(

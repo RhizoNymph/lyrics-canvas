@@ -52,6 +52,11 @@ import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.di.ProcessScope
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
 import dev.nymph.lyrics.app.rhyme.ui.RhymePanel
+import dev.nymph.lyrics.app.tags.tagsViewModel
+import dev.nymph.lyrics.app.tags.ui.FilterBar
+import dev.nymph.lyrics.app.tags.ui.TagPickerSheet
+import dev.nymph.lyrics.logic.tags.TagFilter
+import androidx.compose.foundation.layout.fillMaxWidth
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
 import dev.nymph.lyrics.app.voice.ui.voiceCaptureViewModel
@@ -84,8 +89,10 @@ fun canvasViewModel(
 fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit, onOpenEditor: (SnippetId) -> Unit) {
     val vm = canvasViewModel(container, canvasId)
     val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets) }
+    val tagsVm = tagsViewModel(container, canvasId, vm)
     val state by vm.state.collectAsStateWithLifecycle()
     val rhyme by rhymeVm.state.collectAsStateWithLifecycle()
+    val tags by tagsVm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -107,6 +114,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
         }
     }
     LaunchedEffect(voice) { voice.saved.collect { vm.onVoiceTakeSaved(it.response) } }
+    LaunchedEffect(tagsVm) { tagsVm.messages.collect { text -> scope.launch { snackbar.showSnackbar(text) } } }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.flushViewport() }
 
     val ready = state as? CanvasUiState.Ready
@@ -142,6 +150,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                         onMerge = vm::merge,
                         onDelete = { confirmDelete = true },
                         onRhymes = rhymeVm::open,
+                        onTags = { tagsVm.openPicker(selection.ids) },
                     )
                 } else {
                     CanvasTopBar(
@@ -167,42 +176,47 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
-                // Also reported in list mode, so a voice take there lands at the centre of the last canvas viewport.
-                Box(
-                    Modifier.weight(1f).fillMaxHeight().onSizeChanged { px ->
-                        with(density) { vm.setViewSize(ViewSize(px.width.toDp().value.toDouble(), px.height.toDp().value.toDouble())) }
-                    },
-                ) {
-                    when (val s = state) {
-                        CanvasUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                        is CanvasUiState.Failed -> Column(
-                            Modifier.align(Alignment.Center).padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(s.message, color = Palette.Error)
-                            Button(onClick = vm::reload) { Text("Retry") }
-                        }
-                        is CanvasUiState.Ready -> when (s.mode) {
-                            CanvasMode.Canvas -> SnippetCanvas(
-                                state = s,
-                                hitTest = vm::hitTest,
-                                onAction = onAction,
-                                onViewSize = vm::setViewSize,
-                            )
-                            is CanvasMode.SnippetList -> SnippetList(
-                                rows = s.listRows,
-                                selected = s.selection.ids,
-                                onTap = { id -> vm.onTap(id) },
-                                onLongPress = vm::onListLongPress,
-                                listState = listState,
-                            )
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    // The tag filter applies to the canvas and the list alike.
+                    if (ready != null) FilterBar(tags, tagsVm)
+                    // Also reported in list mode, so a voice take there lands at the centre of the last canvas viewport.
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth().onSizeChanged { px ->
+                            with(density) { vm.setViewSize(ViewSize(px.width.toDp().value.toDouble(), px.height.toDp().value.toDouble())) }
+                        },
+                    ) {
+                        when (val s = state) {
+                            CanvasUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                            is CanvasUiState.Failed -> Column(
+                                Modifier.align(Alignment.Center).padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(s.message, color = Palette.Error)
+                                Button(onClick = vm::reload) { Text("Retry") }
+                            }
+                            is CanvasUiState.Ready -> when (s.mode) {
+                                CanvasMode.Canvas -> SnippetCanvas(
+                                    state = s,
+                                    hitTest = vm::hitTest,
+                                    onAction = onAction,
+                                    onViewSize = vm::setViewSize,
+                                )
+                                is CanvasMode.SnippetList -> SnippetList(
+                                    rows = s.listRows,
+                                    selected = s.selection.ids,
+                                    onTap = { id -> vm.onTap(id) },
+                                    onLongPress = vm::onListLongPress,
+                                    listState = listState,
+                                    filtered = s.filter != TagFilter.Everything,
+                                )
+                            }
                         }
                     }
                 }
                 if (sidePane && rhyme.open) {
                     VerticalDivider(color = Palette.Border)
-                    RhymePanel(rhyme, rhymeVm, onClose = rhymeVm::close, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
+                    RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
                 }
             }
         }
@@ -212,12 +226,13 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
                 containerColor = Palette.Sidebar,
             ) {
-                RhymePanel(rhyme, rhymeVm, onClose = rhymeVm::close, modifier = Modifier.fillMaxSize())
+                RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, modifier = Modifier.fillMaxSize())
             }
         }
     }
 
     VoiceCaptureHost(voice)
+    TagPickerSheet(tags, tagsVm)
 
     if (confirmDelete) {
         val count = selection.ids.size

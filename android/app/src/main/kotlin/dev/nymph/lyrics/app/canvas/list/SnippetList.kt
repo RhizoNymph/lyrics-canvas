@@ -59,10 +59,12 @@ fun SnippetList(
     onLongPress: (SnippetId) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    /** A tag filter is hiding snippets (changes the empty-list text). */
+    filtered: Boolean = false,
 ) {
     if (rows.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No snippets yet", color = Palette.FallbackText)
+            Text(if (filtered) "No snippets match the filter" else "No snippets yet", color = Palette.FallbackText)
         }
         return
     }
