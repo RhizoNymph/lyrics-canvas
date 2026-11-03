@@ -1,0 +1,818 @@
+{
+ "version": 1,
+ "notes": "Shared conformance vectors for the tag expression language (docs/features/tag_expressions.md). Positions are Unicode code point offsets into the input. Any 'input' or 'normalized' value is either a string or an array of segments concatenated in order, where a segment is a string or {\"repeat\": s, \"times\": n}.",
+ "parse_ok": [
+  {
+   "input": "",
+   "normalized": ""
+  },
+  {
+   "input": "   ",
+   "normalized": ""
+  },
+  {
+   "input": "love",
+   "normalized": "love"
+  },
+  {
+   "input": "Love",
+   "normalized": "Love"
+  },
+  {
+   "input": "love & night",
+   "normalized": "love & night"
+  },
+  {
+   "input": "love night",
+   "normalized": "love & night"
+  },
+  {
+   "input": "love and night",
+   "normalized": "love & night"
+  },
+  {
+   "input": "love AND night",
+   "normalized": "love & night"
+  },
+  {
+   "input": "love|night",
+   "normalized": "love | night"
+  },
+  {
+   "input": "love or night",
+   "normalized": "love | night"
+  },
+  {
+   "input": "!love",
+   "normalized": "!love"
+  },
+  {
+   "input": "! love",
+   "normalized": "!love"
+  },
+  {
+   "input": "not love",
+   "normalized": "!love"
+  },
+  {
+   "input": "NOT love",
+   "normalized": "!love"
+  },
+  {
+   "input": "love & night | dark",
+   "normalized": "love & night | dark"
+  },
+  {
+   "input": "love & (night | dark)",
+   "normalized": "love & (night | dark)"
+  },
+  {
+   "input": "(love & night) | dark",
+   "normalized": "love & night | dark"
+  },
+  {
+   "input": "love | night & dark",
+   "normalized": "love | night & dark"
+  },
+  {
+   "input": "(love | night) & dark",
+   "normalized": "(love | night) & dark"
+  },
+  {
+   "input": "a & (b & c)",
+   "normalized": "a & b & c"
+  },
+  {
+   "input": "a | (b | c)",
+   "normalized": "a | b | c"
+  },
+  {
+   "input": "(a & b) & c",
+   "normalized": "a & b & c"
+  },
+  {
+   "input": "((love))",
+   "normalized": "love"
+  },
+  {
+   "input": "!(love | night)",
+   "normalized": "!(love | night)"
+  },
+  {
+   "input": "!(love & night)",
+   "normalized": "!(love & night)"
+  },
+  {
+   "input": "!!love",
+   "normalized": "!!love"
+  },
+  {
+   "input": "!(!love)",
+   "normalized": "!!love"
+  },
+  {
+   "input": "!(a) ",
+   "normalized": "!a"
+  },
+  {
+   "input": "a !b",
+   "normalized": "a & !b"
+  },
+  {
+   "input": "(a | b) (c | d)",
+   "normalized": "(a | b) & (c | d)"
+  },
+  {
+   "input": "a or b and not c",
+   "normalized": "a | b & !c"
+  },
+  {
+   "input": "a&b|c",
+   "normalized": "a & b | c"
+  },
+  {
+   "input": "  love   &   night  ",
+   "normalized": "love & night"
+  },
+  {
+   "input": "andy & oreo & nothing",
+   "normalized": "andy & oreo & nothing"
+  },
+  {
+   "input": "type:verse",
+   "normalized": "type:verse"
+  },
+  {
+   "input": "TYPE:Chorus",
+   "normalized": "type:chorus"
+  },
+  {
+   "input": "type:hook | type:bridge",
+   "normalized": "type:hook | type:bridge"
+  },
+  {
+   "input": "type:freestyle",
+   "normalized": "type:freestyle"
+  },
+  {
+   "input": "type:verse & !draft",
+   "normalized": "type:verse & !draft"
+  },
+  {
+   "input": "a & !(b | type:chorus)",
+   "normalized": "a & !(b | type:chorus)"
+  },
+  {
+   "input": "typed",
+   "normalized": "typed"
+  },
+  {
+   "input": "mood:dark",
+   "normalized": "mood:dark"
+  },
+  {
+   "input": "rock-n-roll",
+   "normalized": "rock-n-roll"
+  },
+  {
+   "input": "café",
+   "normalized": "café"
+  },
+  {
+   "input": "🔥",
+   "normalized": "🔥"
+  },
+  {
+   "input": "🔥 & love",
+   "normalized": "🔥 & love"
+  },
+  {
+   "input": "\"late night\"",
+   "normalized": "\"late night\""
+  },
+  {
+   "input": "\"love\"",
+   "normalized": "love"
+  },
+  {
+   "input": "\"and\"",
+   "normalized": "\"and\""
+  },
+  {
+   "input": "\"OR\"",
+   "normalized": "\"OR\""
+  },
+  {
+   "input": "\"Not\"",
+   "normalized": "\"Not\""
+  },
+  {
+   "input": "\"type:verse\"",
+   "normalized": "\"type:verse\""
+  },
+  {
+   "input": "\"Type:x\"",
+   "normalized": "\"Type:x\""
+  },
+  {
+   "input": "\"say \\\"hi\\\"\"",
+   "normalized": "\"say \\\"hi\\\"\""
+  },
+  {
+   "input": "\"back\\\\slash\"",
+   "normalized": "\"back\\\\slash\""
+  },
+  {
+   "input": "\"wow!\"",
+   "normalized": "\"wow!\""
+  },
+  {
+   "input": "\"a(b)\"",
+   "normalized": "\"a(b)\""
+  },
+  {
+   "input": "\"x&y|z\"",
+   "normalized": "\"x&y|z\""
+  },
+  {
+   "input": "\"late night\"&dark",
+   "normalized": "\"late night\" & dark"
+  },
+  {
+   "input": [
+    {
+     "repeat": "a",
+     "times": 500
+    }
+   ],
+   "normalized": [
+    {
+     "repeat": "a",
+     "times": 500
+    }
+   ]
+  },
+  {
+   "input": [
+    {
+     "repeat": "(",
+     "times": 32
+    },
+    "a",
+    {
+     "repeat": ")",
+     "times": 32
+    }
+   ],
+   "normalized": "a"
+  },
+  {
+   "input": [
+    {
+     "repeat": "!",
+     "times": 40
+    },
+    "a"
+   ],
+   "normalized": [
+    {
+     "repeat": "!",
+     "times": 40
+    },
+    "a"
+   ]
+  }
+ ],
+ "parse_error": [
+  {
+   "input": "&",
+   "code": "unexpected_token",
+   "position": 0
+  },
+  {
+   "input": "& love",
+   "code": "unexpected_token",
+   "position": 0
+  },
+  {
+   "input": "|",
+   "code": "unexpected_token",
+   "position": 0
+  },
+  {
+   "input": "and",
+   "code": "unexpected_token",
+   "position": 0
+  },
+  {
+   "input": "love &",
+   "code": "unexpected_end",
+   "position": 6
+  },
+  {
+   "input": "love & ",
+   "code": "unexpected_end",
+   "position": 7
+  },
+  {
+   "input": "love (",
+   "code": "unexpected_end",
+   "position": 6
+  },
+  {
+   "input": "(",
+   "code": "unexpected_end",
+   "position": 1
+  },
+  {
+   "input": "!",
+   "code": "unexpected_end",
+   "position": 1
+  },
+  {
+   "input": "not",
+   "code": "unexpected_end",
+   "position": 3
+  },
+  {
+   "input": "love not",
+   "code": "unexpected_end",
+   "position": 8
+  },
+  {
+   "input": "love )",
+   "code": "unexpected_token",
+   "position": 5
+  },
+  {
+   "input": ")",
+   "code": "unexpected_token",
+   "position": 0
+  },
+  {
+   "input": "!)",
+   "code": "unexpected_token",
+   "position": 1
+  },
+  {
+   "input": "love | | night",
+   "code": "unexpected_token",
+   "position": 7
+  },
+  {
+   "input": "a & & b",
+   "code": "unexpected_token",
+   "position": 4
+  },
+  {
+   "input": "love and or night",
+   "code": "unexpected_token",
+   "position": 9
+  },
+  {
+   "input": "(love",
+   "code": "unclosed_paren",
+   "position": 0
+  },
+  {
+   "input": "a (b",
+   "code": "unclosed_paren",
+   "position": 2
+  },
+  {
+   "input": "a & (b | (c)",
+   "code": "unclosed_paren",
+   "position": 4
+  },
+  {
+   "input": "()",
+   "code": "empty_group",
+   "position": 0
+  },
+  {
+   "input": "love & ()",
+   "code": "empty_group",
+   "position": 7
+  },
+  {
+   "input": "type:",
+   "code": "unknown_type",
+   "position": 0
+  },
+  {
+   "input": "type:outro",
+   "code": "unknown_type",
+   "position": 0
+  },
+  {
+   "input": "love & type:solo",
+   "code": "unknown_type",
+   "position": 7
+  },
+  {
+   "input": "\"late night",
+   "code": "unterminated_string",
+   "position": 0
+  },
+  {
+   "input": "love & \"",
+   "code": "unterminated_string",
+   "position": 7
+  },
+  {
+   "input": "( \"abc",
+   "code": "unterminated_string",
+   "position": 2
+  },
+  {
+   "input": "\"\"",
+   "code": "empty_name",
+   "position": 0
+  },
+  {
+   "input": "\"   \"",
+   "code": "empty_name",
+   "position": 0
+  },
+  {
+   "input": "\"a\\b\"",
+   "code": "invalid_escape",
+   "position": 2
+  },
+  {
+   "input": "a \\ b",
+   "code": "unexpected_character",
+   "position": 2
+  },
+  {
+   "input": "🔥 &",
+   "code": "unexpected_end",
+   "position": 3
+  },
+  {
+   "input": "🔥 )",
+   "code": "unexpected_token",
+   "position": 2
+  },
+  {
+   "input": "🔥🔥 & \"x",
+   "code": "unterminated_string",
+   "position": 5
+  },
+  {
+   "input": [
+    {
+     "repeat": "a",
+     "times": 501
+    }
+   ],
+   "code": "too_long",
+   "position": 500
+  },
+  {
+   "input": [
+    {
+     "repeat": "(",
+     "times": 33
+    },
+    "a",
+    {
+     "repeat": ")",
+     "times": 33
+    }
+   ],
+   "code": "too_deep",
+   "position": 32
+  }
+ ],
+ "eval": [
+  {
+   "expression": "",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "love",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "Love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "LOVE",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "love",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "lovely"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "love & night",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "love & night",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "night",
+     "love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "love | night",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "night"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "love | night",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": false
+  },
+  {
+   "expression": "!draft",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "!draft",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "draft"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "type:verse",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "type:verse",
+   "snippet": {
+    "type": "chorus",
+    "tags": [
+     "verse"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "verse",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": false
+  },
+  {
+   "expression": "type:chorus & !draft",
+   "snippet": {
+    "type": "chorus",
+    "tags": [
+     "DRAFT"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "type:chorus & !draft",
+   "snippet": {
+    "type": "chorus",
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "\"late night\"",
+   "snippet": {
+    "type": "hook",
+    "tags": [
+     "Late Night"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "a | b & c",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "a"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "a | b & c",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "b"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "(a | b) & c",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "a"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "(a | b) & c",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "a",
+     "c"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "a b",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "a"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "!!a",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "a"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "!(a | b)",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "c"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "!(a | b)",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "b"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "ghost",
+   "snippet": {
+    "type": "verse",
+    "tags": []
+   },
+   "matches": false
+  },
+  {
+   "expression": "!ghost",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "café",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "CAFÉ"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "🔥",
+   "snippet": {
+    "type": "verse",
+    "tags": [
+     "🔥"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "type:bridge | type:hook",
+   "snippet": {
+    "type": "hook",
+    "tags": []
+   },
+   "matches": true
+  }
+ ],
+ "rename": [
+  {
+   "expression": "love & night",
+   "from": "love",
+   "to": "romance",
+   "result": "romance & night"
+  },
+  {
+   "expression": "Love | love",
+   "from": "LOVE",
+   "to": "heart",
+   "result": "heart | heart"
+  },
+  {
+   "expression": "love",
+   "from": "love",
+   "to": "late night",
+   "result": "\"late night\""
+  },
+  {
+   "expression": "!(love)",
+   "from": "love",
+   "to": "and",
+   "result": "!\"and\""
+  },
+  {
+   "expression": "type:verse & verse",
+   "from": "verse",
+   "to": "v",
+   "result": "type:verse & v"
+  },
+  {
+   "expression": "lovely",
+   "from": "love",
+   "to": "romance",
+   "result": "lovely"
+  },
+  {
+   "expression": "\"late night\" | dark",
+   "from": "Late Night",
+   "to": "midnight",
+   "result": "midnight | dark"
+  },
+  {
+   "expression": "",
+   "from": "love",
+   "to": "romance",
+   "result": ""
+  }
+ ]
+}
