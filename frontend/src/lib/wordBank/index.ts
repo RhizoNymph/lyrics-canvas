@@ -1,6 +1,6 @@
 export {
   MAX_WORD_LENGTH, MAX_WORDS_PER_ENTRY, MAX_BATCH_WORDS, normalizeWordText, checkWordText, isValidWordText,
-  describeWordProblem, splitAddInput, checkBatch,
+  describeWordProblem, splitAddInput, checkBatch, addInputProblem, needsDeleteConfirm, DELETE_CONFIRM_THRESHOLD,
 } from './text';
 export type { WordProblem, WordCheck, BatchCheck } from './text';
 export {

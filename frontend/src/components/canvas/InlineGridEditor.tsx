@@ -30,6 +30,9 @@ import { rowKeyAction } from './editorKeys';
 import { registerEditorBridge } from './editorBridge';
 import RecordButton from '@/components/voice/RecordButton';
 import RecordingsSection from '@/components/voice/RecordingsSection';
+import EditorBankMenu from '@/components/wordBank/EditorBankMenu';
+import { isAddSelectionShortcut, selectedFieldText } from '@/lib/wordBank';
+import { useWordBankStore } from '@/stores/wordBankStore';
 
 const SYLLABIFY_DEBOUNCE_MS = 300;
 
@@ -75,6 +78,9 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [snippetType, setSnippetType] = useState<SnippetType>(snippet?.snippet_type || 'freestyle');
   const [hoveredRow, setHoveredRow] = useState(-1);
+  /** The "Add to word bank" context menu over a text selection in the active row. */
+  const [bankMenu, setBankMenu] = useState<{ x: number; y: number; text: string } | null>(null);
+  const closeBankMenu = useCallback(() => setBankMenu(null), []);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
@@ -262,7 +268,21 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     return true;
   };
 
+  /** Ctrl/Cmd+Shift+B and the context menu: add the selected text of a row input to the word bank. */
+  const addSelectionToBank = (text: string) => {
+    if (text.trim() === '') return;
+    void useWordBankStore.getState().addFromText(text, 'editor');
+  };
+
   const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>, row: number) => {
+    if (isAddSelectionShortcut(e.nativeEvent)) {
+      const text = selectedFieldText(e.currentTarget.value, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
+      if (text.trim() !== '') {
+        e.preventDefault();
+        addSelectionToBank(text);
+      }
+      return;
+    }
     if (applyRowKey(e, row)) return;
     switch (e.key) {
       case 'Tab': {
@@ -491,6 +511,14 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
                     value={lineText}
                     onChange={(e) => updateLine(row, e.target.value)}
                     onKeyDown={(e) => onInputKeyDown(e, row)}
+                    onContextMenu={(e) => {
+                      const input = e.currentTarget;
+                      const text = selectedFieldText(input.value, input.selectionStart, input.selectionEnd);
+                      // No selection: keep the browser's own menu.
+                      if (text.trim() === '') return;
+                      e.preventDefault();
+                      setBankMenu({ x: e.clientX, y: e.clientY, text });
+                    }}
                     placeholder="Type lyrics..."
                     style={{
                       width: '100%',
@@ -548,6 +576,9 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
       </div>
 
       <RecordingsSection snippetId={snippetId} scale={s} />
+      {bankMenu !== null && (
+        <EditorBankMenu x={bankMenu.x} y={bankMenu.y} onAdd={() => addSelectionToBank(bankMenu.text)} onClose={closeBankMenu} />
+      )}
     </div>
   );
 }

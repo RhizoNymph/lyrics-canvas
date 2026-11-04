@@ -56,7 +56,10 @@ export interface WordBankState {
   setAddTagIds: (ids: readonly string[]) => void;
   /** Validate locally (first bad index wins), then POST the batch with `tagIds`. */
   addWords: (raw: readonly string[], tagIds: readonly string[]) => Promise<WordBankResult<BankWordCreateResponse>>;
-  /** Split `text` on commas and newlines, add it with the given tags and post a notice either way. */
+  /**
+   * Split `text` on commas and newlines and add it with the given tags. Posts the result as a notice
+   * (failures too, except for the add box, which shows them inline).
+   */
   addFromText: (text: string, source: AddSource, tagIds?: readonly string[]) => Promise<WordBankResult<BankWordCreateResponse>>;
   renameWord: (id: string, text: string) => Promise<WordBankResult<BankWord>>;
   deleteWords: (ids: readonly string[]) => Promise<WordBankResult<void>>;
@@ -189,10 +192,8 @@ export const useWordBankStore = create<WordBankState>((set, get) => {
       const raw = splitAddInput(text);
       const result = await get().addWords(raw, tagIds);
       if (result.ok) notify('info', addSummary(result.value));
-      else {
-        const prefix = source === 'box' ? '' : 'Not added to the word bank: ';
-        notify('error', `${prefix}${describeWordBankError(result.error, raw)}`);
-      }
+      // The add box shows its failures inline; the other sources only have the toast.
+      else if (source !== 'box') notify('error', `Not added to the word bank: ${describeWordBankError(result.error, raw)}`);
       return result;
     },
 

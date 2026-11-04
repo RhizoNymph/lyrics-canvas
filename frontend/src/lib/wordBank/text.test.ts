@@ -177,3 +177,29 @@ describe('checkBatch', () => {
     expect(checkBatch(Array.from({ length: 201 }, () => 'a'))).toEqual({ ok: false, reason: 'too_many' });
   });
 });
+
+describe('addInputProblem', () => {
+  it('is null for valid or empty input', async () => {
+    const { addInputProblem } = await import('./text');
+    expect(addInputProblem('')).toBeNull();
+    expect(addInputProblem('night, neon lights')).toBeNull();
+  });
+
+  it('names the first bad entry', async () => {
+    const { addInputProblem } = await import('./text');
+    expect(addInputProblem('ok, b4d, w0rse')).toEqual({ index: 1, entry: 'b4d', message: expect.stringContaining('"b4d"') });
+  });
+
+  it('flags more than 200 entries', async () => {
+    const { addInputProblem } = await import('./text');
+    expect(addInputProblem(Array.from({ length: 201 }, () => 'a').join(','))?.message).toContain('200');
+  });
+});
+
+describe('needsDeleteConfirm', () => {
+  it('confirms above 5', async () => {
+    const { needsDeleteConfirm } = await import('./text');
+    expect(needsDeleteConfirm(5)).toBe(false);
+    expect(needsDeleteConfirm(6)).toBe(true);
+  });
+});

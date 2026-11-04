@@ -117,4 +117,12 @@ describe('resolveRhymeAnchor', () => {
     expect(resolveRhymeAnchor('  ', new Set(['a', 'b']))).toBeNull();
     expect(resolveRhymeAnchor('', new Set())).toBeNull();
   });
+
+  it('keeps a pinned word anchor while it stays selected', async () => {
+    const { resolveRhymeAnchor } = await import('./queries');
+    expect(resolveRhymeAnchor('', new Set(['a', 'b', 'c']), 'a')).toEqual({ kind: 'word', wordId: 'a' });
+    expect(resolveRhymeAnchor('', new Set(['b', 'c']), 'a')).toBeNull();
+    expect(resolveRhymeAnchor('', new Set(['b']), 'a')).toEqual({ kind: 'word', wordId: 'b' });
+    expect(resolveRhymeAnchor('moon', new Set(['a', 'b']), 'a')).toEqual({ kind: 'text', text: 'moon' });
+  });
 });

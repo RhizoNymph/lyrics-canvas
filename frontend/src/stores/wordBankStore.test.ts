@@ -187,8 +187,14 @@ describe('addFromText', () => {
     expect(notice?.text).toContain('"b4d"');
   });
 
+  it('leaves add box failures to the box (no notice)', async () => {
+    const r = await useWordBankStore.getState().addFromText('b4d', 'box');
+    expect(r.ok).toBe(false);
+    expect(useWordBankStore.getState().notice).toBeNull();
+  });
+
   it('dismisses only the current notice', async () => {
-    await useWordBankStore.getState().addFromText('', 'box');
+    await useWordBankStore.getState().addFromText('', 'editor');
     const id = useWordBankStore.getState().notice!.id;
     useWordBankStore.getState().dismissNotice(id + 1);
     expect(useWordBankStore.getState().notice).not.toBeNull();

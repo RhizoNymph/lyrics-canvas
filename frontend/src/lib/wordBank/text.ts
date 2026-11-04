@@ -101,3 +101,21 @@ export function checkBatch(raw: readonly string[]): BatchCheck {
   }
   return { ok: true, words };
 }
+
+/** The add box's inline message: the first entry that would be rejected, or null when all are fine. */
+export function addInputProblem(raw: string): { readonly index: number; readonly entry: string; readonly message: string } | null {
+  const entries = splitAddInput(raw);
+  if (entries.length > MAX_BATCH_WORDS) return { index: MAX_BATCH_WORDS, entry: entries[MAX_BATCH_WORDS], message: `At most ${MAX_BATCH_WORDS} words at once` };
+  for (let index = 0; index < entries.length; index += 1) {
+    const check = checkWordText(entries[index]);
+    if (!check.ok) return { index, entry: entries[index], message: `"${entries[index]}": ${describeWordProblem(check.problem)}` };
+  }
+  return null;
+}
+
+/** More than this many selected words asks before deleting. */
+export const DELETE_CONFIRM_THRESHOLD = 5;
+
+export function needsDeleteConfirm(count: number): boolean {
+  return count > DELETE_CONFIRM_THRESHOLD;
+}

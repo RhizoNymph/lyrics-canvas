@@ -7,6 +7,8 @@ import ListView from '@/components/list/ListView';
 import Toolbar from '@/components/toolbar/Toolbar';
 import TagExpressionBar from '@/components/toolbar/TagExpressionBar';
 import RhymeSidebar from '@/components/sidebar/RhymeSidebar';
+import WordBankPanel from '@/components/wordBank/WordBankPanel';
+import WordBankToast from '@/components/wordBank/WordBankToast';
 import SimilarityPanel from '@/components/sidebar/SimilarityPanel';
 import SearchModal from '@/components/modals/SearchModal';
 import ExportDialog from '@/components/modals/ExportDialog';
@@ -15,6 +17,7 @@ import { useVoiceStore } from '@/stores/voiceStore';
 import { useTagStore } from '@/stores/tagStore';
 import { useTagFilterStore } from '@/stores/tagFilterStore';
 import { isRecordShortcut } from '@/lib/voice/keys';
+import { isWordBankShortcut } from '@/lib/wordBank/keys';
 import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 
 export default function CanvasPage() {
@@ -54,6 +57,10 @@ export default function CanvasPage() {
         // Alt+Shift+R: record by voice (appends to the open editor, else a new snippet). Works while typing.
         e.preventDefault();
         useVoiceStore.getState().openRecorder();
+      } else if (isWordBankShortcut(e)) {
+        // Ctrl/Cmd+Shift+W (or Alt+Shift+W, which browsers do not reserve): toggle the word bank. Works while typing.
+        e.preventDefault();
+        useUIStore.getState().toggleWordBank();
       } else if (ctrl && e.shiftKey && key === 'l') {
         // Toggle canvas / list view
         if (typingOrEditing(e)) return;
@@ -99,10 +106,12 @@ export default function CanvasPage() {
           <SimilarityPanel />
         </div>
         {rightPanel === 'rhymes' && <RhymeSidebar />}
+        {rightPanel === 'words' && <WordBankPanel />}
       </div>
       <SearchModal />
       <ExportDialog />
       <VoiceCaptureModal />
+      <WordBankToast />
     </div>
   );
 }
