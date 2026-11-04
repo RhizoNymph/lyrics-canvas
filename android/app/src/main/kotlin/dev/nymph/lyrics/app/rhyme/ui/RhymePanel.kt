@@ -31,6 +31,9 @@ import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.rhyme.RhymeError
 import dev.nymph.lyrics.logic.rhyme.RhymeOperation
+import dev.nymph.lyrics.app.wordbank.userMessage
+import dev.nymph.lyrics.logic.wordbank.WordTextCheck
+import dev.nymph.lyrics.logic.wordbank.validateWordText
 
 /** The status line text: searching, empty, or "Showing a–b of total". */
 fun statusText(state: RhymeUiState): String = when {
@@ -49,7 +52,15 @@ fun errorText(error: RhymeError): String =
  * [tags] supplies the tag names, presets and canvas filter for "Only my lines matching".
  */
 @Composable
-fun RhymePanel(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun RhymePanel(
+    state: RhymeUiState,
+    vm: RhymeViewModel,
+    tags: TagsUiState<*>,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** "+ bank" on a candidate: add its text to the word bank. */
+    onAddToBank: ((String) -> Unit)? = null,
+) {
     LazyColumn(modifier.background(Palette.Sidebar)) {
         item(key = "header") {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -94,6 +105,8 @@ fun RhymePanel(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState, onClo
                     onChain = { vm.setTypedText(candidate.text) },
                     onMaterialize = { vm.materialize(candidate.id) },
                     onDismiss = { vm.dismiss(candidate.id) },
+                    onAddToBank = onAddToBank?.let { add -> { add(candidate.text) } },
+                    bankProblem = (validateWordText(candidate.text) as? WordTextCheck.Invalid)?.problem?.userMessage(),
                     modifier = Modifier.background(Palette.Sidebar),
                 )
             }

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.contextmenu.builder.item
+import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -30,6 +32,8 @@ import dev.nymph.lyrics.logic.editor.CaretRequest
 
 private fun LineFieldState.toValue(): TextFieldValue = TextFieldValue(raw, TextRange(selectionStart, selectionEnd))
 
+private const val ADD_TO_WORD_BANK_KEY = "add-to-word-bank"
+
 private fun TextFieldValue.toField(): LineFieldState = LineFieldState(text, selection.min, selection.max)
 
 /**
@@ -52,6 +56,7 @@ internal fun ActiveLineField(
     modifier: Modifier = Modifier,
 ) {
     val focus = remember { FocusRequester() }
+    val addToWordBank = LocalAddToWordBank.current
     var value by remember(caret) { mutableStateOf(LineFieldState.of(text, caret?.offset ?: text.length).toValue()) }
     LaunchedEffect(text, arranged) {
         val shown = value.toField().text
@@ -83,7 +88,22 @@ internal fun ActiveLineField(
             }),
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(focus),
+                .focusRequester(focus)
+                .then(
+                    if (addToWordBank == null) {
+                        Modifier
+                    } else {
+                        // The selection toolbar's "Add to word bank" (only with a non-blank selection).
+                        Modifier.appendTextContextMenuComponents {
+                            val selected = selectedText(value.text, value.selection) ?: return@appendTextContextMenuComponents
+                            separator()
+                            item(key = ADD_TO_WORD_BANK_KEY, label = "Add to word bank") {
+                                addToWordBank(selected)
+                                close()
+                            }
+                        }
+                    },
+                ),
         )
         if (value.toField().text.isEmpty()) {
             Text(
