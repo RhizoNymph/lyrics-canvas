@@ -4,19 +4,20 @@ import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetType
 
 /**
- * Whether a snippet of [type] carrying [tagNames] matches. Tag terms compare under
- * `lowercase(Locale.ROOT)`; unknown names match nothing; type terms compare exactly.
+ * Whether a subject of [type] carrying [tagNames] matches. Tag terms compare under
+ * `lowercase(Locale.ROOT)`; unknown names match nothing; type terms compare exactly. A null
+ * [type] is a typeless subject (a word bank word): every `type:` term is false for it.
  */
-fun TagFilter.matches(type: SnippetType, tagNames: Collection<String>): Boolean = when (this) {
+fun TagFilter.matches(type: SnippetType?, tagNames: Collection<String>): Boolean = when (this) {
     TagFilter.Everything -> true
     is TagFilter.Where -> expr.matches(type, tagNames.mapTo(HashSet()) { it.lowerRoot() })
 }
 
 fun TagFilter.matches(snippet: Snippet): Boolean = matches(snippet.snippetType, snippet.tags.map { it.name })
 
-private fun TagExpr.matches(type: SnippetType, lowerNames: Set<String>): Boolean = when (this) {
+private fun TagExpr.matches(type: SnippetType?, lowerNames: Set<String>): Boolean = when (this) {
     is TagExpr.Tag -> name.lowerRoot() in lowerNames
-    is TagExpr.Type -> value == type
+    is TagExpr.Type -> type != null && value == type
     is TagExpr.Not -> !child.matches(type, lowerNames)
     is TagExpr.And -> children.all { it.matches(type, lowerNames) }
     is TagExpr.Or -> children.any { it.matches(type, lowerNames) }
