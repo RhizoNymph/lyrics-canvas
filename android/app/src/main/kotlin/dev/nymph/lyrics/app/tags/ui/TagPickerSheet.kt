@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.tags.TagEditor
 import dev.nymph.lyrics.app.tags.TagsUiState
-import dev.nymph.lyrics.app.tags.TagsViewModel
+import dev.nymph.lyrics.app.tags.TagControlsViewModel
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.tags.TAG_COLORS
 import dev.nymph.lyrics.logic.tags.TagCheck
@@ -55,13 +55,14 @@ private fun TagCheck.toggleable(): ToggleableState = when (this) {
 }
 
 /**
- * The tag picker for the snippets in `state.picker` (shown while it is set): a searchable
- * checklist (mixed state across several snippets), "Create '<query>'", and per-tag edit / delete.
- * Toggles link or unlink at once. Hosted by the canvas screen and the editor.
+ * The tag picker for the items in `state.picker` (shown while it is set): a searchable
+ * checklist (mixed state across several items), "Create '<query>'", and per-tag edit / delete.
+ * Toggles link or unlink at once. Hosted by the canvas screen, the editor and the word bank;
+ * [pluralNoun] names several picked items ("snippets", "words").
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TagPickerSheet(state: TagsUiState, vm: TagsViewModel) {
+fun TagPickerSheet(state: TagsUiState<*>, vm: TagControlsViewModel<*>, pluralNoun: String = "snippets") {
     val picker = state.picker ?: return
     ModalBottomSheet(
         onDismissRequest = vm::closePicker,
@@ -69,8 +70,8 @@ fun TagPickerSheet(state: TagsUiState, vm: TagsViewModel) {
         containerColor = Palette.Sidebar,
     ) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val count = picker.snippetIds.size
-            Text(if (count == 1) "Tags" else "Tags for $count snippets", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            val count = picker.ids.size
+            Text(if (count == 1) "Tags" else "Tags for $count $pluralNoun", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             OutlinedTextField(
                 value = picker.query,
                 onValueChange = vm::setPickerQuery,
@@ -113,7 +114,7 @@ fun TagPickerSheet(state: TagsUiState, vm: TagsViewModel) {
 
 /** Rename and recolour a tag, or delete it (after a confirm). A taken name shows inline. */
 @Composable
-private fun TagEditorDialog(editor: TagEditor, vm: TagsViewModel) {
+private fun TagEditorDialog(editor: TagEditor, vm: TagControlsViewModel<*>) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = vm::cancelTagEditor,
@@ -141,7 +142,7 @@ private fun TagEditorDialog(editor: TagEditor, vm: TagsViewModel) {
                     }
                 }
                 editor.error?.let { Hint(it, Palette.Error) }
-                Hint("Renaming also updates your presets. Deleting removes the tag from every snippet on every canvas.")
+                Hint("Renaming also updates your presets. Deleting removes the tag from every snippet on every canvas and from every word bank word.")
             }
         },
         confirmButton = { TextButton(onClick = vm::saveTagEditor, enabled = !editor.busy) { Text("Save") } },
@@ -155,7 +156,7 @@ private fun TagEditorDialog(editor: TagEditor, vm: TagsViewModel) {
     if (confirmDelete) {
         ConfirmDialog(
             title = "Delete \"${editor.name}\"?",
-            text = "It is removed from every snippet on every canvas. Presets keep the name, which then matches nothing.",
+            text = "It is removed from every snippet on every canvas and from your word bank. Presets keep the name, which then matches nothing.",
             confirm = "Delete",
             onConfirm = { vm.deleteTag(editor.tagId) },
             onDismiss = { confirmDelete = false },

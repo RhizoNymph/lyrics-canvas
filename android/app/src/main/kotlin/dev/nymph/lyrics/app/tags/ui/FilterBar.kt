@@ -32,30 +32,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.tags.PresetEditor
 import dev.nymph.lyrics.app.tags.TagsUiState
-import dev.nymph.lyrics.app.tags.TagsViewModel
+import dev.nymph.lyrics.app.tags.TagControlsViewModel
 import dev.nymph.lyrics.app.tags.userMessage
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.model.TagPreset
 import dev.nymph.lyrics.model.TagPresetId
 
 /**
- * The canvas filter bar (canvas and list mode): the expression field, clear, and the preset
- * menu (apply, save as, manage). An invalid text is shown as such while the last valid filter
- * keeps applying.
+ * A tag filter bar (the canvas and list mode, the word bank): the expression field, clear, and
+ * the preset menu (apply, save as, manage). An invalid text is shown as such while the last valid
+ * filter keeps applying. [everythingNote] says what an invalid text with nothing applied shows.
  */
 @Composable
-fun FilterBar(state: TagsUiState, vm: TagsViewModel, modifier: Modifier = Modifier) {
+fun FilterBar(
+    state: TagsUiState<*>,
+    vm: TagControlsViewModel<*>,
+    modifier: Modifier = Modifier,
+    everythingNote: String = "showing every snippet",
+) {
     // A Column: the bar, then (on a failed load) the retry line.
-    Column(modifier) { FilterBarContent(state, vm) }
+    Column(modifier) { FilterBarContent(state, vm, everythingNote) }
 }
 
 @Composable
-private fun FilterBarContent(state: TagsUiState, vm: TagsViewModel) {
+private fun FilterBarContent(state: TagsUiState<*>, vm: TagControlsViewModel<*>, everythingNote: String) {
     var managing by rememberSaveable { mutableStateOf(false) }
     val bar = state.filterBar
     val note = when {
         !bar.invalid -> null
-        bar.appliedText.isBlank() -> "showing every snippet"
+        bar.appliedText.isBlank() -> everythingNote
         else -> "still showing: ${bar.appliedText.trim()}"
     }
     Row(
@@ -98,7 +103,7 @@ private fun FilterBarContent(state: TagsUiState, vm: TagsViewModel) {
 
 /** The name prompt for "Save as preset" and rename; a taken name shows inline. */
 @Composable
-fun PresetNameDialog(editor: PresetEditor, vm: TagsViewModel) {
+fun PresetNameDialog(editor: PresetEditor, vm: TagControlsViewModel<*>) {
     val saveAs = editor.target is PresetEditor.Target.SaveAs
     AlertDialog(
         onDismissRequest = vm::cancelPresetEditor,
@@ -123,7 +128,7 @@ fun PresetNameDialog(editor: PresetEditor, vm: TagsViewModel) {
 
 /** Rename, overwrite (with the current filter) or delete each preset. */
 @Composable
-private fun ManagePresetsDialog(presets: List<TagPreset>, vm: TagsViewModel, onDismiss: () -> Unit) {
+private fun ManagePresetsDialog(presets: List<TagPreset>, vm: TagControlsViewModel<*>, onDismiss: () -> Unit) {
     var confirmDelete by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmOverwrite by rememberSaveable { mutableStateOf<String?>(null) }
     AlertDialog(
