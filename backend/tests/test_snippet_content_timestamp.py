@@ -223,7 +223,7 @@ async def test_tag_assignment_does_not_touch_the_snippet():
             return FakeResult(s if len(self.statements) == 1 else tag)
 
     db = TagSession(s)
-    assert await tag_service.add_tag_to_snippet(db, str(s.id), str(tag.id), str(OWNER)) is True
+    await tag_service.add_tag_to_snippet(db, s.id, tag.id, OWNER)
     assert s.content_updated_at == EARLIER
     assert s.updated_at == EARLIER
     # the only write is the association insert

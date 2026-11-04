@@ -56,9 +56,7 @@ The primary store managing all canvas data and interactions.
 | `canvasViewSize` | `ViewSize \| null` | null | Canvas element size, set by `CanvasViewport` on mount/resize; kept in list view (voice capture's "last canvas viewport") |
 | `snippets` | `Map<string, Snippet>` | empty | O(1) lookup |
 | `groups` | `Map<string, Group>` | empty | O(1) lookup |
-| `tags` | `Map<string, Tag>` | empty | O(1) lookup |
 | `selectedSnippetIds` | `Set<string>` | empty | |
-| `activeTagFilters` | `Set<string>` | empty | |
 | `snippetScales` | `Map<string, number>` | empty | Per-snippet zoom (0.3-4x) |
 | `past` | `Array<{snippets, groups}>` | [] | Undo stack (50 max) |
 | `future` | `Array<{snippets, groups}>` | [] | Redo stack |
@@ -103,16 +101,29 @@ The primary store managing all canvas data and interactions.
 | `deleteGroup(id)` | `DELETE /api/groups/{id}` | |
 | `moveGroup(id, dx, dy)` | None | Moves group + all contained snippets locally |
 
-### Tag Operations
+### Embedded Tags
+
+Tags are user-wide and live in `tagStore`; the filter lives in `tagFilterStore` (both below).
+`canvasStore` only keeps the tags embedded in snippets in step:
 
 | Action | API Call | Notes |
 |--------|---------|-------|
-| `createTag(name, color)` | `POST /api/canvases/{id}/tags` | Returns new tag ID (`string \| null`) |
-| `updateTag(id, data)` | `PUT /api/tags/{id}` | Updates tag in `tags` Map and in all snippets referencing it |
-| `deleteTag(id)` | `DELETE /api/tags/{id}` | |
-| `toggleTagFilter(id)` | None | Toggle in activeTagFilters set |
-| `addTagToSnippet(sId, tId)` | `POST /api/snippets/{sId}/tags` | Reloads entire canvas |
-| `removeTagFromSnippet(sId, tId)` | `DELETE /api/snippets/{sId}/tags/{tId}` | Reloads entire canvas |
+| `updateEmbeddedTags(update)` | None | Applies `update(snippets)` to the live map and to every `past`/`future` snapshot; no undo entry. Called by `tagStore` after link, unlink, rename, recolor and delete |
+
+### tagStore (`src/stores/tagStore.ts`)
+
+User-wide tags and presets, sorted by lower(name). `load()` fetches `GET /api/tags` and
+`GET /api/tag-presets` in parallel (`loadState`: idle / loading / ready / failed). `createTag`,
+`updateTag` (a rename also refetches presets and renames the tag in the canvas and rhyme filters),
+`deleteTag`, `applyToggle(plan)` (link/unlink on many snippets in parallel, keeping partial successes),
+`createPreset`, `updatePreset`, `deletePreset`. All return `TagResult` with a typed `TagApiError`; none
+throw. See [web_tag_expressions.md](../features/web_tag_expressions.md).
+
+### tagFilterStore (`src/stores/tagFilterStore.ts`)
+
+`{ canvasId, filter: FilterState }`; `open(canvasId)` restores the per-canvas filter from localStorage,
+`dispatch(action)` runs `filterReducer` and persists. Visibility reads `filter.applied` (last valid
+expression).
 
 ### Undo/Redo
 
@@ -231,7 +242,7 @@ Full description in [web_voice_capture.md](../features/web_voice_capture.md).
 - **Maps for collections**: O(1) lookups instead of array scans
 - **Sets for selections/filters**: O(1) membership checks
 - **Optimistic updates**: `moveSnippet` is local-only; `commitPositions` batches to backend on mouseup
-- **Cascade reloads**: Tag operations reload entire canvas for consistency
+- **Local patches for tag links**: link/unlink/rename/delete patch the embedded tags in place (live and undo snapshots) instead of reloading the canvas
 - **Auto-open panels**: Setting a similarity target automatically opens the similarity panel
 - **Undo snapshots**: Deep copies of snippet + group Maps, 50-state limit
 - **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so the sidebar can render the failure; `canvasStore.mergeSelected` returns a `MergeResult` and mirrors a `MergeError` into `mergeError`

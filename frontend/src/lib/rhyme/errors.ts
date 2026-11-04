@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { RhymeError } from '@/types/rhyme';
 import type { RhymeOperation } from '@/types/rhyme';
+import { parseServerDetail } from '@/lib/tags/serverDetail';
 
 function detailFromBody(data: unknown): string | null {
   if (typeof data !== 'object' || data === null) return null;
@@ -23,7 +24,17 @@ export function toRhymeError(err: unknown, operation: RhymeOperation): RhymeErro
     if (status === null) {
       return new RhymeError('network', operation, err.message || 'Network error', null);
     }
-    const detail = detailFromBody(err.response?.data) ?? err.message;
+    const structured = parseServerDetail(err.response?.data);
+    if (structured.code === 'invalid_tag_expression') {
+      return new RhymeError(
+        'invalid_tag_filter',
+        operation,
+        structured.message ?? 'Invalid tag filter',
+        status,
+        structured.expressionError,
+      );
+    }
+    const detail = detailFromBody(err.response?.data) ?? structured.message ?? err.message;
     if (status === 404) return new RhymeError('not_found', operation, detail, status);
     if (status === 422 || status === 400) return new RhymeError('invalid_request', operation, detail, status);
     return new RhymeError('server', operation, detail, status);

@@ -67,7 +67,8 @@ FIELDS = {"raw_text": "a\nb", "grid_data": {"lines": []}, "position_x": 1.0, "po
 
 async def test_creates_links_tags_deletes_and_commits_once():
     db = FakeSession()
-    tags = [Tag(id=uuid.uuid4(), canvas_id=CANVAS, name="t1"), Tag(id=uuid.uuid4(), canvas_id=CANVAS, name="t2")]
+    owner = uuid.uuid4()
+    tags = [Tag(id=uuid.uuid4(), user_id=owner, name="t1"), Tag(id=uuid.uuid4(), user_id=owner, name="t2")]
     olds = originals()
     created = await snippet_service.replace_with_merged(db, CANVAS, FIELDS, tags, olds)
 

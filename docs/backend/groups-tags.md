@@ -1,6 +1,6 @@
 # Groups & Tags
 
-Group containers and tag labels for organizing snippets.
+Group containers, user-wide tag labels and saved tag-expression presets for organizing snippets.
 
 ## Group Service
 
@@ -45,53 +45,82 @@ Deleting a group sets `group_id = None` on all contained snippets (unassign). Do
 
 ---
 
-## Tag Service
+## Tags
 
-**File:** `app/services/tag_service.py`
+Tags are **user-wide**: one list per user, shared by every canvas of that user, names unique per user
+ignoring case. The canonical spec (expression language, presets, error codes, migration 005) is
+[docs/features/tag_expressions.md](../features/tag_expressions.md); this section summarizes the
+backend modules.
 
-### Operations
+### Tag Service
+
+**File:** `app/services/tag_service.py`. Every function is owner-scoped and raises the typed errors of
+`app/services/tag_errors.py` (`TagNotFoundError`, `SnippetNotFoundError`, `TagNameTakenError`,
+`PresetExpressionTooLongError`); the routes map them to `{"error", "message"}` details.
 
 ```python
-async def create_tag(db, canvas_id, owner_id, name, color="#6366f1") -> Tag | None
-async def update_tag(db, tag_id, owner_id, name=None, color=None) -> Tag | None
-async def delete_tag(db, tag_id, owner_id) -> bool
-async def add_tag_to_snippet(db, snippet_id, tag_id, owner_id) -> bool
-async def remove_tag_from_snippet(db, snippet_id, tag_id, owner_id) -> bool
+@dataclass(frozen=True) class TagSummary: id, name, color, snippet_count, created_at
+async def list_tags(db, owner_id) -> list[TagSummary]                       # sorted by lower(name), id
+async def create_tag(db, owner_id, name: TagName, color: TagColor) -> TagSummary
+async def update_tag(db, tag_id, owner_id, name: TagName | None, color: TagColor | None) -> TagSummary
+async def delete_tag(db, tag_id, owner_id) -> None
+async def add_tag_to_snippet(db, snippet_id, tag_id, owner_id) -> None       # both must be the user's; idempotent
+async def remove_tag_from_snippet(db, snippet_id, tag_id, owner_id) -> None  # both must be the user's; idempotent
 ```
 
-### Constraints
+- `update_tag` with a changed name rewrites every preset of the user through
+  `tag_expr.rename_tag` in the same transaction; a rewrite longer than 500 code points rolls the whole
+  update back (`PresetExpressionTooLongError`, 409).
+- Values are validated before the service by `app/services/tag_values.py`: `tag_name` (trimmed,
+  1-100 code points, no control characters), `tag_color` (`#rrggbb`, stored lowercase).
+- Name uniqueness: a lower-name lookup, plus the `uq_tags_user_lower_name` index (an
+  `IntegrityError` on commit is also `TagNameTakenError`).
 
-- Tag names are unique per canvas (`UniqueConstraint("canvas_id", "name")`)
-- Default color: `#6366f1` (indigo)
+### Tag Presets
+
+**File:** `app/services/tag_preset_service.py`: `list_presets`, `create_preset`, `update_preset`,
+`delete_preset` (owner-scoped; `PresetNotFoundError`, `PresetNameTakenError`). Expressions arrive
+normalized from `tag_values.preset_expression` (empty -> `EmptyPresetError`, unparsable ->
+`InvalidTagExpressionError` with the parse error attached).
 
 ### Tag-Snippet Association
 
-Managed via the `snippet_tags` junction table with CASCADE deletes:
-- Deleting a tag removes all associations
-- Deleting a snippet removes all associations
-- `add_tag_to_snippet`: Verifies snippet ownership via Canvas join, verifies tag exists, inserts association
-- `remove_tag_from_snippet`: Deletes association directly (note: does not verify ownership)
+`snippet_tags` junction table with CASCADE deletes on both FKs: deleting a tag or a snippet removes
+its links. Deleting a canvas no longer deletes tags (they belong to the user). Merging snippets
+unions their tag ids (`merge_service.union_tag_ids`); with user-wide tags a tag shared by the
+originals is one link on the merged snippet.
 
-## Tag Schemas
+### Tag Schemas
 
 **File:** `app/schemas/tag.py`
 
 | Schema | Fields |
 |--------|--------|
-| `TagCreate` | name, color (default: "#6366f1") |
+| `TagCreate` | name, color (default `"#6366f1"`) |
 | `TagUpdate` | name?, color? |
-| `TagResponse` | id, canvas_id, name, color |
+| `TagResponse` | id, name, color, snippet_count, created_at |
+| `SnippetTagResponse` | id, name, color (embedded in `SnippetResponse.tags`) |
+| `TagLinkResponse` | ok |
+| `TagPresetCreate` / `TagPresetUpdate` | name, expression / name?, expression? |
+| `TagPresetResponse` | id, name, expression (normalized), created_at, updated_at |
+| `TagErrorResponse` | `detail: {error, message, expression_error?: {code, position, message}}` |
 
-## Tag Routes
+### Tag Routes
 
-**File:** `app/api/tags.py`
+**Files:** `app/api/tags.py`, `app/api/tag_presets.py`, error mapping in `app/api/tag_errors.py`
 
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
-| POST | `/api/canvases/{id}/tags` | Bearer | Create tag (`TagResponse`) | 201/404 |
-| PUT | `/api/tags/{id}` | Bearer | Update tag (name/color) (`TagResponse`) | 200/404 |
-| DELETE | `/api/tags/{id}` | Bearer | Delete tag | 204/404 |
-| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Add tag to snippet (`TagLinkResponse` `{"ok": true}`) | 200/404 |
-| DELETE | `/api/snippets/{id}/tags/{tag_id}` | Bearer | Remove tag from snippet | 204 |
+| GET | `/api/tags` | Bearer | The user's tags (`TagResponse[]`) | 200 |
+| POST | `/api/tags` | Bearer | Create tag (`TagResponse`) | 201/409/422 |
+| PUT | `/api/tags/{id}` | Bearer | Rename/recolor (`TagResponse`); rename rewrites presets | 200/404/409/422 |
+| DELETE | `/api/tags/{id}` | Bearer | Delete tag and its links | 204/404 |
+| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Link (`TagLinkResponse` `{"ok": true}`) | 200/404 |
+| DELETE | `/api/snippets/{id}/tags/{tag_id}` | Bearer | Unlink | 204/404 |
+| GET | `/api/tag-presets` | Bearer | The user's presets (`TagPresetResponse[]`) | 200 |
+| POST | `/api/tag-presets` | Bearer | Create preset | 201/409/422 |
+| PUT | `/api/tag-presets/{id}` | Bearer | Update preset | 200/404/409/422 |
+| DELETE | `/api/tag-presets/{id}` | Bearer | Delete preset | 204/404 |
 
-Note: `add_tag_to_snippet` uses a query parameter for `tag_id` rather than a request body.
+`POST /api/canvases/{id}/tags` was removed, and so was the `tags` list on the canvas detail response.
+`add_tag` still takes `tag_id` as a query parameter.

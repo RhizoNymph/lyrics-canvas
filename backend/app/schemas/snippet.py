@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model
 
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
-from app.schemas.tag import TagResponse
+from app.schemas.tag import SnippetTagResponse
 
 
 class FaithfulModel(BaseModel):
@@ -97,7 +97,7 @@ class SnippetResponse(BaseModel):
     height: float
     z_index: int
     group_id: str | None = None
-    tags: list[TagResponse] = []
+    tags: list[SnippetTagResponse] = []
     phonetics: SnippetPhonetics | None = None
     derived_from: DerivedFromModel | None = None
     created_at: str

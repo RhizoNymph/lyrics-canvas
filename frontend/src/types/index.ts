@@ -22,11 +22,31 @@ export interface GridData {
 export type SnippetType = 'verse' | 'chorus' | 'bridge' | 'hook' | 'freestyle';
 export type GridMode = 'auto' | 'fixed';
 
+/** A user-wide tag (`GET /api/tags`); shared by every canvas of its owner. */
 export interface Tag {
   id: string;
-  canvas_id: string;
+  name: string;
+  /** `#rrggbb`. */
+  color: string;
+  /** Snippets (across all canvases) carrying this tag. */
+  snippet_count: number;
+  created_at: string;
+}
+
+/** A tag as embedded in a snippet response. */
+export interface SnippetTag {
+  id: string;
   name: string;
   color: string;
+}
+
+/** A saved filter expression (`GET /api/tag-presets`); `expression` is stored normalized and never empty. */
+export interface TagPreset {
+  id: string;
+  name: string;
+  expression: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Snippet {
@@ -43,7 +63,7 @@ export interface Snippet {
   height: number;
   z_index: number;
   group_id: string | null;
-  tags: Tag[];
+  tags: SnippetTag[];
   created_at: string;
   updated_at: string;
   /** ISO-8601; bumped by the server on content changes (text, type, grid) only, never on moves. */
@@ -74,7 +94,6 @@ export interface Canvas {
 export interface CanvasDetail extends Canvas {
   snippets: Snippet[];
   groups: Group[];
-  tags: Tag[];
 }
 
 // ---- Merge (POST /api/canvases/{id}/merge) ----

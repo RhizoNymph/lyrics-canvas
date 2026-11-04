@@ -4,9 +4,10 @@ import { parseManualSlot } from '@/lib/rhyme/slotFit';
 import { RHYME_K_VALUES } from '@/types/rhyme';
 import type { RhymeK } from '@/types/rhyme';
 import AnchorChips from './AnchorChips';
+import NotesTagFilter from './NotesTagFilter';
 import { inputStyle, labelStyle, mutedStyle, errorStyle, monoStyle } from './sidebarStyles';
 
-/** Search box, anchor chips, k / min score / slot / sources / include-rare. Changes re-query via useRhymeQuery. */
+/** Search box, anchor chips, k / min score / slot / sources / include-rare / notes tag filter. Changes re-query via useRhymeQuery. */
 export default function QueryControls() {
   const typedAnchor = useRhymeStore((s) => s.typedAnchor);
   const setTypedAnchor = useRhymeStore((s) => s.setTypedAnchor);
@@ -139,6 +140,8 @@ export default function QueryControls() {
           <input type="checkbox" checked={includeRare} onChange={(e) => setIncludeRare(e.target.checked)} /> rare words
         </label>
       </div>
+
+      <NotesTagFilter />
     </div>
   );
 }

@@ -5,13 +5,15 @@ import { useUIStore } from '@/stores/uiStore';
 import CanvasViewport from '@/components/canvas/CanvasViewport';
 import ListView from '@/components/list/ListView';
 import Toolbar from '@/components/toolbar/Toolbar';
-import TagFilterBar from '@/components/toolbar/TagFilterBar';
+import TagExpressionBar from '@/components/toolbar/TagExpressionBar';
 import RhymeSidebar from '@/components/sidebar/RhymeSidebar';
 import SimilarityPanel from '@/components/sidebar/SimilarityPanel';
 import SearchModal from '@/components/modals/SearchModal';
 import ExportDialog from '@/components/modals/ExportDialog';
 import VoiceCaptureModal from '@/components/voice/VoiceCaptureModal';
 import { useVoiceStore } from '@/stores/voiceStore';
+import { useTagStore } from '@/stores/tagStore';
+import { useTagFilterStore } from '@/stores/tagFilterStore';
 import { isRecordShortcut } from '@/lib/voice/keys';
 import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 
@@ -22,8 +24,14 @@ export default function CanvasPage() {
   const { setSearchModalOpen, rhymeSidebarOpen, viewMode, toggleViewMode } = useUIStore();
   useRhymeQuery();
 
+  // Tags and presets are user-wide: (re)load them whenever the page mounts.
+  useEffect(() => {
+    void useTagStore.getState().load();
+  }, []);
+
   useEffect(() => {
     if (id) {
+      useTagFilterStore.getState().open(id);
       loadCanvas(id).catch(() => navigate('/'));
     }
     // Leaving the canvas closes the recorder (its session releases the mic on unmount).
@@ -84,7 +92,7 @@ export default function CanvasPage() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Toolbar />
-      <TagFilterBar />
+      <TagExpressionBar />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {viewMode === 'list' ? <ListView /> : <CanvasViewport />}

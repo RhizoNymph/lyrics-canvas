@@ -47,6 +47,9 @@ User 1──N Canvas 1──N Snippet N──M Tag
                          SnippetEmbedding (1:1, Vector(384))
                                │
                          SnippetRecording (N:1, ON DELETE CASCADE)
+
+User 1──N Tag        (user-wide tags, ON DELETE CASCADE)
+User 1──N TagPreset  (saved tag expressions, ON DELETE CASCADE)
 ```
 
 ### Canvas
@@ -64,7 +67,7 @@ User 1──N Canvas 1──N Snippet N──M Tag
 | `created_at` | DateTime(tz) | now() | |
 | `updated_at` | DateTime(tz) | now() | Auto-updates |
 
-Relationships: `owner`, `snippets`, `groups`, `tags` (all cascade: all, delete-orphan)
+Relationships: `owner`, `snippets`, `groups` (all cascade: all, delete-orphan)
 
 ### Snippet
 
@@ -113,20 +116,34 @@ Relationships: `canvas`, `snippets` (1:N via group_id)
 
 ### Tag
 
-**File:** `app/models/tag.py`, **Table:** `tags`
+**File:** `app/models/tag.py`, **Table:** `tags`. User-wide since migration 005 (see
+[tag_expressions.md](../features/tag_expressions.md#2-data-model-migration-005)).
 
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
 | `id` | UUID | uuid4 | PK |
-| `canvas_id` | UUID | - | FK -> canvases.id |
-| `name` | String(100) | - | UNIQUE per canvas |
-| `color` | String(7) | #6366f1 | Hex color |
+| `user_id` | UUID | - | FK -> users.id, ON DELETE CASCADE |
+| `name` | String(100) | - | unique per user ignoring case |
+| `color` | String(7) | #6366f1 | `#rrggbb` |
+| `created_at` | DateTime(tz) | now() | |
 
-Constraint: `UniqueConstraint("canvas_id", "name")`
+Index: `uq_tags_user_lower_name` UNIQUE `(user_id, lower(name))`
 
 **Junction table:** `snippet_tags(snippet_id, tag_id)` with CASCADE deletes on both FKs.
 
-Relationships: `canvas`, `snippets` (N:M via snippet_tags)
+Relationships: `snippets` (N:M via snippet_tags)
+
+### TagPreset
+
+**File:** `app/models/tag_preset.py`, **Table:** `tag_presets`
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | UUID | uuid4 | PK |
+| `user_id` | UUID | - | FK -> users.id, ON DELETE CASCADE |
+| `name` | String(100) | - | unique per user ignoring case (`uq_tag_presets_user_lower_name`) |
+| `expression` | Text | - | normalized tag expression, non-empty, at most 500 code points |
+| `created_at` / `updated_at` | DateTime(tz) | now() | `updated_at` bumped on update |
 
 ### SnippetEmbedding
 
@@ -207,6 +224,17 @@ Creates the `recording_split_mode` enum type, the `snippet_recordings` table (FK
 `ON DELETE CASCADE`) and its `(snippet_id, created_at)` index. Downgrade drops the index, the table and
 the type. Startup `create_all` creates the table on a fresh dev database; an existing database needs
 `alembic upgrade head`.
+
+**File:** `alembic/versions/005_user_wide_tags.py`
+
+Makes tags user-wide: adds `tags.user_id` (backfilled from the canvas owner, then NOT NULL with a
+cascading FK) and `tags.created_at`, merges each user's tags whose names are equal ignoring case into
+the one with the smallest `id::text` (links repointed, duplicates dropped), drops `canvas_id` and
+`uq_tag_canvas_name`, and adds the unique `(user_id, lower(name))` index. Creates `tag_presets`.
+The downgrade drops the presets and splits tags back into one copy per canvas they are used on
+(unused ones go to the user's oldest canvas). An existing database needs `alembic upgrade head`
+before the backend runs this code (startup `create_all` would otherwise create `tag_presets` but
+not alter `tags`).
 
 ### Running Migrations
 

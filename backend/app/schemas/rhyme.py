@@ -87,6 +87,9 @@ class RhymeSuggestRequest(BaseModel):
     offset: int = Field(0, ge=0)
     weights: ScoreWeightsModel | None = None
     dialect: DialectMapModel | None = None
+    # A tag expression (docs/features/tag_expressions.md): when set and non-empty, the notes source
+    # only uses snippets whose type and tag names match. The dictionary source is never filtered.
+    tag_filter: str | None = None
 
 
 class RhymeSyllable(BaseModel):

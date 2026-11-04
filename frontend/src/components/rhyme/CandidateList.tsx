@@ -37,7 +37,9 @@ export default function CandidateList() {
 
       {error && (
         <div style={{ ...errorStyle, padding: '6px 12px' }}>
-          {error.operation === 'materialize' ? 'Materialize failed' : 'Query failed'} ({error.kind}): {error.message}
+          {error.kind === 'invalid_tag_filter'
+            ? `Not searched: ${error.message}`
+            : `${error.operation === 'materialize' ? 'Materialize failed' : 'Query failed'} (${error.kind}): ${error.message}`}
         </div>
       )}
 

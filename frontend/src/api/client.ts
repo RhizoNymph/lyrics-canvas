@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { apiHealthChannel } from '@/lib/health/channel';
 import { installHealthInterceptors } from '@/lib/health/interceptors';
-import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType } from '@/types';
+import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType, Tag, TagPreset } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 import { createVoiceApi } from './voice';
 
@@ -92,17 +92,39 @@ export const groupApi = {
   delete: (id: string) => api.delete(`/api/groups/${id}`),
 };
 
-// ---- Tags ----
+// ---- Tags (user-wide) ----
+export interface TagUpdateBody {
+  name?: string;
+  color?: string;
+}
+
 export const tagApi = {
-  create: (canvasId: string, name: string, color: string) =>
-    api.post(`/api/canvases/${canvasId}/tags`, { name, color }),
-  update: (id: string, data: { name?: string; color?: string }) =>
-    api.put(`/api/tags/${id}`, data),
-  delete: (id: string) => api.delete(`/api/tags/${id}`),
+  /** Every tag of the user, sorted by lower(name). */
+  list: () => api.get<Tag[]>('/api/tags'),
+  /** The server defaults the color to #6366f1 when omitted. */
+  create: (name: string, color?: string) =>
+    api.post<Tag>('/api/tags', color === undefined ? { name } : { name, color }),
+  /** A rename also rewrites the user's presets server-side. */
+  update: (id: string, data: TagUpdateBody) => api.put<Tag>(`/api/tags/${encodeURIComponent(id)}`, data),
+  delete: (id: string) => api.delete<void>(`/api/tags/${encodeURIComponent(id)}`),
   addToSnippet: (snippetId: string, tagId: string) =>
-    api.post(`/api/snippets/${snippetId}/tags?tag_id=${tagId}`),
+    api.post(`/api/snippets/${encodeURIComponent(snippetId)}/tags`, null, { params: { tag_id: tagId } }),
   removeFromSnippet: (snippetId: string, tagId: string) =>
-    api.delete(`/api/snippets/${snippetId}/tags/${tagId}`),
+    api.delete<void>(`/api/snippets/${encodeURIComponent(snippetId)}/tags/${encodeURIComponent(tagId)}`),
+};
+
+// ---- Tag presets (saved filter expressions, user-wide) ----
+export interface TagPresetUpdateBody {
+  name?: string;
+  expression?: string;
+}
+
+export const tagPresetApi = {
+  list: () => api.get<TagPreset[]>('/api/tag-presets'),
+  create: (name: string, expression: string) => api.post<TagPreset>('/api/tag-presets', { name, expression }),
+  update: (id: string, data: TagPresetUpdateBody) =>
+    api.put<TagPreset>(`/api/tag-presets/${encodeURIComponent(id)}`, data),
+  delete: (id: string) => api.delete<void>(`/api/tag-presets/${encodeURIComponent(id)}`),
 };
 
 // ---- NLP ----

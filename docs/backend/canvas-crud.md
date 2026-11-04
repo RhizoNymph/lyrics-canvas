@@ -24,7 +24,9 @@ async def fork_canvas(db, canvas_id, new_owner_id) -> Canvas | None
 `get_canvas` uses `selectinload` to prevent N+1 queries:
 - `Canvas.snippets` -> `Snippet.tags`
 - `Canvas.groups` -> `Group.snippets`
-- `Canvas.tags`
+
+Tags are user-wide and not part of the canvas detail; clients load `GET /api/tags`
+(see [tag_expressions.md](../features/tag_expressions.md)).
 
 ### Sharing
 
@@ -43,7 +45,7 @@ async def fork_canvas(db, canvas_id, new_owner_id) -> Canvas | None
 | `CanvasCreate` | title (default: "Untitled Canvas") |
 | `CanvasUpdate` | title?, is_public?, viewport_state? |
 | `CanvasResponse` | id, owner_id, title, is_public, share_token, viewport_state, timestamps |
-| `CanvasDetailResponse` | extends CanvasResponse + `snippets: list[SnippetResponse]`, `groups: list[GroupResponse]`, `tags: list[TagResponse]` |
+| `CanvasDetailResponse` | extends CanvasResponse + `snippets: list[SnippetResponse]`, `groups: list[GroupResponse]` (no `tags` list since tags became user-wide) |
 | `ShareResponse` | share_token |
 
 ## Canvas Routes
@@ -70,10 +72,10 @@ OpenAPI snapshot ([docs/api/openapi.json](../api/README.md)) is generated from t
 
 ```python
 _canvas_response(canvas) -> CanvasResponse
-_canvas_detail_response(canvas) -> CanvasDetailResponse   # snippets, groups, tags
-_snippet_response(s) -> SnippetResponse   # grid_data, phonetics, derived_from validated from JSONB; nested TagResponse list
+_canvas_detail_response(canvas) -> CanvasDetailResponse   # snippets, groups
+_snippet_response(s) -> SnippetResponse   # grid_data, phonetics, derived_from validated from JSONB; nested SnippetTagResponse list
 _group_response(g) -> GroupResponse       # includes snippet_ids
-_tag_response(t) -> TagResponse
+_snippet_tag_response(t) -> SnippetTagResponse   # {id, name, color}
 ```
 
 Wire shapes are the ones the old dict builders produced (same field names and nesting;
@@ -89,7 +91,7 @@ JSON with them):
 - Response models set `json_schema_serialization_defaults_required`, so every field they always emit is
   `required` in the OpenAPI output schema.
 - Only JSON key order may differ from before (object keys follow model field order; JSONB already
-  reordered stored keys, and nested snippet tags are now `id, canvas_id, name, color`).
+  reordered stored keys, and nested snippet tags are `id, name, color` since tags became user-wide).
 - `_compute_size` returns floats, so a just-created snippet's `width`/`height` read `284.0` like a
   reloaded one (previously `284` until reload).
 
@@ -110,7 +112,7 @@ Snippet creation, updates, and batch positioning are handled in the canvases rou
 | `SnippetUpdate` | All fields optional; `grid_data: GridDataModel | None` (a malformed grid is a 422) |
 | `BatchPositionUpdate` | `updates: [{id, position_x, position_y}]` |
 | `BatchPositionResult` | `updated: int` |
-| `SnippetResponse` | All model fields; `grid_data: GridDataModel | None`, `tags: list[TagResponse]`, `phonetics: SnippetPhonetics | None`, `derived_from: DerivedFromModel | None`, timestamps (`created_at`, `updated_at`, `content_updated_at`) as strings |
+| `SnippetResponse` | All model fields; `grid_data: GridDataModel | None`, `tags: list[SnippetTagResponse]` (`{id, name, color}`), `phonetics: SnippetPhonetics | None`, `derived_from: DerivedFromModel | None`, timestamps (`created_at`, `updated_at`, `content_updated_at`) as strings |
 | `MergeRequest` / `MergeResponse` | see [Merge](#merge) |
 
 ### Grid on Create

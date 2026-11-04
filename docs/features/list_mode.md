@@ -13,9 +13,10 @@ against the same contract; platform differences are noted per item.
   descending and then `id` ascending. Timestamps compare as instants, not strings (the backend sends
   `str(datetime)`, e.g. `2026-10-13 16:49:57.893996+00:00`). A missing or unparseable timestamp sorts
   as the oldest.
-- **Visibility**: the same tag-filter rule as the canvas. With no active tag filter every snippet
-  shows; otherwise a snippet shows when it carries at least one active tag. Android lists the snippets
-  its filter bar's tag expression matches (see [android_tag_expressions.md](./android_tag_expressions.md)).
+- **Visibility**: the same tag-filter rule as the canvas, on both clients: with no filter every snippet
+  shows, otherwise a snippet shows when the applied tag expression matches its type and tag names. Web
+  uses the canvas page's filter bar (see [web_tag_expressions.md](./web_tag_expressions.md)), Android its
+  filter bar above the canvas and list (see [android_tag_expressions.md](./android_tag_expressions.md)).
 - **Selection**: list and canvas share one selection, so switching views keeps it. Merge (vertical or
   horizontal) and delete act on that selection. Merge order is whatever the server merge defines
   (canvas position), not list order (see [merge_blocks.md](./merge_blocks.md)).
@@ -62,7 +63,8 @@ Toolbar "List" / Ctrl+Shift+L
   -> CanvasPage renders <ListView/> instead of <CanvasViewport/>
 
 ListView render
-  visibleSnippets(snippets, activeTagFilters)      lib/canvas/visibility (also used by CanvasViewport)
+  visibleSnippets(snippets, tagFilterStore.filter.applied)
+                                                   lib/canvas/visibility (also used by CanvasViewport)
   -> sortForList(...)                              lib/listMode/order: content_updated_at desc,
                                                    created_at desc, id asc
   -> useFrozenOrder(sortedIds, editingSnippetId !== null)
@@ -114,7 +116,7 @@ is keyed by snippet id in both views, so switching straight from one snippet to 
 
 | File | Role | Key exports |
 |------|------|-------------|
-| `frontend/src/lib/canvas/visibility.ts` | Tag-filter visibility used by both views | `isSnippetVisible`, `visibleSnippets` |
+| `frontend/src/lib/canvas/visibility.ts` | Tag-expression visibility used by both views (evaluates `tagFilterStore.filter.applied`) | `isSnippetVisible`, `visibleSnippets` |
 | `frontend/src/lib/listMode/order.ts` | Sort and freeze logic | `compareForList`, `sortForList`, `applyFrozenOrder` |
 | `frontend/src/lib/listMode/selection.ts` | Row click into a selection result | `listClick`, `ListClickModifiers`, `ListSelectionState`, `ListClickResult` |
 | `frontend/src/lib/listMode/viewMode.ts` | Mode type and guarded persistence | `ViewMode`, `VIEW_MODE_STORAGE_KEY`, `parseViewMode`, `browserStorage`, `loadViewMode`, `saveViewMode`, `ViewModeStorageError`, `SaveViewModeResult` |
