@@ -115,6 +115,7 @@ export default function WordBankPanel() {
 
   return (
     <aside
+      data-word-bank
       aria-label="Word bank"
       style={{
         width: WORD_BANK_WIDTH,

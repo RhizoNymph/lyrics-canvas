@@ -46,6 +46,8 @@ export default function CanvasPage() {
     const typingOrEditing = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      // Keys pressed inside the word bank (e.g. Delete on a focused word) never act on canvas snippets.
+      if (e.target instanceof Element && e.target.closest('[data-word-bank]') !== null) return true;
       return useUIStore.getState().editingSnippetId !== null;
     };
     const handler = (e: KeyboardEvent) => {
