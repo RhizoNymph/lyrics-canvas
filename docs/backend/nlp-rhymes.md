@@ -14,6 +14,7 @@ in [docs/features/rhyme_view.md](../features/rhyme_view.md#api-contract).
 
 ```
 RhymeSuggestRequest
+  -> parse(tag_filter) when set                    TagExpressionError -> 422 invalid_tag_expression
   -> repo.canvas_owned(canvas_id, user)            else CanvasNotFoundError -> 404
   -> resolve_dialect / resolve_weights             DialectRuleError -> 422
   -> resolve_anchor per anchor
@@ -31,7 +32,7 @@ RhymeSuggestRequest
   -> context: tag ids of context snippet anchors (missing entries ignored)
   -> sources (run in a worker thread):
        notes:      NotesSource over every line and word-boundary suffix of the user's
-                   snippets, skipping the anchor lines
+                   snippets that match tag_filter (all when unset), skipping the anchor lines
        dictionary: DictionarySource(dialect, weights, include_rare)
        each: suggest(anchors, k, min_score, limit=5000, exclude=exclude_ids + anchor ids)
   -> drop candidates whose text equals an anchor's text
@@ -51,6 +52,13 @@ by `slice_grid_line` (word indexes rebased, leading rests dropped, trailing rest
 `word_end` is set); otherwise `syllabify_text(unit.text)`. `RhymeUnitModel.word_end` is set only
 for range anchors.
 
+`tag_filter` is a [tag expression](../features/tag_expressions.md) evaluated per snippet against
+`SnippetRecord.snippet_type` and `SnippetRecord.tag_names` (`matches_filter`, in Python after
+`repo.user_snippets`). An empty or whitespace-only filter means no filter. Anchors and the
+dictionary source are never filtered; the context-tag tie-break (tag ids) is unchanged.
+`SnippetRecord` gained `snippet_type` (default `freestyle`) and `tag_names` (default `()`), filled by
+`DbSnippetRepository`.
+
 Data access goes through the `SnippetRepository` protocol (`DbSnippetRepository` in
 production; `tests/fakes.py` in tests), so the service is tested without Postgres.
 
@@ -63,6 +71,7 @@ production; `tests/fakes.py` in tests), so the service is tested without Postgre
 | invalid k, limit, stress, empty anchors, `word_start < 0`, `word_end < 1`, `word_start >= word_end` | pydantic | 422 |
 | bad line index, empty snippet, word range outside the line or without a pronounceable word, unpronounceable text anchor | `RhymeQueryError` | 422 |
 | malformed dialect rule | `DialectRuleError` | 422 |
+| `tag_filter` does not parse | `TagExpressionError` | 422, `detail = {"error": "invalid_tag_expression", "message", "expression_error": {code, position, message}}` (other 422s keep a string detail) |
 
 ## Legacy lookup
 

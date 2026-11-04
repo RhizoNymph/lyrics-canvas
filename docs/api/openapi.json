@@ -114,14 +114,6 @@
             "title": "Snippets",
             "type": "array"
           },
-          "tags": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/TagResponse"
-            },
-            "title": "Tags",
-            "type": "array"
-          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -153,8 +145,7 @@
           "created_at",
           "updated_at",
           "snippets",
-          "groups",
-          "tags"
+          "groups"
         ],
         "title": "CanvasDetailResponse",
         "type": "object"
@@ -367,6 +358,29 @@
           }
         },
         "title": "ExportRequest",
+        "type": "object"
+      },
+      "ExpressionErrorBody": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "position",
+          "message"
+        ],
+        "title": "ExpressionErrorBody",
         "type": "object"
       },
       "GoogleAuthRequest": {
@@ -1162,6 +1176,17 @@
             "title": "Sources",
             "type": "array"
           },
+          "tag_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag Filter"
+          },
           "weights": {
             "anyOf": [
               {
@@ -1685,7 +1710,7 @@
           "tags": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TagResponse"
+              "$ref": "#/components/schemas/SnippetTagResponse"
             },
             "title": "Tags",
             "type": "array"
@@ -1725,6 +1750,30 @@
           "content_updated_at"
         ],
         "title": "SnippetResponse",
+        "type": "object"
+      },
+      "SnippetTagResponse": {
+        "description": "A tag as embedded in a snippet (``SnippetResponse.tags``).",
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "SnippetTagResponse",
         "type": "object"
       },
       "SnippetType": {
@@ -2024,6 +2073,46 @@
         "title": "TagCreate",
         "type": "object"
       },
+      "TagErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "expression_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpressionErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "TagErrorBody",
+        "type": "object"
+      },
+      "TagErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TagErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TagErrorResponse",
+        "type": "object"
+      },
       "TagLinkResponse": {
         "properties": {
           "ok": {
@@ -2038,14 +2127,32 @@
         "title": "TagLinkResponse",
         "type": "object"
       },
-      "TagResponse": {
+      "TagPresetCreate": {
         "properties": {
-          "canvas_id": {
-            "title": "Canvas Id",
+          "expression": {
+            "title": "Expression",
             "type": "string"
           },
-          "color": {
-            "title": "Color",
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "expression"
+        ],
+        "title": "TagPresetCreate",
+        "type": "object"
+      },
+      "TagPresetResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expression": {
+            "title": "Expression",
             "type": "string"
           },
           "id": {
@@ -2055,13 +2162,80 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
           }
         },
         "required": [
           "id",
-          "canvas_id",
           "name",
-          "color"
+          "expression",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TagPresetResponse",
+        "type": "object"
+      },
+      "TagPresetUpdate": {
+        "properties": {
+          "expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "TagPresetUpdate",
+        "type": "object"
+      },
+      "TagResponse": {
+        "description": "A tag of the user's tag list (``GET /api/tags`` and tag writes).",
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "snippet_count": {
+            "title": "Snippet Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "snippet_count",
+          "created_at"
         ],
         "title": "TagResponse",
         "type": "object"
@@ -3103,63 +3277,6 @@
         ]
       }
     },
-    "/api/canvases/{canvas_id}/tags": {
-      "post": {
-        "operationId": "create_tag_api_canvases__canvas_id__tags_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "canvas_id",
-            "required": true,
-            "schema": {
-              "title": "Canvas Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TagCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TagResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Create Tag",
-        "tags": [
-          "tags"
-        ]
-      }
-    },
     "/api/canvases/{canvas_id}/tsne": {
       "post": {
         "operationId": "tsne_layout_api_canvases__canvas_id__tsne_post",
@@ -3963,6 +4080,7 @@
             "name": "snippet_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Snippet Id",
               "type": "string"
             }
@@ -3972,6 +4090,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Tag Id",
               "type": "string"
             }
@@ -3987,6 +4106,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -4019,6 +4148,7 @@
             "name": "snippet_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Snippet Id",
               "type": "string"
             }
@@ -4028,6 +4158,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Tag Id",
               "type": "string"
             }
@@ -4036,6 +4167,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -4059,6 +4200,304 @@
         ]
       }
     },
+    "/api/tag-presets": {
+      "get": {
+        "description": "The user's presets, sorted by name ignoring case.",
+        "operationId": "list_presets_api_tag_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TagPresetResponse"
+                  },
+                  "title": "Response List Presets Api Tag Presets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Presets",
+        "tags": [
+          "tags"
+        ]
+      },
+      "post": {
+        "description": "The expression is parsed and stored normalized; empty expressions are refused.",
+        "operationId": "create_preset_api_tag_presets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagPresetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagPresetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Preset",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/tag-presets/{preset_id}": {
+      "delete": {
+        "operationId": "delete_preset_api_tag_presets__preset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Preset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Preset",
+        "tags": [
+          "tags"
+        ]
+      },
+      "put": {
+        "operationId": "update_preset_api_tag_presets__preset_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Preset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagPresetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagPresetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Preset",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "description": "The user's tags, sorted by name ignoring case.",
+        "operationId": "list_tags_api_tags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TagResponse"
+                  },
+                  "title": "Response List Tags Api Tags Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tags",
+        "tags": [
+          "tags"
+        ]
+      },
+      "post": {
+        "operationId": "create_tag_api_tags_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
     "/api/tags/{tag_id}": {
       "delete": {
         "operationId": "delete_tag_api_tags__tag_id__delete",
@@ -4068,6 +4507,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Tag Id",
               "type": "string"
             }
@@ -4076,6 +4516,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -4099,6 +4549,7 @@
         ]
       },
       "put": {
+        "description": "Rename and/or recolor. A rename rewrites the user's presets that name the tag.",
         "operationId": "update_tag_api_tags__tag_id__put",
         "parameters": [
           {
@@ -4106,6 +4557,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Tag Id",
               "type": "string"
             }
@@ -4132,15 +4584,35 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/TagErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
