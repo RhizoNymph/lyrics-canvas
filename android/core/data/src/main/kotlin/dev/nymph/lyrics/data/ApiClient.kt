@@ -67,6 +67,20 @@ class ApiClient(
     suspend fun <T> sendMultipart(path: List<String>, body: MultipartBody, response: DeserializationStrategy<T>): ApiResult<T> =
         call(HttpMethod.POST, path, body) { readJson(it) { text -> json.decodeFromString(response, text) } }
 
+    /**
+     * A bodiless [method] call with [query] parameters (e.g. `POST /api/snippets/{id}/tags?tag_id=`);
+     * the JSON response is decoded with [response].
+     */
+    suspend fun <T> sendQuery(
+        method: HttpMethod,
+        path: List<String>,
+        query: List<Pair<String, String>>,
+        response: DeserializationStrategy<T>,
+    ): ApiResult<T> {
+        val body = if (method == HttpMethod.GET || method == HttpMethod.DELETE) null else ByteArray(0).toRequestBody(null)
+        return call(method, path, body, query = query) { readJson(it) { text -> json.decodeFromString(response, text) } }
+    }
+
     /** DELETE; the 204 body is ignored. */
     suspend fun delete(path: List<String>): ApiResult<Unit> = call(HttpMethod.DELETE, path, null) { readJson(it) { } }
 
@@ -82,9 +96,10 @@ class ApiClient(
         path: List<String>,
         body: RequestBody?,
         accept: String = "application/json",
+        query: List<Pair<String, String>> = emptyList(),
         read: (Response) -> ApiResult<T>,
     ): ApiResult<T> {
-        val request = buildRequest(method, path, body, accept, tokenStore.token())
+        val request = buildRequest(method, path, query, body, accept, tokenStore.token())
         val response = try {
             okHttpClient.newCall(request).await()
         } catch (e: IOException) {
@@ -102,8 +117,18 @@ class ApiClient(
         return result
     }
 
-    private fun buildRequest(method: HttpMethod, path: List<String>, body: RequestBody?, accept: String, token: String?): Request {
-        val url = baseUrl.newBuilder().apply { path.forEach(::addPathSegment) }.build()
+    private fun buildRequest(
+        method: HttpMethod,
+        path: List<String>,
+        query: List<Pair<String, String>>,
+        body: RequestBody?,
+        accept: String,
+        token: String?,
+    ): Request {
+        val url = baseUrl.newBuilder().apply {
+            path.forEach(::addPathSegment)
+            query.forEach { (name, value) -> addQueryParameter(name, value) }
+        }.build()
         return Request.Builder()
             .url(url)
             .method(method.name, body)

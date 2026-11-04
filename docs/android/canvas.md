@@ -17,10 +17,12 @@ its own milestone.
 - Rhyme sheet: every feature of the web rhyme sidebar (see [rhyme-view.md](../frontend/rhyme-view.md)).
 - Record: the top-bar "Record" button (canvas and list mode) opens the voice modal; the take becomes a
   new snippet at the viewport centre, selected (see [android_voice_capture.md](../features/android_voice_capture.md)).
+- Tags: the filter bar above the body (canvas and list mode), "Tags" in the selection bar (tag picker)
+  and the rhyme sheet's "Only my lines matching" (see [android_tag_expressions.md](../features/android_tag_expressions.md)).
 
 ## Non-scope
 
-- The grid editor screen (B2). Per-card resize (the web's corner handle), groups, tag editing, undo,
+- The grid editor screen (B2). Per-card resize (the web's corner handle), groups, undo,
   t-SNE, search, export.
 - Pull to refresh (a Refresh action is in the list's top bar instead).
 
@@ -57,7 +59,8 @@ server's detail.
 `CanvasViewModel(canvasId, canvases, snippets, persistScope, viewportSaveDelayMs = 1000, savedState)`
 
 State: `CanvasUiState` = `Loading` | `Failed(message)` | `Ready(canvasId, title, snippets, viewport,
-viewSize, selection, busy, mergeError, mode)`. `Selection` = `Idle` | `Selecting(ids)`; `Selecting` cannot be
+viewSize, selection, busy, mergeError, mode, filter)`; `Ready.visibleSnippets` is what `filter` (the
+filter bar's last valid tag expression) matches. `Selection` = `Idle` | `Selecting(ids)`; `Selecting` cannot be
 empty (deselecting the last card leaves selection mode). `CanvasMode` = `Canvas` | `SnippetList(order)`
 (the list order captured by `ListOrder.of`); `Ready.listRows` is `order.arrange(snippets)`. The mode's
 kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coordinates are dp.
@@ -82,7 +85,9 @@ kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coor
 | `replaceSnippet(s)` | The editor's `onSaved` (and `onSnippetChanged` after a voice append): replace in place; in list mode, capture a new list order |
 | `voiceTarget()` | `VoiceTakeTarget.New(viewportCenter(viewport, viewSize))`; in list mode the viewport is the last canvas one and the size is the list body's; null before load |
 | `onVoiceTakeSaved(response)` | Created: insert, select only it, and in list mode emit `CanvasEvent.RevealSnippet`; appended: `replaceSnippet` |
-| `hitTest(screen)` | Topmost card under a dp point (`hitTestScreen`) |
+| `hitTest(screen)` | Topmost visible card under a dp point (`hitTestScreen` over `visibleSnippets`) |
+| `setTagFilter(filter)` (`TagCanvasPort`) | Kept also before load; `Ready.filter`; selection pruned to visible snippets |
+| `onTagLinked` / `onTagUnlinked` / `onTagEdited` / `onTagDeleted` (`TagCanvasPort`) | Server-confirmed tag changes from the picker update the embedded `Snippet.tags` |
 
 Viewport persistence: every camera change cancels and restarts a 1 s timer; when it fires, or on
 `flushViewport()`, the viewport is saved with `CanvasRepository.saveViewport` unless it equals the last
@@ -90,7 +95,8 @@ saved one. Saves run in `ProcessScope` (process lifetime), so a save started whe
 cancelled with the ViewModel. A failed save forgets the "last saved" value so the next change retries.
 
 `CanvasViewModel` implements `RhymeCanvasPort` for the rhyme sheet: `rhymeView` (selection, snippets,
-camera), `currentRhymeView()`, `insertMaterialized(snippet)`.
+camera), `currentRhymeView()`, `insertMaterialized(snippet)`; and `TagCanvasPort` for `TagsViewModel`
+(filter, tag changes, `currentSnippets()`).
 
 ## Gestures
 
@@ -125,7 +131,7 @@ cancelled mid-gesture, `Cancel` is fed so a card move still ends.
 
 1. Background `#12122a` and the web's 50-unit grid lines (`backgroundGridLines`, skipped when closer
    than 8 dp).
-2. `visibleCards(snippets, viewport, viewSize)`: draw order (z-index, then list order), culled to cards
+2. `visibleCards(visibleSnippets, viewport, viewSize)` (snippets the tag filter hides are skipped): draw order (z-index, then list order), culled to cards
    whose screen rectangle grown by the 4 dp shadow overlaps the view.
 3. For each card, `drawCard` (`render/CardRenderer.kt`) under `translate(origin) + scale(zoom × density)`,
    so everything is drawn in card-local world units from `cardLayout(snippet)`
@@ -146,7 +152,9 @@ Strokes are expressed in dp (`1 / zoom` card units).
 `CanvasScreen` = `BoxWithConstraints` around a `Scaffold`:
 
 - Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
-  (enabled with ≥ 2 selected and nothing in flight), Delete (confirm dialog), Rhymes, ✕).
+  (enabled with ≥ 2 selected and nothing in flight), Tags (tag picker), Delete (confirm dialog), Rhymes, ✕).
+- Filter bar (`tags/ui/FilterBar`, once loaded) above the body in both modes; the tag picker sheet
+  (`TagPickerSheet`) while `TagsUiState.picker` is set; `TagsViewModel.messages` go to the snackbar.
 - FAB "New snippet" while not selecting.
 - Body: the canvas or, in list mode, `SnippetList` (rows are the canvas card resized for the row by
   `listCardWidth` / `listCardHeight`, tap = `onTap`, long-press = `onListLongPress`); a `Failed`
@@ -202,6 +210,7 @@ snippet is not selected, so it does not change the plan and does not re-query.
 | Min score slider (0–1, 0.05 steps) | `setMinScore` (clamped) |
 | Slot radio, manual count + stress | `setSlotMode`, `setManualSlot` (validated by `parseManualSlot`; only a valid slot is sent) |
 | notes / dictionary / rare words | `toggleSource`, `setIncludeRare` |
+| Only my lines matching (expression field, chips, pills, Presets ▾, Use canvas filter) | `editTagFilter`, `acceptTagFilterSuggestion`, `insertTagFilterTag`, `setTagFilterText`, `clearTagFilter`; sent as `tag_filter`, a known-invalid expression blocks the query (`RhymeQueryPlan.Blocked`) |
 | Row tap / text tap | `toggleRow` / `setTypedText(candidate.text)` (chain search) |
 | Materialize / Dismiss button / swipe | `materialize`, `dismiss` |
 | More | `loadMore` |
@@ -235,7 +244,8 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`, `RevealSnippet`) |
 | `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS`, `CANVAS_MODE_KEY` |
 | `canvas/CanvasScreen.kt` | `CanvasScreen`, `canvasViewModel(container, canvasId, owner)` |
-| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`), `SelectionTopBar` |
+| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`), `SelectionTopBar` (optional `onTags`) |
+| `tags/` | `TagsViewModel`, filter bar, picker, presets (see [android_tag_expressions.md](../features/android_tag_expressions.md)) |
 | `canvas/SnippetCanvas.kt` | `SnippetCanvas` (draw loop, layout cache, size reporting, gestures) |
 | `canvas/list/ListCardSize.kt` | `ListCardMetrics`, `ListCardWidth`, `listCardNeededWidth`, `listCardWidth`, `listCardHeight`, `listCard` (pure) |
 | `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`, optional hoisted `listState`; rows drawn with `cardLayout` + `drawCard`) |
@@ -248,8 +258,8 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `rhyme/RhymeUiState.kt` | `RhymeControls`, `RhymeUiState` |
 | `rhyme/AnchorChips.kt` | `AnchorChip`, `CHIP_TEXT_MAX`, `truncateChip`, `chipLabel`, `chipHint`, `anchorChips` (pure) |
 | `rhyme/RhymeViewModel.kt` | `RhymeViewModel`, `RHYME_QUERY_DEBOUNCE_MS` |
-| `rhyme/ui/RhymePanel.kt` | `RhymePanel`, `statusText`, `errorText` |
-| `rhyme/ui/QueryControls.kt` | `QueryControls` |
+| `rhyme/ui/RhymePanel.kt` | `RhymePanel(state, vm, tags, onClose)`, `statusText`, `errorText` |
+| `rhyme/ui/QueryControls.kt` | `QueryControls` (incl. "Only my lines matching") |
 | `rhyme/ui/AnchorChipsView.kt` | `AnchorChipsView` |
 | `rhyme/ui/CandidateRow.kt` | `CandidateRow` |
 | `rhyme/ui/SyllableStrip.kt` | `SyllableStrip(line, selected, onWordTap)` |
@@ -259,7 +269,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 
 Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, fake repositories in
 `fakes/`): `CanvasViewModelTest`, `CanvasViewModelListModeTest`, `ListCardSizeTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
-`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
+`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `CanvasViewModelTagsTest`, `RhymeViewModelTagFilterTest`, `TagsViewModelTest`, `TagMessagesTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
 `MainDispatcherExtension` installs a `StandardTestDispatcher` as `Dispatchers.Main`.
 
 ## Invariants

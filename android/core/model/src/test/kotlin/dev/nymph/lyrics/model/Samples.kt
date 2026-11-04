@@ -27,7 +27,7 @@ object Samples {
           "syllable_count":3,"raw_text":"hello world"}]},
         "raw_text":"hello world","position_x":100.0,"position_y":200.5,"width":332.0,"height":80.0,"z_index":3,
         "group_id":"9a000000-0000-4000-8000-000000000001",
-        "tags":[{"id":"7a000000-0000-4000-8000-000000000001","name":"hook idea","color":"#6366f1","canvas_id":"c0ffee00-0000-4000-8000-000000000001"}],
+        "tags":[{"id":"7a000000-0000-4000-8000-000000000001","name":"hook idea","color":"#6366f1"}],
         "phonetics":$PHONETICS,
         "derived_from":{"provenance":"dictionary","source_unit_id":"dict:tin","score":0.9,"match_depth":1,"k":2,
           "anchor_unit_id":"note:a:0:0","anchor_text":"hinge"},
@@ -45,8 +45,7 @@ object Samples {
         "created_at":"2026-09-01 10:00:00+00:00","updated_at":"2026-09-02 11:00:00+00:00",
         "snippets":[$SNIPPET,$SNIPPET_BARE],
         "groups":[{"id":"9a000000-0000-4000-8000-000000000001","canvas_id":"c0ffee00-0000-4000-8000-000000000001","name":"Verse 1",
-          "position_x":0.0,"position_y":0.0,"snippet_ids":["5a1e0000-0000-4000-8000-000000000001"],"created_at":"2026-09-01"}],
-        "tags":[{"id":"7a000000-0000-4000-8000-000000000001","canvas_id":"c0ffee00-0000-4000-8000-000000000001","name":"hook idea","color":"#6366f1"}]}"""
+          "position_x":0.0,"position_y":0.0,"snippet_ids":["5a1e0000-0000-4000-8000-000000000001"],"created_at":"2026-09-01"}]}"""
 
     const val BATCH_POSITION = """{"updated":2}"""
 

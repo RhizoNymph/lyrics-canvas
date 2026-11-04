@@ -13,10 +13,10 @@ against the same contract; platform differences are noted per item.
   descending and then `id` ascending. Timestamps compare as instants, not strings (the backend sends
   `str(datetime)`, e.g. `2026-10-13 16:49:57.893996+00:00`). A missing or unparseable timestamp sorts
   as the oldest.
-- **Visibility**: the same tag-filter rule as the canvas. Web: the canvas page's tag expression
-  filter (see [web_tag_expressions.md](./web_tag_expressions.md)); with no filter every snippet shows,
-  otherwise a snippet shows when the applied expression matches its type and tag names. Android has no
-  tag filter yet, so it lists every snippet.
+- **Visibility**: the same tag-filter rule as the canvas, on both clients: with no filter every snippet
+  shows, otherwise a snippet shows when the applied tag expression matches its type and tag names. Web
+  uses the canvas page's filter bar (see [web_tag_expressions.md](./web_tag_expressions.md)), Android its
+  filter bar above the canvas and list (see [android_tag_expressions.md](./android_tag_expressions.md)).
 - **Selection**: list and canvas share one selection, so switching views keeps it. Merge (vertical or
   horizontal) and delete act on that selection. Merge order is whatever the server merge defines
   (canvas position), not list order (see [merge_blocks.md](./merge_blocks.md)).
@@ -158,7 +158,9 @@ Tests: `lib/canvas/visibility.test.ts`, `lib/listMode/{order,selection,viewMode}
 
 - A "List" / "Canvas" text button in the canvas top bar (shown once the canvas has loaded) switches the
   body of the canvas screen between `SnippetCanvas` and `SnippetList` (a `LazyColumn`).
-- Every snippet of the canvas is listed: Android has no tag filter yet, so there is nothing to filter by.
+- The snippets the filter bar's tag expression matches are listed (`Ready.listRows` arranges
+  `Ready.visibleSnippets`; see [android_tag_expressions.md](./android_tag_expressions.md)); with an
+  empty filter, every snippet. An empty result reads "No snippets match the filter".
 - Order: `sortForList` (`content_updated_at` desc, `created_at` desc, `id` asc), compared as parsed
   instants, not strings.
 - Rows are the canvas card (`cardLayout` + `drawCard`), resized for the row: the full grid width plus
@@ -174,7 +176,7 @@ Tests: `lib/canvas/visibility.test.ts`, `lib/listMode/{order,selection,viewMode}
 
 ### Non-scope
 
-- A tag filter (none on Android yet), search, or any other ordering.
+- Search, or any other ordering. (The tag filter is [android_tag_expressions.md](./android_tag_expressions.md).)
 - Moving, resizing or reordering snippets from the list (long-press does not start a move).
 - Remembering the mode across app launches (it lives in the back-stack entry's saved state only).
 - Live re-sorting: rows that change in place keep their position until the next capture.
@@ -192,7 +194,7 @@ Top bar "List" / "Canvas" -> setMode(kind)
 CanvasScreen: Ready.mode
   Canvas      -> SnippetCanvas (unchanged)
   SnippetList -> SnippetList(rows = Ready.listRows, selected = selection.ids)
-                 Ready.listRows = order.arrange(snippets)   (lazy; unseen ids first, sorted; gone ids dropped)
+                 Ready.listRows = order.arrange(visibleSnippets)   (lazy; unseen ids first, sorted; gone or filtered ids dropped)
 Row tap        -> CanvasViewModel.onTap(id): Idle -> CanvasEvent.OpenEditor(id) -> EditorRoute
                                              Selecting -> toggle id
 Row long-press -> CanvasViewModel.onListLongPress(id): select(id) (no move origin recorded)

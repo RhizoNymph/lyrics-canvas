@@ -8,6 +8,9 @@ import dev.nymph.lyrics.logic.rhyme.ShownRange
 import dev.nymph.lyrics.logic.rhyme.SlotMode
 import dev.nymph.lyrics.logic.rhyme.listRows
 import dev.nymph.lyrics.logic.rhyme.parseManualSlot
+import dev.nymph.lyrics.logic.tags.ExpressionField
+import dev.nymph.lyrics.logic.tags.RhymeTagFilter
+import dev.nymph.lyrics.logic.tags.rhymeTagFilter
 import dev.nymph.lyrics.model.AnchorRange
 import dev.nymph.lyrics.model.Provenance
 import dev.nymph.lyrics.model.RhymeCandidate
@@ -23,6 +26,8 @@ data class RhymeControls(
     val params: RhymeQueryParams,
     val excluded: Set<SnippetId>,
     val ranges: Map<SnippetId, AnchorRange>,
+    /** "Only my lines matching": restricts the notes source. */
+    val tagFilter: ExpressionField,
 )
 
 /** The rhyme sheet session (rhymeStore.ts). Results never reach the canvas until materialized. */
@@ -58,8 +63,13 @@ data class RhymeUiState(
     val materializing: Set<String> = emptySet(),
     /** The canvas as last seen: selection and snippets are current, the camera may be stale (read it from the port). */
     val canvas: RhymeCanvasView? = null,
+    /** "Only my lines matching" (kept when the sheet closes, like the other query controls). */
+    val tagFilter: ExpressionField = ExpressionField(),
 ) {
-    val controls: RhymeControls get() = RhymeControls(typedText, params, excluded, ranges)
+    val controls: RhymeControls get() = RhymeControls(typedText, params, excluded, ranges, tagFilter)
+
+    /** The filter is known-invalid while the notes source is on, so no query is sent. */
+    val tagFilterBlocked: Boolean get() = rhymeTagFilter(tagFilter, params.sources.notes) is RhymeTagFilter.Blocked
 
     val chips: List<AnchorChip> get() = anchorChips(canvas, excluded, ranges, anchors, expandedChips, awaitingEnd)
 

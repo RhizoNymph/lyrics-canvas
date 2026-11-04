@@ -14,6 +14,12 @@ import dev.nymph.lyrics.data.repository.HttpNlpRepository
 import dev.nymph.lyrics.data.repository.HttpSnippetRepository
 import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
+import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
+import dev.nymph.lyrics.data.repository.HttpTagRepository
+import dev.nymph.lyrics.data.repository.TagPresetRepository
+import dev.nymph.lyrics.data.repository.TagRepository
+import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
+import dev.nymph.lyrics.app.tags.TagFilterStore
 import dev.nymph.lyrics.data.status.AlertsEndpoint
 import dev.nymph.lyrics.data.status.HttpStatusRepository
 import dev.nymph.lyrics.data.repository.HttpVoiceRepository
@@ -31,6 +37,7 @@ import okhttp3.OkHttpClient
 
 private val Context.authDataStore by preferencesDataStore(name = "auth")
 private val Context.voiceDataStore by preferencesDataStore(name = "voice")
+private val Context.tagFilterDataStore by preferencesDataStore(name = "tag_filters")
 
 /**
  * Manual dependency graph, one per process (see [dev.nymph.lyrics.app.LyricsApp]). ViewModels
@@ -69,6 +76,11 @@ class AppContainer(
     val canvases: CanvasRepository = HttpCanvasRepository(api)
     val snippets: SnippetRepository = HttpSnippetRepository(api)
     val nlp: NlpRepository = HttpNlpRepository(api)
+    val tags: TagRepository = HttpTagRepository(api)
+    val tagPresets: TagPresetRepository = HttpTagPresetRepository(api)
+
+    /** The canvas filter bar's text, per canvas, on this device. */
+    val tagFilters: TagFilterStore = DataStoreTagFilterStore(appContext.tagFilterDataStore)
 
     /**
      * Voice takes wait for transcription (the backend allows the STT service 120 s), and upload

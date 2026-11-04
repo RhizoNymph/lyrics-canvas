@@ -26,6 +26,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.tags.TagsUiState
+import dev.nymph.lyrics.app.tags.ui.ExpressionInput
+import dev.nymph.lyrics.app.tags.ui.PresetMenu
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.rhyme.ManualSlotError
 import dev.nymph.lyrics.logic.rhyme.SlotMode
@@ -33,10 +41,10 @@ import dev.nymph.lyrics.model.RhymeK
 import dev.nymph.lyrics.model.SourceName
 import java.util.Locale
 
-/** Search box, anchor chips, k, min score, slot, sources, rare words (QueryControls.tsx). */
+/** Search box, anchor chips, k, min score, slot, sources, rare words (QueryControls.tsx), "Only my lines matching". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun QueryControls(state: RhymeUiState, vm: RhymeViewModel) {
+fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             OutlinedTextField(
@@ -120,6 +128,41 @@ fun QueryControls(state: RhymeUiState, vm: RhymeViewModel) {
             Toggle("notes", state.params.sources.notes) { vm.toggleSource(SourceName.NOTES) }
             Toggle("dictionary", state.params.sources.dictionary) { vm.toggleSource(SourceName.DICTIONARY) }
             Toggle("rare words", state.params.includeRare) { vm.setIncludeRare(!state.params.includeRare) }
+        }
+
+        TagFilterControls(state, vm, tags)
+    }
+}
+
+/** "Only my lines matching": restricts the notes source (never the dictionary) to snippets matching an expression. */
+@Composable
+private fun TagFilterControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Label("Only my lines matching")
+        ExpressionInput(
+            field = state.tagFilter,
+            tags = tags.tags,
+            label = "Tag filter for notes",
+            onEdit = vm::editTagFilter,
+            onAccept = vm::acceptTagFilterSuggestion,
+            onInsertTag = vm::insertTagFilterTag,
+            note = when {
+                !state.params.sources.notes -> "notes is off, so this is not used"
+                state.tagFilterBlocked -> "no search until it is fixed"
+                else -> null
+            },
+            trailingIcon = if (state.tagFilter.text.isNotEmpty()) {
+                { IconButton(onClick = vm::clearTagFilter) { Icon(Icons.Default.Close, contentDescription = "Clear tag filter") } }
+            } else {
+                null
+            },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val canvasFilter = tags.filterBar.appliedText.trim()
+            TextButton(onClick = { vm.setTagFilterText(canvasFilter) }, enabled = canvasFilter.isNotEmpty()) {
+                Text("Use canvas filter", fontSize = 13.sp)
+            }
+            PresetMenu(tags.presets, onApply = { vm.setTagFilterText(it.expression) })
         }
     }
 }

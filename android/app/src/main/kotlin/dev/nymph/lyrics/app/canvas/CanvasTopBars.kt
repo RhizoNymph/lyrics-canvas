@@ -47,7 +47,7 @@ fun CanvasTopBar(
     )
 }
 
-/** The contextual bar while selecting: count, Merge ⇣, Merge ⇢, Delete, Rhymes, ✕. */
+/** The contextual bar while selecting: count, Merge ⇣, Merge ⇢, Tags, Delete, Rhymes, ✕. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SelectionTopBar(
@@ -57,6 +57,8 @@ fun SelectionTopBar(
     onMerge: (MergeMode) -> Unit,
     onDelete: () -> Unit,
     onRhymes: () -> Unit,
+    /** Opens the tag picker for the selection. */
+    onTags: () -> Unit = {},
 ) {
     val canMerge = count >= 2 && !busy
     TopAppBar(
@@ -67,6 +69,7 @@ fun SelectionTopBar(
         actions = {
             TextButton(onClick = { onMerge(MergeMode.VERTICAL) }, enabled = canMerge) { Text("Merge ⇣") }
             TextButton(onClick = { onMerge(MergeMode.HORIZONTAL) }, enabled = canMerge) { Text("Merge ⇢") }
+            TextButton(onClick = onTags, enabled = !busy) { Text("Tags") }
             IconButton(onClick = onDelete, enabled = !busy) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
             TextButton(onClick = onRhymes) { Text("Rhymes") }
         },

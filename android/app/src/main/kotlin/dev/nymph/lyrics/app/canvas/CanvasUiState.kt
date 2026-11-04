@@ -4,6 +4,8 @@ import dev.nymph.lyrics.logic.canvas.MergeError
 import dev.nymph.lyrics.logic.canvas.ViewSize
 import dev.nymph.lyrics.logic.canvas.Viewport
 import dev.nymph.lyrics.logic.list.ListOrder
+import dev.nymph.lyrics.logic.tags.TagFilter
+import dev.nymph.lyrics.logic.tags.matches
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetId
@@ -73,14 +75,21 @@ sealed interface CanvasUiState {
         /** The last merge failure, cleared by the next successful merge or a selection exit. */
         val mergeError: MergeError? = null,
         val mode: CanvasMode = CanvasMode.Canvas,
+        /** The filter bar's last valid expression; snippets it does not match are hidden from the canvas and the list. */
+        val filter: TagFilter = TagFilter.Everything,
     ) : CanvasUiState {
         val byId: Map<SnippetId, Snippet> = snippets.associateBy { it.id }
 
-        /** List-mode rows ([ListOrder.arrange] of [snippets]); empty on the canvas. Computed on first read. */
+        /** The snippets [filter] matches, in [snippets] order: what the canvas draws and hit-tests. */
+        val visibleSnippets: List<Snippet> by lazy {
+            if (filter == TagFilter.Everything) snippets else snippets.filter { filter.matches(it) }
+        }
+
+        /** List-mode rows ([ListOrder.arrange] of [visibleSnippets]); empty on the canvas. Computed on first read. */
         val listRows: List<Snippet> by lazy {
             when (mode) {
                 CanvasMode.Canvas -> emptyList()
-                is CanvasMode.SnippetList -> mode.order.arrange(snippets)
+                is CanvasMode.SnippetList -> mode.order.arrange(visibleSnippets)
             }
         }
     }

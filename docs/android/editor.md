@@ -23,7 +23,8 @@ Backspace line split and join).
 ## Non-scope
 
 - Undo (none in v1, as the web), cross-line chunk moves, editing a syllable's text or stress, fixed grid
-  mode / `beats_per_line` editing, tags.
+  mode / `beats_per_line` editing. (Tags are edited through the canvas entry's tag picker: the host passes
+  a "Tags" action in `GridEditorRoute(extraTopBarActions)`; see [android_tag_expressions.md](../features/android_tag_expressions.md).)
 - Vertical auto-scroll while dragging a row (rows are moved within the visible area, or with ▲ / ▼).
 - Any change to `:core:*`.
 

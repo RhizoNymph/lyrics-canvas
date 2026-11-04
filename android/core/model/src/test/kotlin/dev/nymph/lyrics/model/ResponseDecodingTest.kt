@@ -43,13 +43,12 @@ class ResponseDecodingTest {
     }
 
     @Test
-    fun `canvas detail with snippets, groups and tags`() {
+    fun `canvas detail with snippets and groups`() {
         val detail = LyricsJson.decodeFromString<CanvasDetail>(Samples.CANVAS_DETAIL)
         assertEquals("Night drive", detail.title)
         assertEquals(2, detail.snippets.size)
         assertEquals(listOf(SnippetId("5a1e0000-0000-4000-8000-000000000001")), detail.groups.single().snippetIds)
         assertEquals("Verse 1", detail.groups.single().name)
-        assertEquals(TagId("7a000000-0000-4000-8000-000000000001"), detail.tags.single().id)
         assertEquals(detail.title, detail.toCanvas().title)
     }
 

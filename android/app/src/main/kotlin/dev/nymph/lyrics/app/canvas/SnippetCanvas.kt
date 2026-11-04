@@ -60,7 +60,8 @@ fun SnippetCanvas(
         for (x in grid.xs) drawLine(Palette.CanvasGridLine, Offset(x.toFloat() * px, 0f), Offset(x.toFloat() * px, size.height), strokeWidth = 1f)
         for (y in grid.ys) drawLine(Palette.CanvasGridLine, Offset(0f, y.toFloat() * px), Offset(size.width, y.toFloat() * px), strokeWidth = 1f)
 
-        val visible = visibleCards(state.snippets, viewport, view)
+        // Cards the tag filter hides are neither drawn nor hit.
+        val visible = visibleCards(state.visibleSnippets, viewport, view)
         layouts.retain(state.snippets)
         for (snippet in visible) {
             val origin = viewport.worldToScreen(Point(snippet.positionX, snippet.positionY))

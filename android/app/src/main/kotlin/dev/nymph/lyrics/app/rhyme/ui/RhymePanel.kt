@@ -27,12 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.rhyme.RhymeError
 import dev.nymph.lyrics.logic.rhyme.RhymeOperation
 
 /** The status line text: searching, empty, or "Showing a–b of total". */
 fun statusText(state: RhymeUiState): String = when {
+    state.tagFilterBlocked -> "Fix the tag filter to search"
     state.loading -> "Searching…"
     state.rows.isEmpty() -> "No candidates"
     else -> "Showing ${state.shown.start}–${state.shown.end} of ${state.total}"
@@ -44,9 +46,10 @@ fun errorText(error: RhymeError): String =
 /**
  * The rhyme sheet's content (RhymeSidebar.tsx): header, query controls, status line with More,
  * error line, and the result rows. Hosted in a bottom sheet or a side pane by the canvas screen.
+ * [tags] supplies the tag names, presets and canvas filter for "Only my lines matching".
  */
 @Composable
-fun RhymePanel(state: RhymeUiState, vm: RhymeViewModel, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun RhymePanel(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState, onClose: () -> Unit, modifier: Modifier = Modifier) {
     LazyColumn(modifier.background(Palette.Sidebar)) {
         item(key = "header") {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -55,7 +58,7 @@ fun RhymePanel(state: RhymeUiState, vm: RhymeViewModel, onClose: () -> Unit, mod
             }
             HorizontalDivider(color = Palette.Border)
         }
-        item(key = "controls") { Box(Modifier.padding(12.dp)) { QueryControls(state, vm) } }
+        item(key = "controls") { Box(Modifier.padding(12.dp)) { QueryControls(state, vm, tags) } }
         item(key = "status") {
             HorizontalDivider(color = Palette.Border)
             Row(

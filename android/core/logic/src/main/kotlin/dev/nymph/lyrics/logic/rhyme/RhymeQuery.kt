@@ -1,6 +1,10 @@
 package dev.nymph.lyrics.logic.rhyme
 
 import dev.nymph.lyrics.logic.canvas.Point
+import dev.nymph.lyrics.logic.tags.ExpressionField
+import dev.nymph.lyrics.logic.tags.RhymeTagFilter
+import dev.nymph.lyrics.logic.tags.TagExprError
+import dev.nymph.lyrics.logic.tags.rhymeTagFilter
 import dev.nymph.lyrics.model.AnchorRange
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.DerivedFrom
@@ -70,6 +74,13 @@ sealed interface RhymeQueryPlan {
         override val ranges: Map<SnippetId, AnchorRange>,
     ) : RhymeQueryPlan
 
+    /** The "Only my lines matching" expression is invalid: no request (shown inline). */
+    data class Blocked(
+        val error: TagExprError,
+        override val excluded: Set<SnippetId>,
+        override val ranges: Map<SnippetId, AnchorRange>,
+    ) : RhymeQueryPlan
+
     data class Query(
         val request: RhymeSuggestRequest,
         /** The slot sent, for display. */
@@ -99,14 +110,29 @@ fun slotFromFirstAnchor(anchorSnips: List<Snippet>, ranges: Map<SnippetId, Ancho
     return if (range == null) slotFromSnippet(first, null) else slotFromRange(first, range)
 }
 
-/** Build the rhyme-suggest request for one page ([offset]) of the current sheet state. */
-fun planRhymeQuery(canvasId: CanvasId, params: RhymeQueryParams, selection: RhymeSelection, offset: Int): RhymeQueryPlan {
+/**
+ * Build the rhyme-suggest request for one page ([offset]) of the current sheet state. [tagFilter]
+ * restricts the notes source (sent normalized as `tag_filter`; ignored while notes is off); a
+ * known-invalid expression gives [RhymeQueryPlan.Blocked].
+ */
+fun planRhymeQuery(
+    canvasId: CanvasId,
+    params: RhymeQueryParams,
+    selection: RhymeSelection,
+    offset: Int,
+    tagFilter: ExpressionField = ExpressionField(),
+): RhymeQueryPlan {
     val excluded = pruneExclusions(selection.excluded, selection.selectedIds)
     val ranges = pruneRanges(selection.ranges, selection.selectedIds, selection.snippets)
     val anchors = anchorsFromSelection(selection.selectedIds, selection.snippets, selection.typedText, excluded, ranges)
     val sources = params.sources.enabled()
     if (anchors.isEmpty() || sources.isEmpty()) return RhymeQueryPlan.Skip(excluded, ranges)
 
+    val tagFilterText = when (val filter = rhymeTagFilter(tagFilter, params.sources.notes)) {
+        is RhymeTagFilter.Blocked -> return RhymeQueryPlan.Blocked(filter.error, excluded, ranges)
+        is RhymeTagFilter.Send -> filter.expression
+        RhymeTagFilter.None -> null
+    }
     val anchorSnips = anchorSnippets(selection.selectedIds, selection.snippets, excluded)
     val slot = when (params.slotMode) {
         SlotMode.FROM_SELECTION -> slotFromFirstAnchor(anchorSnips, ranges)
@@ -126,6 +152,7 @@ fun planRhymeQuery(canvasId: CanvasId, params: RhymeQueryParams, selection: Rhym
         offset = offset,
         weights = null,
         dialect = null,
+        tagFilter = tagFilterText,
     )
     return RhymeQueryPlan.Query(request, slot, excluded, ranges)
 }

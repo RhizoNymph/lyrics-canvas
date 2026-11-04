@@ -25,6 +25,10 @@ import dev.nymph.lyrics.app.canvaslist.CanvasListScreen
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.editor.GridEditorRoute
 import dev.nymph.lyrics.app.session.SessionState
+import dev.nymph.lyrics.app.tags.tagsViewModel
+import dev.nymph.lyrics.app.tags.ui.TagPickerSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import dev.nymph.lyrics.app.session.SessionViewModel
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.model.CanvasId
@@ -77,12 +81,17 @@ fun AppNavHost(container: AppContainer) {
     }
 }
 
-/** The editor shares the canvas entry's ViewModel: it reads the snippet there and writes the saved one back. */
+/**
+ * The editor shares the canvas entry's ViewModels: it reads the snippet there and writes the saved
+ * one back, and its "Tags" opens the canvas entry's tag picker for this snippet.
+ */
 @Composable
 private fun EditorDestination(container: AppContainer, nav: NavHostController, entry: NavBackStackEntry) {
     val route = entry.toRoute<EditorRoute>()
     val canvasEntry = remember(entry) { nav.getBackStackEntry<CanvasRoute>() }
     val canvas = canvasViewModel(container, CanvasId(route.canvasId), canvasEntry)
+    val tags = tagsViewModel(container, CanvasId(route.canvasId), canvas, canvasEntry)
+    val tagsState by tags.state.collectAsStateWithLifecycle()
     val snippet = remember(entry) { canvas.snippet(SnippetId(route.snippetId)) }
     // Pop only while the editor is on top, so a save followed by a close leaves one screen.
     val close = { if (nav.currentBackStackEntry?.id == entry.id) nav.popBackStack() }
@@ -99,5 +108,7 @@ private fun EditorDestination(container: AppContainer, nav: NavHostController, e
         },
         onClose = { close() },
         onSnippetChanged = canvas::replaceSnippet,
+        extraTopBarActions = { TextButton(onClick = { tags.openPicker(setOf(snippet.id)) }) { Text("Tags") } },
     )
+    TagPickerSheet(tagsState, tags)
 }

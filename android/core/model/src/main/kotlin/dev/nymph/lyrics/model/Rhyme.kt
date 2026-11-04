@@ -128,6 +128,8 @@ data class RhymeSuggestRequest(
     val offset: Int = 0,
     val weights: ScoreWeights? = null,
     val dialect: DialectMap? = null,
+    /** Restricts the notes source to snippets matching this tag expression (normalized); null = no restriction. */
+    @SerialName("tag_filter") val tagFilter: String? = null,
 )
 
 @Serializable
