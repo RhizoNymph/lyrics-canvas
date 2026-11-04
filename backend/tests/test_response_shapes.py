@@ -78,8 +78,9 @@ def legacy_group(g) -> dict:
 
 
 def legacy_tag(t) -> dict:
-    # TagResponse lost canvas_id and gained snippet_count and created_at with user-wide tags
-    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "created_at": str(t.created_at)}
+    # TagResponse lost canvas_id and gained snippet_count and created_at with user-wide tags,
+    # and word_count with the word bank
+    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at)}
 
 
 def legacy_detail(canvas) -> dict:

@@ -21,7 +21,14 @@ router = APIRouter(tags=["tags"])
 
 
 def _tag_response(t: TagSummary) -> TagResponse:
-    return TagResponse(id=str(t.id), name=t.name, color=t.color, snippet_count=t.snippet_count, created_at=str(t.created_at))
+    return TagResponse(
+        id=str(t.id),
+        name=t.name,
+        color=t.color,
+        snippet_count=t.snippet_count,
+        word_count=t.word_count,
+        created_at=str(t.created_at),
+    )
 
 
 @router.get("/api/tags", response_model=list[TagResponse])
