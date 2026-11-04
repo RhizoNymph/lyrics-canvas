@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { canvasApi, snippetApi, groupApi, tagApi } from '@/api/client';
-import type { Snippet, Group, Tag, CanvasDetail, SnippetType, GridMode, MergeResponse } from '@/types';
+import { canvasApi, snippetApi, groupApi } from '@/api/client';
+import type { Snippet, Group, CanvasDetail, SnippetType, GridMode, MergeResponse } from '@/types';
+import type { SnippetMap } from '@/lib/tags/snippetTags';
 import type { DerivedFrom } from '@/types/rhyme';
 import { MergeError, toMergeError } from '@/lib/merge';
 import type { MergeMode, MergeResult } from '@/lib/merge';
@@ -25,11 +26,9 @@ interface CanvasState {
   // Data
   snippets: Map<string, Snippet>;
   groups: Map<string, Group>;
-  tags: Map<string, Tag>;
 
-  // Selection / filtering
+  // Selection (tags and the tag filter live in tagStore / tagFilterStore)
   selectedSnippetIds: Set<string>;
-  activeTagFilters: Set<string>;
 
   // Undo/redo
   past: Array<{ snippets: Map<string, Snippet>; groups: Map<string, Group> }>;
@@ -81,13 +80,12 @@ interface CanvasState {
   deleteGroup: (id: string) => Promise<void>;
   moveGroup: (groupId: string, dx: number, dy: number) => void;
 
-  // Tags
-  createTag: (name: string, color: string) => Promise<string | null>;
-  updateTag: (id: string, data: { name?: string; color?: string }) => Promise<void>;
-  deleteTag: (id: string) => Promise<void>;
-  toggleTagFilter: (id: string) => void;
-  addTagToSnippet: (snippetId: string, tagId: string) => Promise<void>;
-  removeTagFromSnippet: (snippetId: string, tagId: string) => Promise<void>;
+  /**
+   * Rewrite the tags embedded in snippets (link, unlink, rename, recolor, delete), in the live map and
+   * in every undo/redo snapshot, so undo never resurrects a tag state the server no longer has.
+   * No undo entry: tag links are not part of the local history.
+   */
+  updateEmbeddedTags: (update: (snippets: SnippetMap) => SnippetMap) => void;
 
   // Undo/redo
   pushUndoState: () => void;
@@ -106,9 +104,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasViewSize: null,
   snippets: new Map(),
   groups: new Map(),
-  tags: new Map(),
   selectedSnippetIds: new Set(),
-  activeTagFilters: new Set(),
   snippetScales: new Map(),
   past: [],
   future: [],
@@ -123,15 +119,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     data.snippets.forEach((s) => snippets.set(s.id, s));
     const groups = new Map<string, Group>();
     data.groups.forEach((g) => groups.set(g.id, g));
-    const tags = new Map<string, Tag>();
-    data.tags.forEach((t) => tags.set(t.id, t));
     set({
       canvasId: data.id,
       canvasTitle: data.title,
       viewport: data.viewport_state || { x: 0, y: 0, zoom: 1 },
       snippets,
       groups,
-      tags,
       selectedSnippetIds: new Set(),
       past: [],
       future: [],
@@ -320,80 +313,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ groups: nextGroups, snippets: nextSnippets });
   },
 
-  createTag: async (name, color) => {
-    const { canvasId, tags } = get();
-    if (!canvasId) return null;
-    const res = await tagApi.create(canvasId, name, color);
-    const tag: Tag = res.data;
-    const next = new Map(tags);
-    next.set(tag.id, tag);
-    set({ tags: next });
-    return tag.id;
-  },
-
-  updateTag: async (id, data) => {
-    const res = await tagApi.update(id, data);
-    const updated = res.data;
-    const { tags } = get();
-    const next = new Map(tags);
-    next.set(id, updated);
-    // Also update the tag in any snippets that reference it
-    const { snippets } = get();
-    const nextSnippets = new Map(snippets);
-    let changed = false;
-    for (const [sid, snippet] of nextSnippets) {
-      const idx = snippet.tags.findIndex((t) => t.id === id);
-      if (idx >= 0) {
-        const newTags = [...snippet.tags];
-        newTags[idx] = updated;
-        nextSnippets.set(sid, { ...snippet, tags: newTags });
-        changed = true;
-      }
-    }
-    set({ tags: next, ...(changed ? { snippets: nextSnippets } : {}) });
-  },
-
-  deleteTag: async (id) => {
-    const { tags, snippets, activeTagFilters } = get();
-    await tagApi.delete(id);
-    const nextTags = new Map(tags);
-    nextTags.delete(id);
-    // Remove from all snippets' tag arrays
-    const nextSnippets = new Map(snippets);
-    let changed = false;
-    for (const [sid, snippet] of nextSnippets) {
-      if (snippet.tags.some((t) => t.id === id)) {
-        nextSnippets.set(sid, { ...snippet, tags: snippet.tags.filter((t) => t.id !== id) });
-        changed = true;
-      }
-    }
-    // Remove from active filters
-    const nextFilters = new Set(activeTagFilters);
-    nextFilters.delete(id);
-    set({ tags: nextTags, activeTagFilters: nextFilters, ...(changed ? { snippets: nextSnippets } : {}) });
-  },
-
-  toggleTagFilter: (id) => {
-    const { activeTagFilters } = get();
-    const next = new Set(activeTagFilters);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
-    set({ activeTagFilters: next });
-  },
-
-  addTagToSnippet: async (snippetId, tagId) => {
-    await tagApi.addToSnippet(snippetId, tagId);
-    const { canvasId } = get();
-    if (canvasId) await get().loadCanvas(canvasId);
-  },
-
-  removeTagFromSnippet: async (snippetId, tagId) => {
-    await tagApi.removeFromSnippet(snippetId, tagId);
-    const { canvasId } = get();
-    if (canvasId) await get().loadCanvas(canvasId);
+  updateEmbeddedTags: (update) => {
+    const { snippets, past, future } = get();
+    const next = update(snippets);
+    const patchSnapshot = (snap: { snippets: Map<string, Snippet>; groups: Map<string, Group> }) => {
+      const patched = update(snap.snippets);
+      return patched === snap.snippets ? snap : { ...snap, snippets: new Map(patched) };
+    };
+    set({
+      ...(next !== snippets ? { snippets: new Map(next) } : {}),
+      past: past.map(patchSnapshot),
+      future: future.map(patchSnapshot),
+    });
   },
 
   pushUndoState: () => {

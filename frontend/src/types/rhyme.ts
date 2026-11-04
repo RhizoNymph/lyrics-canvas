@@ -4,6 +4,7 @@
  * pydantic models in backend/app/schemas/rhyme.py.
  */
 import type { GridLine } from './index';
+import type { TagExprError } from '@/lib/tagExpr/errors';
 
 export type Stress = 0 | 1 | 2;
 export type RhymeK = 1 | 2 | 3 | 4;
@@ -136,6 +137,11 @@ export interface RhymeSuggestRequest {
   offset: number;
   weights: ScoreWeights | null;
   dialect: DialectMap | null;
+  /**
+   * Normalized tag expression restricting the notes source to matching snippets. Omitted when the
+   * sidebar's filter is empty; never sent when it does not parse.
+   */
+  tag_filter?: string;
 }
 
 export interface RhymeSuggestResponse {
@@ -151,6 +157,7 @@ export type RhymeErrorKind =
   | 'network'        // no response (offline, timeout, CORS)
   | 'not_found'      // 404: canvas not owned / missing
   | 'invalid_request' // 422: bad k, stress string, empty anchors
+  | 'invalid_tag_filter' // the tag filter does not parse: blocked locally, or 422 invalid_tag_expression
   | 'server'         // 5xx or any other HTTP failure
   | 'unknown';       // non-HTTP failure
 
@@ -161,12 +168,21 @@ export class RhymeError extends Error {
   readonly kind: RhymeErrorKind;
   readonly operation: RhymeOperation;
   readonly status: number | null;
+  /** Where the tag filter fails to parse; set only for `invalid_tag_filter`. */
+  readonly expressionError: TagExprError | null;
 
-  constructor(kind: RhymeErrorKind, operation: RhymeOperation, message: string, status: number | null = null) {
+  constructor(
+    kind: RhymeErrorKind,
+    operation: RhymeOperation,
+    message: string,
+    status: number | null = null,
+    expressionError: TagExprError | null = null,
+  ) {
     super(message);
     this.name = 'RhymeError';
     this.kind = kind;
     this.operation = operation;
     this.status = status;
+    this.expressionError = expressionError;
   }
 }

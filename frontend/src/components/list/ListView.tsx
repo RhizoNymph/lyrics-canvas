@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useTagFilterStore } from '@/stores/tagFilterStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useVoiceStore } from '@/stores/voiceStore';
 import { visibleSnippets } from '@/lib/canvas';
@@ -10,13 +11,13 @@ import ListRow from './ListRow';
 import { useFrozenOrder } from './useFrozenOrder';
 
 /**
- * List mode: the canvas's snippets (same tag filter as the canvas) as a vertical list, last content
+ * List mode: the canvas's snippets (same tag expression filter as the canvas) as a vertical list, last content
  * edit first. Rows share the canvas selection, open the inline editor in place, and use the canvas
  * context menu; merge / delete / undo go through the same store actions and page shortcuts.
  */
 export default function ListView() {
   const snippets = useCanvasStore((s) => s.snippets);
-  const activeTagFilters = useCanvasStore((s) => s.activeTagFilters);
+  const tagFilter = useTagFilterStore((s) => s.filter.applied);
   const selectedSnippetIds = useCanvasStore((s) => s.selectedSnippetIds);
   const setSelection = useCanvasStore((s) => s.setSelection);
   const clearSelection = useCanvasStore((s) => s.clearSelection);
@@ -29,8 +30,8 @@ export default function ListView() {
   const clearReveal = useVoiceStore((s) => s.clearReveal);
 
   const sortedIds = useMemo(
-    () => sortForList(visibleSnippets(snippets, activeTagFilters)).map((s) => s.id),
-    [snippets, activeTagFilters],
+    () => sortForList(visibleSnippets(snippets, tagFilter)).map((s) => s.id),
+    [snippets, tagFilter],
   );
   const order = useFrozenOrder(sortedIds, editingSnippetId !== null);
 
@@ -78,7 +79,7 @@ export default function ListView() {
     if (e.target === e.currentTarget && editingSnippetId === null) clearSelection();
   };
 
-  const filtered = activeTagFilters.size > 0;
+  const filtered = tagFilter !== null;
 
   return (
     <div
@@ -93,7 +94,7 @@ export default function ListView() {
       <div onClick={onBackgroundClick} style={{ maxWidth: 960, margin: '0 auto' }}>
         {order.length === 0 && (
           <div style={{ color: '#6a6a8a', fontSize: 13, textAlign: 'center', marginTop: 48 }}>
-            {filtered ? 'No snippets carry the active tags.' : 'No snippets yet. Switch to the canvas and double-click to add one.'}
+            {filtered ? 'No snippets match the tag filter.' : 'No snippets yet. Switch to the canvas and double-click to add one.'}
           </div>
         )}
         {order.map((id) => {

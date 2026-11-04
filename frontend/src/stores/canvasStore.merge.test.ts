@@ -41,7 +41,6 @@ beforeEach(() => {
   useCanvasStore.setState({
     canvasId: 'c1',
     snippets: new Map([top, bottom, right, other].map((s) => [s.id, s])),
-    tags: new Map([tag('t1'), tag('t2')].map((t) => [t.id, t])),
     selectedSnippetIds: new Set(['bottom', 'top']),
     past: [],
     future: [],

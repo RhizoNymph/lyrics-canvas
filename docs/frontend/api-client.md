@@ -68,15 +68,30 @@ every status resolves.
 | `update(id, data)` | PUT `/api/groups/{id}` | JSON body |
 | `delete(id)` | DELETE `/api/groups/{id}` | - |
 
-#### tagApi
+#### tagApi (user-wide tags)
 
 | Method | Path | Body/Params |
 |--------|------|-------------|
-| `create(canvasId, name, color)` | POST `/api/canvases/{canvasId}/tags` | `{ name, color }` |
-| `update(id, data)` | PUT `/api/tags/{id}` | `{ name?, color? }` |
+| `list()` | GET `/api/tags` | -> `Tag[]` sorted by lower(name) |
+| `create(name, color?)` | POST `/api/tags` | `{ name, color? }` (server default `#6366f1`) -> `Tag` |
+| `update(id, data)` | PUT `/api/tags/{id}` | `{ name?, color? }` -> `Tag`; a rename rewrites the user's presets server-side |
 | `delete(id)` | DELETE `/api/tags/{id}` | - |
 | `addToSnippet(snippetId, tagId)` | POST `/api/snippets/{snippetId}/tags?tag_id={tagId}` | Query param |
 | `removeFromSnippet(snippetId, tagId)` | DELETE `/api/snippets/{snippetId}/tags/{tagId}` | - |
+
+#### tagPresetApi (saved filter expressions)
+
+| Method | Path | Body/Params |
+|--------|------|-------------|
+| `list()` | GET `/api/tag-presets` | -> `TagPreset[]` |
+| `create(name, expression)` | POST `/api/tag-presets` | `{ name, expression }` (client sends the normalized form) |
+| `update(id, data)` | PUT `/api/tag-presets/{id}` | `{ name?, expression? }` |
+| `delete(id)` | DELETE `/api/tag-presets/{id}` | - |
+
+Errors map to `TagApiError` (`lib/tags/errors.ts`): `tag_name_taken`, `tag_not_found`,
+`preset_name_taken`, `preset_not_found`, `invalid_tag_expression` (with `expressionError`),
+`empty_preset`, `invalid_tag_name`, `invalid_color`, `invalid_preset_name`, else `not_found`,
+`validation`, `network`, `server`, `http`.
 
 #### nlpApi
 
@@ -162,7 +177,7 @@ interface Snippet {
   height: number;
   z_index: number;
   group_id: string | null;
-  tags: Tag[];
+  tags: SnippetTag[];
   created_at: string;
   updated_at: string;
   content_updated_at: string; // bumped on text/type/grid changes only; list-mode sort key
@@ -178,11 +193,26 @@ interface Group {
   created_at: string;
 }
 
-interface Tag {
+interface Tag {            // user-wide, GET /api/tags
   id: string;
-  canvas_id: string;
+  name: string;
+  color: string;           // #rrggbb
+  snippet_count: number;
+  created_at: string;
+}
+
+interface SnippetTag {     // embedded in snippets
+  id: string;
   name: string;
   color: string;
+}
+
+interface TagPreset {
+  id: string;
+  name: string;
+  expression: string;      // normalized, non-empty
+  created_at: string;
+  updated_at: string;
 }
 
 interface Canvas {
@@ -199,7 +229,6 @@ interface Canvas {
 interface CanvasDetail extends Canvas {
   snippets: Snippet[];
   groups: Group[];
-  tags: Tag[];
 }
 
 interface User {

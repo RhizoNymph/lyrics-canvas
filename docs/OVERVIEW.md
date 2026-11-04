@@ -48,7 +48,7 @@ A **canvas** is a user's workspace. Each canvas contains **snippets** — rectan
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)).
 
 ### Groups & Tags
-**Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases, names unique ignoring case) that can be attached to snippets and used as visibility filters. Filters are **tag expressions** (`love & !draft`, `type:hook | night`; `!` > `&` > `|`, juxtaposition is AND) that can be saved server-side as named presets, and the same expressions can restrict the rhyme sidebar's notes source; see [tag_expressions.md](./features/tag_expressions.md). Tags are assigned via a right-click context menu on snippets, which also supports inline tag creation (auto-assigned to the snippet), editing (name and color), and snippet deletion. Assigned tags appear as colored pill labels in the snippet header.
+**Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases) attached to snippets. On web they are assigned from the right-click context menu's tag picker: a searchable checklist that links and unlinks immediately (on the whole multi-selection when the menu is opened on one of its members, with a mixed state), creates a tag from the search text, and edits (name, color) or deletes tags. Assigned tags appear as colored pill labels in the snippet header. Snippets are filtered with a **tag expression** (`love & !draft | type:chorus`; `!` > `&` > `|`, juxtaposition is AND, `type:` addresses the snippet type) typed into the filter bar under the toolbar, with autocomplete at the caret and tag pills that insert at the caret. An invalid expression keeps the last valid filter applied. The filter text is remembered per canvas per browser. Expressions can be saved as named **presets** (server-side, per user, shared with Android); renaming a tag rewrites the user's presets. The rhyme sidebar's "Only my lines matching" restricts the notes source with the same kind of expression. See [tag_expressions.md](./features/tag_expressions.md) and [web_tag_expressions.md](./features/web_tag_expressions.md).
 
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
@@ -62,9 +62,10 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Zoom**: Ctrl/Cmd+Wheel (1.1x steps), with per-snippet scaling (0.3x-4x)
 - **Select**: Click (Shift for multi-select)
 - **Edit**: Double-click a snippet to open the text/type editor
-- **Tag Assignment**: Right-click a snippet to open context menu for assigning/editing tags and deleting snippets
+- **Tag Assignment**: Right-click a snippet to open the context menu: tag picker (search, toggle, create, edit, delete; applies to the multi-selection), merge, delete
+- **Tag filter**: The bar under the toolbar takes a tag expression with autocomplete, tag pills that insert at the caret, presets (apply, save, rename, overwrite, delete) and clear; it filters both the canvas and list mode; see [web_tag_expressions.md](./features/web_tag_expressions.md)
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
-- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the active tag filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
 - **Voice capture (web)**: The toolbar `Record` button, the `Rec` button in the open editor, or Alt+Shift+R opens a full-screen recorder. A tap or Space/Enter starts the next line, a double tap stops, and auto-stop after N seconds of silence is optional. The take is uploaded and transcribed server-side. It becomes a new snippet at the viewport centre, or is appended to the snippet open in the editor (whose pending edits are saved first). The audio is kept and can be played or deleted from the editor's Recordings section. Needs HTTPS. See [web_voice_capture.md](./features/web_voice_capture.md) and the cross-cutting [voice_capture.md](./features/voice_capture.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
@@ -107,6 +108,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
+| [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop), upload to voice-takes, editor recordings list |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -117,7 +119,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Canvas Rendering](./frontend/canvas-rendering.md) | Pixi.js viewport, snippet cards, grid background, group containers |
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing |
 | [Sidebars](./frontend/sidebars.md) | Rhyme sidebar and similarity analysis panel |
-| [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag filter pills |
+| [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag expression filter bar |
 | [Modals](./frontend/modals.md) | Search and export dialogs |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor |
 | [State Management](./frontend/state-management.md) | Zustand stores (auth, canvas, UI) |
@@ -218,6 +220,23 @@ All services hot-reload via bind-mounted source volumes.
 
 ```yaml
 Features Index:
+  web_tag_expressions:
+    description: Web client of user-wide tags and tag filter expressions. A typed TypeScript implementation of the expression language (lexer, parser, discriminated-union AST, normalized format, evaluate, rename; code point positions) passing spec/tag_expression_vectors.json read from the repo root, plus caret context, autocomplete (tag names, type values, and/or/not where they fit) and tag insertion at the caret. Tags load from GET /api/tags (tagStore), are created/renamed/recolored/deleted via /api/tags, and kept in step with the tags embedded in loaded snippets (live and undo snapshots); a rename refetches presets and renames the tag in the open filters. The context-menu tag picker searches, links/unlinks immediately (whole multi-selection, mixed state), creates and edits/deletes tags. The canvas filter bar (canvas and list view) validates live with a marker at the error position, keeps the last valid filter applied while the text is invalid, inserts tags from pills at the caret, applies/saves/renames/overwrites/deletes presets (/api/tag-presets) and persists the text per canvas in localStorage. The rhyme sidebar's "Only my lines matching" sends tag_filter (normalized) and blocks the request locally when invalid. Typed TagApiError for every new server code.
+    entry_points:
+      - frontend/src/lib/tagExpr/
+      - frontend/src/lib/tags/
+      - frontend/src/lib/tagFilter/
+      - frontend/src/stores/tagStore.ts
+      - frontend/src/stores/tagFilterStore.ts
+      - frontend/src/components/tags/ (TagExpressionInput, PresetPicker, TagPicker)
+      - frontend/src/components/toolbar/TagExpressionBar.tsx
+      - frontend/src/components/rhyme/NotesTagFilter.tsx
+      - frontend/src/components/canvas/SnippetContextMenu.tsx
+      - frontend/src/lib/canvas/visibility.ts
+      - frontend/src/api/client.ts (tagApi, tagPresetApi)
+      - spec/tag_expression_vectors.json
+    depends_on: [tag_expressions, list_mode, rhyme_view, canvas_rendering, typed_api]
+    doc: docs/features/web_tag_expressions.md
   rhyme_view:
     description: Select a snippet (whole last line, or a word range of a line picked on its sidebar chip) or type a phrase; a sidebar lists engine-scored rhyme and near-rhyme candidates that fit the slot, each materializable into a snippet on the canvas.
     entry_points:

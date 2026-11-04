@@ -1,4 +1,4 @@
-import type { GridCell, GridLine, Snippet, Tag } from '@/types';
+import type { GridCell, GridLine, Snippet, SnippetTag } from '@/types';
 
 /** Cells for a line of text: one syllable per word, "." is a rest. */
 export function cellsFor(text: string): GridCell[] {
@@ -16,8 +16,8 @@ export function line(text: string, cellText = text): GridLine {
   return { cells, syllable_count: cells.filter((c) => !c.rest).length, raw_text: text };
 }
 
-export function tag(id: string): Tag {
-  return { id, canvas_id: 'c1', name: id, color: '#000' };
+export function tag(id: string, name: string = id): SnippetTag {
+  return { id, name, color: '#000' };
 }
 
 interface SnippetOverrides extends Partial<Omit<Snippet, 'id' | 'raw_text'>> {}
