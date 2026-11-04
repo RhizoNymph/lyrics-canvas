@@ -15,3 +15,7 @@ data class CanvasRoute(val canvasId: String)
 /** The grid editor for one snippet of the canvas below it on the back stack. */
 @Serializable
 data class EditorRoute(val canvasId: String, val snippetId: String)
+
+/** The word bank, opened from the canvas below it on the back stack (drafts become snippets there). */
+@Serializable
+data class WordBankRoute(val canvasId: String)

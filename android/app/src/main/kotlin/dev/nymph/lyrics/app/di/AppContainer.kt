@@ -19,6 +19,10 @@ import dev.nymph.lyrics.data.repository.HttpTagRepository
 import dev.nymph.lyrics.data.repository.TagPresetRepository
 import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
+import dev.nymph.lyrics.app.tags.FilterTextStore
+import dev.nymph.lyrics.app.wordbank.DataStoreWordBankFilterStore
+import dev.nymph.lyrics.data.repository.HttpWordBankRepository
+import dev.nymph.lyrics.data.repository.WordBankRepository
 import dev.nymph.lyrics.app.tags.TagFilterStore
 import dev.nymph.lyrics.data.status.AlertsEndpoint
 import dev.nymph.lyrics.data.status.HttpStatusRepository
@@ -81,6 +85,11 @@ class AppContainer(
 
     /** The canvas filter bar's text, per canvas, on this device. */
     val tagFilters: TagFilterStore = DataStoreTagFilterStore(appContext.tagFilterDataStore)
+
+    val wordBank: WordBankRepository = HttpWordBankRepository(api)
+
+    /** The word bank filter bar's text (user-wide on this device; key `word_bank_filter`). */
+    val wordBankFilter: FilterTextStore = DataStoreWordBankFilterStore(appContext.tagFilterDataStore)
 
     /**
      * Voice takes wait for transcription (the backend allows the STT service 120 s), and upload

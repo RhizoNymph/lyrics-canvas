@@ -27,6 +27,11 @@ import dev.nymph.lyrics.app.editor.GridEditorRoute
 import dev.nymph.lyrics.app.session.SessionState
 import dev.nymph.lyrics.app.tags.tagsViewModel
 import dev.nymph.lyrics.app.tags.ui.TagPickerSheet
+import dev.nymph.lyrics.app.wordbank.QuickAddToasts
+import dev.nymph.lyrics.app.wordbank.ui.WordBankScreen
+import dev.nymph.lyrics.app.wordbank.wordBankQuickAdd
+import dev.nymph.lyrics.app.wordbank.wordBankTagsViewModel
+import dev.nymph.lyrics.app.wordbank.wordBankViewModel
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import dev.nymph.lyrics.app.session.SessionViewModel
@@ -35,7 +40,7 @@ import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.SnippetId
 
 /**
- * Login / register -> canvas list -> canvas -> editor. The session (token store) decides the
+ * Login / register -> canvas list -> canvas -> editor / word bank. The session (token store) decides the
  * start destination and sends the user back to login whenever the token goes away (sign out or
  * a 401 anywhere).
  */
@@ -75,10 +80,27 @@ fun AppNavHost(container: AppContainer) {
                 canvasId = CanvasId(route.canvasId),
                 onBack = { nav.popBackStack() },
                 onOpenEditor = { id -> nav.navigate(EditorRoute(route.canvasId, id.value)) },
+                onOpenWordBank = { nav.navigate(WordBankRoute(route.canvasId)) },
             )
         }
         composable<EditorRoute> { entry -> EditorDestination(container, nav, entry) }
+        composable<WordBankRoute> { entry -> WordBankDestination(container, nav, entry) }
     }
+}
+
+/**
+ * The word bank shares the canvas entry's ViewModels: drafts are created on that canvas, and tag
+ * edits made here reach its tag controls. Its own ViewModels (list, filter, picker) live here.
+ */
+@Composable
+private fun WordBankDestination(container: AppContainer, nav: NavHostController, entry: NavBackStackEntry) {
+    val route = entry.toRoute<WordBankRoute>()
+    val canvasEntry = remember(entry) { nav.getBackStackEntry<CanvasRoute>() }
+    val canvas = canvasViewModel(container, CanvasId(route.canvasId), canvasEntry)
+    val canvasTags = tagsViewModel(container, CanvasId(route.canvasId), canvas, canvasEntry)
+    val bank = wordBankViewModel(container, canvas)
+    val bankTags = wordBankTagsViewModel(container, bank, canvasTags)
+    WordBankScreen(bank, bankTags, onBack = { if (nav.currentBackStackEntry?.id == entry.id) nav.popBackStack() })
 }
 
 /**
@@ -99,9 +121,12 @@ private fun EditorDestination(container: AppContainer, nav: NavHostController, e
         LaunchedEffect(entry) { close() }
         return
     }
+    val quickAdd = wordBankQuickAdd(container, canvasEntry)
+    QuickAddToasts(quickAdd)
     GridEditorRoute(
         container = container,
         snippet = snippet,
+        onAddToWordBank = quickAdd::add,
         onSaved = { saved ->
             canvas.replaceSnippet(saved)
             close()

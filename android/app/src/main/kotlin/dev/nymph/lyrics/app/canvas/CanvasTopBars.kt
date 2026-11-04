@@ -27,6 +27,8 @@ fun CanvasTopBar(
     onToggleRhymes: () -> Unit,
     /** Opens the voice recording modal; null hides the button (not loaded yet). */
     onRecord: (() -> Unit)? = null,
+    /** Opens the word bank screen; null hides the button. */
+    onWordBank: (() -> Unit)? = null,
 ) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -41,6 +43,7 @@ fun CanvasTopBar(
                 null -> Unit
             }
             if (onRecord != null) TextButton(onClick = onRecord) { Text("Record") }
+            if (onWordBank != null) TextButton(onClick = onWordBank) { Text("Words") }
             TextButton(onClick = onToggleRhymes) { Text(if (rhymesOpen) "Hide rhymes" else "Rhymes") }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Sidebar),
