@@ -96,6 +96,12 @@ spec:
             {{- end }}
             - name: HF_HOME
               value: /cache/huggingface
+            - name: RELATED_WORDS_WARMUP
+              value: {{ $b.relatedWords.warmup | quote }}
+            {{- with $b.relatedWords.cacheDir }}
+            - name: RELATED_WORDS_CACHE_DIR
+              value: {{ . | quote }}
+            {{- end }}
             {{- if .Values.stt.enabled }}
             - name: STT_URL
               value: {{ include "lyrics-canvas.stt.url" . | quote }}
