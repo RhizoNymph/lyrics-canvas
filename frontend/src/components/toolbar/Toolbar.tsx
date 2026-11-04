@@ -2,13 +2,14 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { nlpApi, exportApi } from '@/api/client';
 import RecordButton from '@/components/voice/RecordButton';
+import { WORD_BANK_SHORTCUT_LABEL } from '@/lib/wordBank/keys';
 
 export default function Toolbar() {
   const {
     canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
     selectedSnippetIds, mergeSelected, mergeError, clearMergeError,
   } = useCanvasStore();
-  const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, rhymeSidebarOpen, viewMode, toggleViewMode } = useUIStore();
+  const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, toggleWordBank, rightPanel, viewMode, toggleViewMode } = useUIStore();
   const listMode = viewMode === 'list';
   const canMerge = selectedSnippetIds.size >= 2;
 
@@ -111,10 +112,19 @@ export default function Toolbar() {
       </button>
       <button
         onClick={toggleRhymeSidebar}
-        style={rhymeSidebarOpen ? activeBtnStyle : btnStyle}
+        style={rightPanel === 'rhymes' ? activeBtnStyle : btnStyle}
+        aria-pressed={rightPanel === 'rhymes'}
         title="Rhyme candidates for the selected snippet or a typed phrase"
       >
         Rhymes
+      </button>
+      <button
+        onClick={toggleWordBank}
+        style={rightPanel === 'words' ? activeBtnStyle : btnStyle}
+        aria-pressed={rightPanel === 'words'}
+        title={`Word bank: words and phrases to use later (${WORD_BANK_SHORTCUT_LABEL})`}
+      >
+        Words
       </button>
       {!listMode && (
         <button onClick={handleTSNE} style={tsneMode ? activeBtnStyle : btnStyle}>

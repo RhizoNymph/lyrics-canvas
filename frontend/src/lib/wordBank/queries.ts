@@ -67,3 +67,10 @@ export async function searchRelated(q: string, deps: RelatedSearchDeps): Promise
     }
   }
 }
+
+/** "Rhymes with": a typed text wins; else exactly one selected word; else nothing to rank against. */
+export function resolveRhymeAnchor(typed: string, selected: ReadonlySet<string>): RhymeAnchorInput | null {
+  if (typed.trim() !== '') return { kind: 'text', text: typed.trim() };
+  if (selected.size === 1) return { kind: 'word', wordId: [...selected][0] };
+  return null;
+}

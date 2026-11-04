@@ -108,3 +108,13 @@ describe('searchRelated', () => {
     if (!r.ok && r.error !== 'cancelled') expect(r.error).toBeInstanceOf(WordBankApiError);
   });
 });
+
+describe('resolveRhymeAnchor', () => {
+  it('prefers typed text, else exactly one selected word', async () => {
+    const { resolveRhymeAnchor } = await import('./queries');
+    expect(resolveRhymeAnchor(' night ', new Set(['a']))).toEqual({ kind: 'text', text: 'night' });
+    expect(resolveRhymeAnchor('', new Set(['a']))).toEqual({ kind: 'word', wordId: 'a' });
+    expect(resolveRhymeAnchor('  ', new Set(['a', 'b']))).toBeNull();
+    expect(resolveRhymeAnchor('', new Set())).toBeNull();
+  });
+});

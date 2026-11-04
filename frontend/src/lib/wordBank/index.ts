@@ -17,8 +17,9 @@ export { EMPTY_SELECTION, selectionReducer, clickKind } from './selection';
 export type { WordSelection, SelectionAction, ClickKind } from './selection';
 export {
   DEFAULT_FAMILY_MIN_SCORE, DEFAULT_RHYME_MIN_SCORE, MAX_RELATED_TRIES, tagFilterParam, familiesBody, rhymesBody,
-  checkRelatedQuery, searchRelated,
+  checkRelatedQuery, searchRelated, resolveRhymeAnchor,
 } from './queries';
 export type { RelatedQueryCheck, RelatedSearchDeps, RelatedSearchResult } from './queries';
 export { DEFAULT_DRAFT_TYPE, draftFromWords, isDraftCreatable, addSummary, selectedFieldText } from './draft';
 export type { SnippetDraft } from './draft';
+export { WORD_BANK_SHORTCUT_LABEL, ADD_SELECTION_SHORTCUT_LABEL, isWordBankShortcut, isAddSelectionShortcut } from './keys';

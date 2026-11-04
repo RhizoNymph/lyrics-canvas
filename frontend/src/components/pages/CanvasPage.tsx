@@ -21,7 +21,7 @@ export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { loadCanvas, undo, redo, deleteSnippet, mergeSelected } = useCanvasStore();
-  const { setSearchModalOpen, rhymeSidebarOpen, viewMode, toggleViewMode } = useUIStore();
+  const { setSearchModalOpen, rightPanel, viewMode, toggleViewMode } = useUIStore();
   useRhymeQuery();
 
   // Tags and presets are user-wide: (re)load them whenever the page mounts.
@@ -98,7 +98,7 @@ export default function CanvasPage() {
           {viewMode === 'list' ? <ListView /> : <CanvasViewport />}
           <SimilarityPanel />
         </div>
-        {rhymeSidebarOpen && <RhymeSidebar />}
+        {rightPanel === 'rhymes' && <RhymeSidebar />}
       </div>
       <SearchModal />
       <ExportDialog />
