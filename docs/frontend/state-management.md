@@ -116,7 +116,9 @@ User-wide tags and presets, sorted by lower(name). `load()` fetches `GET /api/ta
 `GET /api/tag-presets` in parallel (`loadState`: idle / loading / ready / failed). `createTag`,
 `updateTag` (a rename also refetches presets and renames the tag in the canvas and rhyme filters),
 `deleteTag`, `applyToggle(plan)` (link/unlink on many snippets in parallel, keeping partial successes),
-`createPreset`, `updatePreset`, `deletePreset`. All return `TagResult` with a typed `TagApiError`; none
+`createPreset`, `updatePreset`, `deletePreset`, `forgetTag(id)` (drop a tag locally from snippets, word bank
+words and the add box chips) and `adjustWordCount(id, delta)`. Updates and deletes also patch the word bank
+(`wordBankStore.patchTag` / `removeTag`, and a rename renames the tag in the word bank filter). All return `TagResult` with a typed `TagApiError`; none
 throw. See [web_tag_expressions.md](../features/web_tag_expressions.md).
 
 ### tagFilterStore (`src/stores/tagFilterStore.ts`)
@@ -149,7 +151,7 @@ Lightweight store for UI panel visibility and editing state.
 
 | Field | Type | Initial |
 |-------|------|---------|
-| `rhymeSidebarOpen` | boolean | false |
+| `rightPanel` | `'none' \| 'rhymes' \| 'words'` | `'none'` (at most one right sidebar) |
 | `similarityPanelOpen` | boolean | false |
 | `searchModalOpen` | boolean | false |
 | `exportDialogOpen` | boolean | false |
@@ -162,7 +164,8 @@ Lightweight store for UI panel visibility and editing state.
 
 | Action | Side Effect |
 |--------|-------------|
-| `toggleRhymeSidebar()` | Toggle boolean; `CanvasPage` mounts `RhymeSidebar` while true, which runs `rhymeStore.enter()` / `exit()` |
+| `toggleRhymeSidebar()` | `rightPanel` 'rhymes' <-> 'none' (closes the word bank); `CanvasPage` mounts `RhymeSidebar` while it is 'rhymes', which runs `rhymeStore.enter()` / `exit()` |
+| `toggleWordBank()` | `rightPanel` 'words' <-> 'none' (closes the rhyme sidebar); `CanvasPage` mounts `WordBankPanel` |
 | `toggleSimilarityPanel()` | Toggle boolean |
 | `setSearchModalOpen(open)` | Set directly |
 | `setExportDialogOpen(open)` | Set directly |
@@ -173,6 +176,33 @@ Lightweight store for UI panel visibility and editing state.
 | `setSimilarityTarget(id)` | **Also opens similarity panel** |
 | `setContextMenu(menu)` | Set context menu state (snippet ID + screen position) |
 | `closeContextMenu()` | Set contextMenu to null |
+
+---
+
+## wordBankStore
+
+**File:** `src/stores/wordBankStore.ts`
+**Hook:** `useWordBankStore`
+
+The user's word bank, loaded whole (`GET /api/word-bank`, newest first) and filtered locally. State:
+`words`, `loadState` / `loadError`, `filter: FilterState` (persisted at localStorage
+`lyrics-canvas.wordBankFilter`, restored on the first `open()`), `selection: {ids, anchor}` (always a
+subset of the shown words), `addTagIds`, `revision` (bumped on every word or word-tag change, so the rhyme
+views refetch) and `notice` (the toast). Actions: `open`, `load`, `dispatchFilter`, `select`,
+`setAddTagIds`, `addWords`, `addFromText`, `renameWord`, `deleteWords`, `setTag`, `toggleTagOnSelection`,
+`makeSnippet`, `dismissNotice`, and `patchTag` / `removeTag` (called by `tagStore`). Every action returns
+`WordBankResult` with a typed `WordBankApiError` and never throws. `selectVisibleWords(state)` gives the
+filtered list.
+
+## wordBankQueryStore
+
+**File:** `src/stores/wordBankQueryStore.ts`
+
+Families (`familyMinScore`, default 0.8), rhymes with (`rhymeMinScore`, default 0.5, `rhymeText`) and the
+related search (`related`: idle / invalid / loading / warming / ready / failed). Each view drops stale
+responses by sequence number; the related search retries `related_words_warming` after Retry-After, at most
+10 requests, and `cancelRelated` (or a new search) stops the wait. `addRelatedWord(text)` adds with the add
+box tags and marks the result "in bank". See [web_word_bank.md](../features/web_word_bank.md).
 
 ---
 

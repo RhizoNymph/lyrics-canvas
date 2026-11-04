@@ -50,6 +50,9 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases) attached to snippets. On web they are assigned from the right-click context menu's tag picker: a searchable checklist that links and unlinks immediately (on the whole multi-selection when the menu is opened on one of its members, with a mixed state), creates a tag from the search text, and edits (name, color) or deletes tags. Assigned tags appear as colored pill labels in the snippet header. Snippets are filtered with a **tag expression** (`love & !draft | type:chorus`; `!` > `&` > `|`, juxtaposition is AND, `type:` addresses the snippet type) typed into the filter bar under the toolbar, with autocomplete at the caret and tag pills that insert at the caret. An invalid expression keeps the last valid filter applied. The filter text is remembered per canvas per browser. Expressions can be saved as named **presets** (server-side, per user, shared with Android); renaming a tag rewrites the user's presets. The rhyme sidebar's "Only my lines matching" restricts the notes source with the same kind of expression. Android has the same tag picker (from the selection bar and the editor), filter bar, presets and rhyme filter. See [tag_expressions.md](./features/tag_expressions.md), [web_tag_expressions.md](./features/web_tag_expressions.md) and [android_tag_expressions.md](./features/android_tag_expressions.md).
 
+### Word Bank
+A per-user bank of words and short phrases to use later, tagged with the same user-wide tags and filtered with the same tag expressions and presets; it finds rhyme families and "rhymes with" matches inside the bank, searches related words by meaning, and turns a selection into a new snippet. See [word_bank.md](./features/word_bank.md). On web it is a right sidebar (toolbar `Words`, Ctrl/Cmd+Shift+W or Alt+Shift+W; exclusive with the rhyme sidebar) with an add box, the filterable multi-select list, Rhymes and Related tabs and a "Make snippet" draft, and words can be added from rhyme candidates ("+ bank") and from an editor text selection ("Add to word bank", Ctrl/Cmd+Shift+B); see [web_word_bank.md](./features/web_word_bank.md).
+
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
@@ -67,6 +70,7 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
 - **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
 - **Voice capture (web)**: The toolbar `Record` button, the `Rec` button in the open editor, or Alt+Shift+R opens a full-screen recorder. A tap or Space/Enter starts the next line, a double tap stops, and auto-stop after N seconds of silence is optional. The take is uploaded and transcribed server-side. It becomes a new snippet at the viewport centre, or is appended to the snippet open in the editor (whose pending edits are saved first). The audio is kept and can be played or deleted from the editor's Recordings section. Needs HTTPS. See [web_voice_capture.md](./features/web_voice_capture.md) and the cross-cutting [voice_capture.md](./features/voice_capture.md)
+- **Word bank (web)**: The toolbar `Words` toggle (Ctrl/Cmd+Shift+W, or Alt+Shift+W where the browser reserves the former) opens the word bank sidebar in place of the rhyme sidebar; see [web_word_bank.md](./features/web_word_bank.md)
 - **Undo/Redo**: 50-item snapshot history (Ctrl+Z / Ctrl+Shift+Z)
 - **Export**: Markdown, plain text, or PDF
 
@@ -110,6 +114,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
+| [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop), upload to voice-takes, editor recordings list |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -119,11 +124,11 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 |--------|-------|
 | [Canvas Rendering](./frontend/canvas-rendering.md) | Pixi.js viewport, snippet cards, grid background, group containers |
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing |
-| [Sidebars](./frontend/sidebars.md) | Rhyme sidebar and similarity analysis panel |
+| [Sidebars](./frontend/sidebars.md) | Rhyme sidebar, word bank panel and similarity analysis panel |
 | [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag expression filter bar |
 | [Modals](./frontend/modals.md) | Search and export dialogs |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor |
-| [State Management](./frontend/state-management.md) | Zustand stores (auth, canvas, UI) |
+| [State Management](./frontend/state-management.md) | Zustand stores (auth, canvas, UI, tags, word bank) |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces |
 
 ### Backend Modules
@@ -221,6 +226,23 @@ All services hot-reload via bind-mounted source volumes.
 
 ```yaml
 Features Index:
+  web_word_bank:
+    description: Web client of the word bank. Typed wire shapes and API (api/wordBank.ts) rejecting only with WordBankApiError (invalid_word with batch index, word_exists, word_not_found, too_many_words, related_words_warming with Retry-After, related_words_unavailable, plus tag codes). Client mirror of the word text rules (NFC, strip, collapse whitespace, 1-64 code points, at most 4 words, letters/apostrophes/hyphens/spaces, a letter) and the add box splitter (commas, newlines). wordBankStore loads the whole bank, filters it locally with the shared evaluator on a typeless subject (spec vectors v2), persists the filter at localStorage lyrics-canvas.wordBankFilter, keeps the selection within the shown words, adds batches with tags, renames, deletes, links/unlinks via POST /api/word-bank/tags, keeps word pills and Tag.word_count in step with tagStore, and creates a draft snippet at the viewport centre. wordBankQueryStore runs rhyme families (min score 0.8), rhymes with (one selected word or typed text, min score 0.5) and the related search (at most 10 tries after Retry-After). Right sidebar via the Words toggle / Ctrl/Cmd+Shift+W / Alt+Shift+W, exclusive with the rhyme sidebar; "+ bank" on rhyme candidates; editor context menu "Add to word bank" and Ctrl/Cmd+Shift+B. The canvas filter bar and the snippet tag picker are generalized into TagFilterBar and TagChecklist, shared with the panel.
+    entry_points:
+      - frontend/src/components/wordBank/
+      - frontend/src/stores/wordBankStore.ts
+      - frontend/src/stores/wordBankQueryStore.ts
+      - frontend/src/lib/wordBank/
+      - frontend/src/api/wordBank.ts
+      - frontend/src/types/wordBank.ts
+      - frontend/src/components/tags/TagFilterBar.tsx
+      - frontend/src/components/tags/TagChecklist.tsx
+      - frontend/src/components/rhyme/CandidateRow.tsx (+ bank)
+      - frontend/src/components/canvas/InlineGridEditor.tsx (Add to word bank)
+      - frontend/src/stores/uiStore.ts (rightPanel, toggleWordBank)
+      - spec/tag_expression_vectors.json
+    depends_on: [word_bank, web_tag_expressions, rhyme_view, web_voice_capture, typed_api]
+    doc: docs/features/web_word_bank.md
   web_tag_expressions:
     description: Web client of user-wide tags and tag filter expressions. A typed TypeScript implementation of the expression language (lexer, parser, discriminated-union AST, normalized format, evaluate, rename; code point positions) passing spec/tag_expression_vectors.json read from the repo root, plus caret context, autocomplete (tag names, type values, and/or/not where they fit) and tag insertion at the caret. Tags load from GET /api/tags (tagStore), are created/renamed/recolored/deleted via /api/tags, and kept in step with the tags embedded in loaded snippets (live and undo snapshots); a rename refetches presets and renames the tag in the open filters. The context-menu tag picker searches, links/unlinks immediately (whole multi-selection, mixed state), creates and edits/deletes tags. The canvas filter bar (canvas and list view) validates live with a marker at the error position, keeps the last valid filter applied while the text is invalid, inserts tags from pills at the caret, applies/saves/renames/overwrites/deletes presets (/api/tag-presets) and persists the text per canvas in localStorage. The rhyme sidebar's "Only my lines matching" sends tag_filter (normalized) and blocks the request locally when invalid. Typed TagApiError for every new server code.
     entry_points:

@@ -443,7 +443,7 @@ interface RhymeState {
 
 Interactions:
 
-- Toolbar button "Rhymes" toggles `uiStore.rhymeSidebarOpen`; the sidebar mounts, calls `enter()`, and
+- Toolbar button "Rhymes" toggles `uiStore.rightPanel` between 'rhymes' and 'none' (the word bank shares the slot); the sidebar mounts, calls `enter()`, and
   queries immediately when a snippet is selected or a phrase is typed.
 - Selection, typed anchor, chip, and parameter changes re-query after 150 ms; Enter in the search box queries now.
 - A chip's × removes that selected snippet from the anchors for this query (restored by + or by deselecting
