@@ -103,6 +103,24 @@ function batchIndex(data: unknown): number | null {
   return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : null;
 }
 
+function detailFor(
+  code: string | null,
+  response: { status: number; data: unknown; headers: unknown },
+  expressionError: TagExprError | null,
+): WordBankErrorDetail {
+  if (!isWordBankServerErrorCode(code) && !isTagServerErrorCode(code)) return { kind: fallbackKind(response.status) };
+  switch (code) {
+    case 'invalid_word':
+      return { kind: code, index: batchIndex(response.data) };
+    case 'related_words_warming':
+      return { kind: code, retryAfterSeconds: parseRetryAfter(headerValue(response.headers, 'Retry-After')) };
+    case 'invalid_tag_expression':
+      return { kind: code, expressionError };
+    default:
+      return { kind: code };
+  }
+}
+
 /** Map anything a word bank call threw into a WordBankApiError. */
 export function toWordBankApiError(err: unknown, operation: WordBankOperation): WordBankApiError {
   if (err instanceof WordBankApiError) return err;
@@ -111,15 +129,7 @@ export function toWordBankApiError(err: unknown, operation: WordBankOperation): 
     if (!response) return new WordBankApiError({ kind: 'network' }, operation, err.message || 'Network error');
     const parsed = parseServerDetail(response.data);
     const message = parsed.message ?? err.message ?? `HTTP ${response.status}`;
-    const code = parsed.code;
-    let detail: WordBankErrorDetail;
-    if (code === 'invalid_word') detail = { kind: 'invalid_word', index: batchIndex(response.data) };
-    else if (code === 'related_words_warming') {
-      detail = { kind: 'related_words_warming', retryAfterSeconds: parseRetryAfter(headerValue(response.headers, 'Retry-After')) };
-    } else if (code === 'invalid_tag_expression') detail = { kind: 'invalid_tag_expression', expressionError: parsed.expressionError };
-    else if (isWordBankServerErrorCode(code) || isTagServerErrorCode(code)) detail = { kind: code };
-    else detail = { kind: fallbackKind(response.status) };
-    return new WordBankApiError(detail, operation, message, response.status);
+    return new WordBankApiError(detailFor(parsed.code, response, parsed.expressionError), operation, message, response.status);
   }
   if (err instanceof Error) return new WordBankApiError({ kind: 'http' }, operation, err.message);
   return new WordBankApiError({ kind: 'http' }, operation, String(err));
