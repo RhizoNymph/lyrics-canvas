@@ -27,4 +27,3 @@ class Canvas(Base):
     owner = relationship("User", back_populates="canvases")
     snippets = relationship("Snippet", back_populates="canvas", cascade="all, delete-orphan")
     groups = relationship("Group", back_populates="canvas", cascade="all, delete-orphan")
-    tags = relationship("Tag", back_populates="canvas", cascade="all, delete-orphan")

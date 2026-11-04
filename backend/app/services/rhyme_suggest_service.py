@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.canvas import Canvas
-from app.models.snippet import Snippet
+from app.models.snippet import Snippet, SnippetType
 from app.schemas.phonetics import SnippetPhonetics
 from app.schemas.rhyme import (
     Anchor,
@@ -41,6 +41,7 @@ from app.services.phonetics.sources.notes import NotesSource
 from app.services.phonetics.types import Unit
 from app.services.phonetics.units import unit_from_text
 from app.services.phonetics_service import compute_snippet_phonetics, note_unit
+from app.services.tag_expr import Expr, SnippetFacts, matches, parse
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ class SnippetRecord:
     grid_data: dict | None
     phonetics: dict | None
     tag_ids: tuple[str, ...]
+    snippet_type: SnippetType = SnippetType.freestyle
+    tag_names: tuple[str, ...] = ()
 
 
 class SnippetRepository(Protocol):
@@ -92,6 +95,8 @@ def _record(snippet: Snippet) -> SnippetRecord:
         grid_data=snippet.grid_data,
         phonetics=snippet.phonetics,
         tag_ids=tuple(str(t.id) for t in (snippet.tags or [])),
+        snippet_type=snippet.snippet_type,
+        tag_names=tuple(t.name for t in (snippet.tags or [])),
     )
 
 
@@ -156,6 +161,11 @@ def snippet_phonetics(record: SnippetRecord) -> SnippetPhonetics:
     if record.phonetics is not None:
         return SnippetPhonetics.model_validate(record.phonetics)
     return compute_snippet_phonetics(record.raw_text, record.grid_data, None)
+
+
+def matches_filter(record: SnippetRecord, tag_filter: Expr | None) -> bool:
+    """True when the snippet's type and tag names match the expression (None matches all)."""
+    return matches(tag_filter, SnippetFacts.of(record.snippet_type, record.tag_names))
 
 
 def _source_rank(source: str) -> int:
@@ -371,6 +381,8 @@ async def suggest(
     dictionary: DictionaryFactory | None = None,
 ) -> RhymeSuggestResponse:
     started = time.perf_counter()
+    # an invalid filter is a request error before anything is looked up (TagExpressionError)
+    tag_filter = parse(req.tag_filter) if req.tag_filter else None
     if not await repo.canvas_owned(req.canvas_id, user_id):
         raise CanvasNotFoundError(f"canvas {req.canvas_id} not found")
     dialect = resolve_dialect(req)
@@ -386,7 +398,8 @@ async def suggest(
     records_by_id: dict[str, SnippetRecord] = {r.record.id: r.record for r in resolved if r.record is not None}
     sources: list[CandidateSource] = []
     if "notes" in req.sources:
-        units, by_id = note_units(await repo.user_snippets(user_id), dialect, anchor_lines)
+        records = [r for r in await repo.user_snippets(user_id) if matches_filter(r, tag_filter)]
+        units, by_id = note_units(records, dialect, anchor_lines)
         records_by_id.update(by_id)
         sources.append(NotesSource(units, dialect, weights))
     if "dictionary" in req.sources:
@@ -414,7 +427,8 @@ async def suggest(
         elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     logger.info(
-        "rhyme_suggest.done anchors=%d sources=%s k=%d total=%d returned=%d elapsed_ms=%.1f",
-        len(anchors), ",".join(req.sources), req.k, response.total, len(response.candidates), response.elapsed_ms,
+        "rhyme_suggest.done anchors=%d sources=%s k=%d tag_filter=%s total=%d returned=%d elapsed_ms=%.1f",
+        len(anchors), ",".join(req.sources), req.k, tag_filter is not None, response.total, len(response.candidates),
+        response.elapsed_ms,
     )
     return response

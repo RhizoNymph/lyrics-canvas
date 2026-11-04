@@ -8,7 +8,6 @@ from sqlalchemy.orm import selectinload
 from app.models.canvas import Canvas
 from app.models.snippet import Snippet
 from app.models.group import Group
-from app.models.tag import Tag
 
 
 async def create_canvas(db: AsyncSession, owner_id: str, title: str = "Untitled Canvas") -> Canvas:
@@ -30,7 +29,6 @@ async def get_canvas(db: AsyncSession, canvas_id: str, owner_id: str | None = No
     q = select(Canvas).options(
         selectinload(Canvas.snippets).selectinload(Snippet.tags),
         selectinload(Canvas.groups).selectinload(Group.snippets),
-        selectinload(Canvas.tags),
     ).where(Canvas.id == uuid.UUID(canvas_id))
     if owner_id:
         q = q.where(Canvas.owner_id == uuid.UUID(owner_id))
@@ -73,7 +71,6 @@ async def get_canvas_by_share_token(db: AsyncSession, token: str) -> Canvas | No
     q = select(Canvas).options(
         selectinload(Canvas.snippets).selectinload(Snippet.tags),
         selectinload(Canvas.groups).selectinload(Group.snippets),
-        selectinload(Canvas.tags),
     ).where(Canvas.share_token == token)
     result = await db.execute(q)
     return result.scalar_one_or_none()
