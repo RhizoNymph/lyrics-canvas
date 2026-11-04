@@ -30,6 +30,8 @@ export interface Tag {
   color: string;
   /** Snippets (across all canvases) carrying this tag. */
   snippet_count: number;
+  /** Word bank words carrying this tag. */
+  word_count: number;
   created_at: string;
 }
 

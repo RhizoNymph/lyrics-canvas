@@ -22,7 +22,7 @@ const api = vi.mocked(tagApi);
 const presetApi = vi.mocked(tagPresetApi);
 
 const T = (id: string, name: string, extra: Partial<Tag> = {}): Tag => ({
-  id, name, color: '#111111', snippet_count: 0, created_at: '2026-11-03T00:00:00Z', ...extra,
+  id, name, color: '#111111', snippet_count: 0, word_count: 0, created_at: '2026-11-03T00:00:00Z', ...extra,
 });
 const P = (id: string, name: string, expression: string): TagPreset => ({
   id, name, expression, created_at: '', updated_at: '',
