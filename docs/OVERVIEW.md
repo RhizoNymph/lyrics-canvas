@@ -50,6 +50,9 @@ Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases) attached to snippets. On web they are assigned from the right-click context menu's tag picker: a searchable checklist that links and unlinks immediately (on the whole multi-selection when the menu is opened on one of its members, with a mixed state), creates a tag from the search text, and edits (name, color) or deletes tags. Assigned tags appear as colored pill labels in the snippet header. Snippets are filtered with a **tag expression** (`love & !draft | type:chorus`; `!` > `&` > `|`, juxtaposition is AND, `type:` addresses the snippet type) typed into the filter bar under the toolbar, with autocomplete at the caret and tag pills that insert at the caret. An invalid expression keeps the last valid filter applied. The filter text is remembered per canvas per browser. Expressions can be saved as named **presets** (server-side, per user, shared with Android); renaming a tag rewrites the user's presets. The rhyme sidebar's "Only my lines matching" restricts the notes source with the same kind of expression. Android has the same tag picker (from the selection bar and the editor), filter bar, presets and rhyme filter. See [tag_expressions.md](./features/tag_expressions.md), [web_tag_expressions.md](./features/web_tag_expressions.md) and [android_tag_expressions.md](./features/android_tag_expressions.md).
 
+### Word Bank
+A per-user bank of words and short phrases to use later, tagged with the same user-wide tags and filtered with the same tag expressions and presets; see [word_bank.md](./features/word_bank.md). On Android a "Words" action on the canvas top bar opens a full-screen Word bank (add box, filtered multi-select list, rhyme families and rhymes-with, related-word search, and "Make snippet" drafts created on that canvas), with "+ bank" on rhyme candidates and "Add to word bank" on editor text selections ([android_word_bank.md](./features/android_word_bank.md)).
+
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
@@ -100,6 +103,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop), transcribed by the server into a new snippet or appended lines; recordings played back and deleted in the editor |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
+| [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
 | [Alerting](./features/alerting.md) | Optional PrometheusRule in the chart: pod readiness, restart loops, unavailable workloads, backup freshness |
@@ -509,4 +513,15 @@ Features Index:
       - spec/tag_expression_vectors.json
     depends_on: [tag_expressions, android_app, list_mode, rhyme_view]
     doc: docs/features/android_tag_expressions.md
+  android_word_bank:
+    description: Android client of the word bank. :core:logic word text rules (NFC, strip, whitespace collapse, 1-64 code points, <= 4 words, letters / apostrophes / hyphens / spaces, >= 1 letter) and the add splitter (commas / newlines, case-insensitive de-dup, 200 per batch); typeless tag evaluation (null type, vectors v2). DTOs and HttpWordBankRepository for every /api/word-bank route, UserTag.word_count, typed WordBankError for invalid_word (index), word_exists, word_not_found, too_many_words, related_words_warming (Retry-After), related_words_unavailable plus tag codes. Full-screen Word bank from the canvas top bar - filter bar and presets shared with the canvas (generalized TagControlsViewModel / TagTarget; own DataStore key word_bank_filter), add box with tag chips, "N words (M shown)", checkbox / long-press selection, inline rename, delete (confirm > 5), tag picker on the selection, Families (min score 0.8, select all per family, unmatched last) and Rhymes with (one selected word or typed text, min score 0.5), Related search (warming retry <= 10, unavailable message, "+" / "in bank"), Make snippet draft sheet created at the canvas viewport centre. "+ bank" on rhyme candidates (disabled with tooltip when invalid) and "Add to word bank" in the editor selection toolbar.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/wordbank/
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/WordBank.kt
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/WordBankRepository.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/wordbank/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/tags/TagControlsViewModel.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppNavHost.kt (WordBankDestination)
+    depends_on: [word_bank, android_tag_expressions, android_app, rhyme_view]
+    doc: docs/features/android_word_bank.md
 ```

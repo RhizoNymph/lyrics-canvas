@@ -86,6 +86,7 @@ kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coor
 | `voiceTarget()` | `VoiceTakeTarget.New(viewportCenter(viewport, viewSize))`; in list mode the viewport is the last canvas one and the size is the list body's; null before load |
 | `onVoiceTakeSaved(response)` | Created: insert, select only it, and in list mode emit `CanvasEvent.RevealSnippet`; appended: `replaceSnippet` |
 | `hitTest(screen)` | Topmost visible card under a dp point (`hitTestScreen` over `visibleSnippets`) |
+| `createSnippetFromText(text, type)` (`WordBankCanvasPort`) | A word bank draft: `POST` at `viewportCenter` (the FAB's rule) with `raw_text` and the type, then insert, select only it and (list mode) `RevealSnippet`; `DraftCreateResult` (`Created`, `Failed`, `CanvasNotLoaded`) |
 | `setTagFilter(filter)` (`TagCanvasPort`) | Kept also before load; `Ready.filter`; selection pruned to visible snippets |
 | `onTagLinked` / `onTagUnlinked` / `onTagEdited` / `onTagDeleted` (`TagCanvasPort`) | Server-confirmed tag changes from the picker update the embedded `Snippet.tags` |
 
@@ -95,8 +96,9 @@ saved one. Saves run in `ProcessScope` (process lifetime), so a save started whe
 cancelled with the ViewModel. A failed save forgets the "last saved" value so the next change retries.
 
 `CanvasViewModel` implements `RhymeCanvasPort` for the rhyme sheet: `rhymeView` (selection, snippets,
-camera), `currentRhymeView()`, `insertMaterialized(snippet)`; and `TagCanvasPort` for `TagsViewModel`
-(filter, tag changes, `currentSnippets()`).
+camera), `currentRhymeView()`, `insertMaterialized(snippet)`; `TagCanvasPort` for `TagsViewModel`
+(filter, tag changes, `currentSnippets()`); and `WordBankCanvasPort` for the word bank's "Make snippet"
+([android_word_bank.md](../features/android_word_bank.md)).
 
 ## Gestures
 
@@ -151,7 +153,8 @@ Strokes are expressed in dp (`1 / zoom` card units).
 
 `CanvasScreen` = `BoxWithConstraints` around a `Scaffold`:
 
-- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
+- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Words" (once loaded; opens
+  the Word bank screen, `WordBankRoute`), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
   (enabled with ≥ 2 selected and nothing in flight), Tags (tag picker), Delete (confirm dialog), Rhymes, ✕).
 - Filter bar (`tags/ui/FilterBar`, once loaded) above the body in both modes; the tag picker sheet
   (`TagPickerSheet`) while `TagsUiState.picker` is set; `TagsViewModel.messages` go to the snackbar.
@@ -244,8 +247,9 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`, `RevealSnippet`) |
 | `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS`, `CANVAS_MODE_KEY` |
 | `canvas/CanvasScreen.kt` | `CanvasScreen`, `canvasViewModel(container, canvasId, owner)` |
-| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`), `SelectionTopBar` (optional `onTags`) |
-| `tags/` | `TagsViewModel`, filter bar, picker, presets (see [android_tag_expressions.md](../features/android_tag_expressions.md)) |
+| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`, `onWordBank`), `SelectionTopBar` (optional `onTags`) |
+| `tags/` | `TagControlsViewModel` / `TagsViewModel`, filter bar, picker, presets (see [android_tag_expressions.md](../features/android_tag_expressions.md)) |
+| `wordbank/` | Word bank screen, `WordBankViewModel`, quick add for "+ bank" (see [android_word_bank.md](../features/android_word_bank.md)) |
 | `canvas/SnippetCanvas.kt` | `SnippetCanvas` (draw loop, layout cache, size reporting, gestures) |
 | `canvas/list/ListCardSize.kt` | `ListCardMetrics`, `ListCardWidth`, `listCardNeededWidth`, `listCardWidth`, `listCardHeight`, `listCard` (pure) |
 | `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`, optional hoisted `listState`; rows drawn with `cardLayout` + `drawCard`) |
@@ -258,10 +262,10 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `rhyme/RhymeUiState.kt` | `RhymeControls`, `RhymeUiState` |
 | `rhyme/AnchorChips.kt` | `AnchorChip`, `CHIP_TEXT_MAX`, `truncateChip`, `chipLabel`, `chipHint`, `anchorChips` (pure) |
 | `rhyme/RhymeViewModel.kt` | `RhymeViewModel`, `RHYME_QUERY_DEBOUNCE_MS` |
-| `rhyme/ui/RhymePanel.kt` | `RhymePanel(state, vm, tags, onClose)`, `statusText`, `errorText` |
+| `rhyme/ui/RhymePanel.kt` | `RhymePanel(state, vm, tags, onClose, onAddToBank)`, `statusText`, `errorText` |
 | `rhyme/ui/QueryControls.kt` | `QueryControls` (incl. "Only my lines matching") |
 | `rhyme/ui/AnchorChipsView.kt` | `AnchorChipsView` |
-| `rhyme/ui/CandidateRow.kt` | `CandidateRow` |
+| `rhyme/ui/CandidateRow.kt` | `CandidateRow` (Materialize, "+ bank" disabled with a tooltip when the text is not a valid word, Dismiss) |
 | `rhyme/ui/SyllableStrip.kt` | `SyllableStrip(line, selected, onWordTap)` |
 | `rhyme/ui/AlignmentTable.kt` | `AlignmentTable`, `syllableText` |
 | `ui/UserMessages.kt` | `ApiError.userMessage()`, `SESSION_EXPIRED`, `parseHexColor` |
@@ -269,7 +273,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 
 Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, fake repositories in
 `fakes/`): `CanvasViewModelTest`, `CanvasViewModelListModeTest`, `ListCardSizeTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
-`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `CanvasViewModelTagsTest`, `RhymeViewModelTagFilterTest`, `TagsViewModelTest`, `TagMessagesTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
+`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `CanvasViewModelTagsTest`, `CanvasViewModelWordBankTest`, `RhymeViewModelTagFilterTest`, `TagsViewModelTest`, `TagMessagesTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
 `MainDispatcherExtension` installs a `StandardTestDispatcher` as `Dispatchers.Main`.
 
 ## Invariants

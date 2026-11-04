@@ -100,6 +100,10 @@ Ready.visibleSnippets = snippets.filter(filter.matches) -> SnippetCanvas draw, h
 completion), so typing never races the state. The error marker is a `VisualTransformation` that
 underlines the code point at `error.position` (`utf16IndexOf`).
 
+The controls are generic since the word bank: `TagControlsViewModel<K>` drives the bar and picker
+for any `TagTarget<K>`; `TagsViewModel` is the canvas instance (target `SnippetTagTarget` over
+`TagCanvasPort`, store `TagFilterStore.forCanvas(canvasId)`).
+
 ### Tag picker
 
 ```
@@ -160,10 +164,10 @@ A caret-only change re-plans to the same request, which the plan identity check 
 | `.../logic/tags/TagExprLexer.kt` | internal `Token`, `lex`, `lexLenient` |
 | `.../logic/tags/TagExprParser.kt` | `parseTagExpression` |
 | `.../logic/tags/TagExprFormat.kt` | `isBareTagName`, `formatTagName`, `TagFilter.format`, `TagExpr.format` |
-| `.../logic/tags/TagExprEval.kt` | `TagFilter.matches(type, names)`, `TagFilter.matches(snippet)`, `renameTag`, `mentionsTag` |
+| `.../logic/tags/TagExprEval.kt` | `TagFilter.matches(type, names)` (a null type is typeless: every `type:` term false; vectors v2), `TagFilter.matches(snippet)`, `renameTag`, `mentionsTag` |
 | `.../logic/tags/TagCompletion.kt` | `ExprKeyword`, `Suggestion` (`TagName`, `TypeValue`, `Keyword`), `TextEdit`, `Completion` (`apply`), `completeAt`, `insertTagAt`, `COMPLETION_LIMIT` |
 | `.../logic/tags/ExpressionField.kt` | `ExpressionField`, `FilterBarState` (`restored`, `renameTag`), `RhymeTagFilter`, `rhymeTagFilter` |
-| `.../logic/tags/TagPicker.kt` | `TagCheck`, `PickerRow`, `pickerRows`, `TagToggle` (`Link`, `Unlink`), `planToggle`, `createOffer` |
+| `.../logic/tags/TagPicker.kt` | `TagCheck`, `PickerRow`, `pickerRows`, `TagToggle` (`Link`, `Unlink`; `targets` of any `TaggedItemId`, `targetsOf<K>()`), `planToggle`, `createOffer` |
 | `.../logic/tags/TagNames.kt` | `validateTagName` (`TagNameCheck`, `TagNameProblem`), `MAX_TAG_NAME_LENGTH`, `DEFAULT_TAG_COLOR`, `TAG_COLORS`, `isValidTagColor` |
 | `.../logic/tags/SnippetTags.kt` | `Snippet.withTagLinked`, `withTagUnlinked`, `List<Snippet>.withTagEdited`, `withTagDeleted`, `tagLinks` |
 | `.../logic/tags/TagError.kt` | `TagError` (`Rejected(code, status, serverMessage, expressionError)`, `SessionExpired`, `Http`, `Network`, `Unexpected`), `toTagError` |
@@ -176,8 +180,10 @@ A caret-only change re-plans to the same request, which the plan identity check 
 | `.../data/repository/TagRepository.kt` | `TagRepository` (`list`, `create`, `update`, `delete`, `link`, `unlink`), `HttpTagRepository` |
 | `.../data/repository/TagPresetRepository.kt` | `TagPresetRepository` (`list`, `create`, `update`, `delete`), `HttpTagPresetRepository` |
 | `android/app/.../app/tags/TagCanvasPort.kt` | `TagCanvasPort` (implemented by `CanvasViewModel`) |
-| `.../app/tags/TagsViewModel.kt` | `TagsViewModel` (filter bar, picker, tag edits, presets; `messages`) |
-| `.../app/tags/TagsUiState.kt` | `TagsUiState` (`tagNames`, `pickerRows`, `createOffer`), `PickerSession`, `TagEditor`, `PresetEditor` (`Target.SaveAs`, `Target.Rename`) |
+| `.../app/tags/TagControlsViewModel.kt` | `TagControlsViewModel<K>` (filter bar, picker, tag edits, presets; `messages`), shared with the word bank ([android_word_bank.md](./android_word_bank.md)) |
+| `.../app/tags/TagTarget.kt` | `TagTarget<K>` (the list the bar filters and the picker edits), `FilterTextStore`, `TagChangeListener`, `ForwardTagChanges` |
+| `.../app/tags/TagsViewModel.kt` | `TagsViewModel` (the canvas's `TagControlsViewModel<SnippetId>`), `TagFilterStore.forCanvas`, `SnippetTagTarget` |
+| `.../app/tags/TagsUiState.kt` | `TagsUiState<K>` (`tagNames`, `pickerRows`, `createOffer`), `PickerSession<K>` (`ids`), `TagEditor`, `PresetEditor` (`Target.SaveAs`, `Target.Rename`) |
 | `.../app/tags/TagsViewModelFactory.kt` | `tagsViewModel(container, canvasId, canvas, owner)` |
 | `.../app/tags/TagFilterStore.kt` | `TagFilterStore`, `DataStoreTagFilterStore` |
 | `.../app/tags/TagMessages.kt` | `TagError.userMessage`, `TagExprError.userMessage`, `TagNameProblem.userMessage`, `invalidFilterMessage`, `EMPTY_PRESET_MESSAGE` |
