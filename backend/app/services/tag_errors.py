@@ -22,6 +22,13 @@ class TagErrorCode(StrEnum):
     empty_preset = "empty_preset"
     invalid_tag_expression = "invalid_tag_expression"
     preset_expression_too_long = "preset_expression_too_long"
+    # word bank (app/services/word_bank/errors.py)
+    invalid_word = "invalid_word"
+    word_exists = "word_exists"
+    word_not_found = "word_not_found"
+    too_many_words = "too_many_words"
+    related_words_warming = "related_words_warming"
+    related_words_unavailable = "related_words_unavailable"
 
 
 class TagServiceError(Exception):

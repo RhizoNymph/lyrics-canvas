@@ -5,6 +5,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+MODEL_NAME = "all-MiniLM-L6-v2"
+
 _model = None
 
 
@@ -13,8 +15,8 @@ def get_model():
     if _model is None:
         try:
             from sentence_transformers import SentenceTransformer
-            _model = SentenceTransformer("all-MiniLM-L6-v2")
-            logger.info("Loaded sentence-transformers model: all-MiniLM-L6-v2")
+            _model = SentenceTransformer(MODEL_NAME)
+            logger.info("Loaded sentence-transformers model: %s", MODEL_NAME)
         except Exception as e:
             logger.warning(f"Could not load sentence-transformers model: {e}")
             _model = None

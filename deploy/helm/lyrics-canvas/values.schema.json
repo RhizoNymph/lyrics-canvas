@@ -111,6 +111,14 @@
           }
         },
         "startupTimeoutSeconds": { "type": "integer", "minimum": 5 },
+        "relatedWords": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "warmup": { "type": "boolean" },
+            "cacheDir": { "type": "string" }
+          }
+        },
         "modelCache": {
           "type": "object",
           "additionalProperties": false,

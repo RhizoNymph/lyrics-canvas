@@ -1,6 +1,6 @@
 {
- "version": 1,
- "notes": "Shared conformance vectors for the tag expression language (docs/features/tag_expressions.md). Positions are Unicode code point offsets into the input. Any 'input' or 'normalized' value is either a string or an array of segments concatenated in order, where a segment is a string or {\"repeat\": s, \"times\": n}.",
+ "version": 2,
+ "notes": "Shared conformance vectors for the tag expression language (docs/features/tag_expressions.md). Positions are Unicode code point offsets into the input. Any 'input' or 'normalized' value is either a string or an array of segments concatenated in order, where a segment is a string or {\"repeat\": s, \"times\": n}. An eval subject's \"type\" may be null: a subject without a snippet type (a word bank word); every type: term is false for it.",
  "parse_ok": [
   {
    "input": "",
@@ -761,6 +761,80 @@
    "snippet": {
     "type": "hook",
     "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "",
+   "snippet": {
+    "type": null,
+    "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "type:verse",
+   "snippet": {
+    "type": null,
+    "tags": []
+   },
+   "matches": false
+  },
+  {
+   "expression": "!type:verse",
+   "snippet": {
+    "type": null,
+    "tags": []
+   },
+   "matches": true
+  },
+  {
+   "expression": "love | type:chorus",
+   "snippet": {
+    "type": null,
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "love & type:chorus",
+   "snippet": {
+    "type": null,
+    "tags": [
+     "Love"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "!type:hook & love",
+   "snippet": {
+    "type": null,
+    "tags": [
+     "LOVE"
+    ]
+   },
+   "matches": true
+  },
+  {
+   "expression": "type:verse | type:chorus | type:bridge | type:hook | type:freestyle",
+   "snippet": {
+    "type": null,
+    "tags": [
+     "love"
+    ]
+   },
+   "matches": false
+  },
+  {
+   "expression": "night",
+   "snippet": {
+    "type": null,
+    "tags": [
+     "Night"
+    ]
    },
    "matches": true
   }

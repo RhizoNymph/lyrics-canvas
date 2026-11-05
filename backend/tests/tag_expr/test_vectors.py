@@ -38,7 +38,7 @@ def _short(text: str) -> str:
 
 
 def test_vectors_file_has_every_section():
-    assert VECTORS["version"] == 1
+    assert VECTORS["version"] == 2
     for section in ("parse_ok", "parse_error", "eval", "rename"):
         assert VECTORS[section], section
 
@@ -64,8 +64,14 @@ def test_parse_error(vector):
 @pytest.mark.parametrize("vector", VECTORS["eval"], ids=lambda v: f"{v['expression']} {v['snippet']}")
 def test_eval(vector):
     snippet = vector["snippet"]
-    facts = SnippetFacts.of(SnippetType(snippet["type"]), snippet["tags"])
+    # a null type is a typeless subject (a word bank word): every type: term is false
+    snippet_type = None if snippet["type"] is None else SnippetType(snippet["type"])
+    facts = SnippetFacts.of(snippet_type, snippet["tags"])
     assert matches(parse(vector["expression"]), facts) is vector["matches"]
+
+
+def test_vectors_include_typeless_subjects():
+    assert any(v["snippet"]["type"] is None for v in VECTORS["eval"])
 
 
 @pytest.mark.parametrize("vector", VECTORS["rename"], ids=lambda v: f"{v['expression']} {v['from']}->{v['to']}")

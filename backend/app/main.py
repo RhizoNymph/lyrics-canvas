@@ -18,6 +18,8 @@ from app.api.tag_presets import router as tag_presets_router
 from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
 from app.api.voice import router as voice_router
+from app.api.word_bank import related_words
+from app.api.word_bank import router as word_bank_router
 from app.services.phonetics import ResourceError, ensure_resources
 from app.services.phonetics.resources import configure as configure_nltk_data
 
@@ -35,6 +37,9 @@ async def lifespan(app: FastAPI):
         ensure_resources()
     except ResourceError as exc:
         logger.warning("phonetics.resources.unavailable dir=%s error=%s", settings.nltk_data_dir, exc)
+    if settings.related_words_warmup:
+        # starts the build in a worker thread; requests get 503 related_words_warming until it ends
+        await related_words.start()
     yield
     await engine.dispose()
 
@@ -59,6 +64,7 @@ app.include_router(tag_presets_router)
 app.include_router(nlp_router)
 app.include_router(export_router)
 app.include_router(voice_router)
+app.include_router(word_bank_router)
 
 
 @app.get("/api/health")
