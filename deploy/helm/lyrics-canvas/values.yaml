@@ -59,6 +59,17 @@ backend:
   # restarted (torch import on first boot is slow on small nodes).
   startupTimeoutSeconds: 180
 
+  # Word bank related words (docs/features/word_bank.md#related-words): the
+  # vocabulary embedding index is built in a worker thread once per pod.
+  relatedWords:
+    # Build at startup instead of on the first related-word search (searches
+    # answer 503 related_words_warming until it is ready).
+    warmup: true
+    # Directory for the cached index matrix (RELATED_WORDS_CACHE_DIR). Empty =
+    # $HF_HOME/lyrics-canvas, i.e. inside the model cache volume below, so it
+    # survives pod restarts when modelCache.persistence is enabled.
+    cacheDir: ""
+
   # sentence-transformers downloads all-MiniLM-L6-v2 on first use into HF_HOME.
   # Without persistence it is re-downloaded whenever the pod is recreated.
   modelCache:

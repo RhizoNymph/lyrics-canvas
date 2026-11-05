@@ -29,6 +29,7 @@ class TagResponse(BaseModel):
     name: str
     color: str
     snippet_count: int
+    word_count: int  # word bank words carrying the tag
     created_at: str
 
     model_config = _RESPONSE_CONFIG
