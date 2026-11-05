@@ -20,6 +20,7 @@ from app.models.canvas import Canvas
 from app.models.snippet import Snippet
 from app.models.tag import Tag, snippet_tags
 from app.models.tag_preset import TagPreset
+from app.models.word_bank import bank_word_tags
 from app.services.tag_errors import (
     PresetExpressionTooLongError,
     SnippetNotFoundError,
@@ -34,25 +35,30 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class TagSummary:
-    """A tag with the number of snippets carrying it (the TagResponse shape)."""
+    """A tag with the number of snippets and of word bank words carrying it (the TagResponse shape)."""
 
     id: uuid.UUID
     name: str
     color: str
     snippet_count: int
     created_at: datetime
+    word_count: int = 0
 
 
-def _count():
-    return func.count(snippet_tags.c.snippet_id)
+def _counted():
+    """``(Tag, snippet_count, word_count)`` rows, counted by correlated subqueries."""
+    snippets = select(func.count()).where(snippet_tags.c.tag_id == Tag.id).correlate(Tag).scalar_subquery()
+    words = select(func.count()).where(bank_word_tags.c.tag_id == Tag.id).correlate(Tag).scalar_subquery()
+    return select(Tag, snippets, words)
+
+
+def _to_summary(tag: Tag, snippet_count: int, word_count: int) -> TagSummary:
+    return TagSummary(tag.id, tag.name, tag.color, snippet_count, tag.created_at, word_count)
 
 
 async def _summary(db: AsyncSession, tag_id: uuid.UUID) -> TagSummary:
-    result = await db.execute(
-        select(Tag, _count()).outerjoin(snippet_tags, snippet_tags.c.tag_id == Tag.id).where(Tag.id == tag_id).group_by(Tag.id)
-    )
-    tag, count = result.one()
-    return TagSummary(tag.id, tag.name, tag.color, count, tag.created_at)
+    result = await db.execute(_counted().where(Tag.id == tag_id))
+    return _to_summary(*result.one())
 
 
 async def _owned_tag(db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID) -> Tag:
@@ -88,14 +94,8 @@ async def _commit_or_name_taken(db: AsyncSession, name: str) -> None:
 
 
 async def list_tags(db: AsyncSession, owner_id: uuid.UUID) -> list[TagSummary]:
-    result = await db.execute(
-        select(Tag, _count())
-        .outerjoin(snippet_tags, snippet_tags.c.tag_id == Tag.id)
-        .where(Tag.user_id == owner_id)
-        .group_by(Tag.id)
-        .order_by(func.lower(Tag.name), Tag.id)
-    )
-    return [TagSummary(tag.id, tag.name, tag.color, count, tag.created_at) for tag, count in result.all()]
+    result = await db.execute(_counted().where(Tag.user_id == owner_id).order_by(func.lower(Tag.name), Tag.id))
+    return [_to_summary(*row) for row in result.all()]
 
 
 async def create_tag(db: AsyncSession, owner_id: uuid.UUID, name: TagName, color: TagColor) -> TagSummary:
@@ -150,7 +150,8 @@ async def _rewrite_presets(db: AsyncSession, owner_id: uuid.UUID, old: str, new:
 
 
 async def delete_tag(db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    """Delete the tag and its snippet links. Presets keep the name (it now matches nothing)."""
+    """Delete the tag and its snippet and word bank links (FK cascade). Presets keep the name (it
+    now matches nothing)."""
     tag = await _owned_tag(db, tag_id, owner_id)
     await db.delete(tag)
     await db.commit()

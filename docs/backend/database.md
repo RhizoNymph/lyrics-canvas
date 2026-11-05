@@ -145,6 +145,22 @@ Relationships: `snippets` (N:M via snippet_tags)
 | `expression` | Text | - | normalized tag expression, non-empty, at most 500 code points |
 | `created_at` / `updated_at` | DateTime(tz) | now() | `updated_at` bumped on update |
 
+### BankWord
+
+**File:** `app/models/word_bank.py`, **Table:** `bank_words` (migration 006, see
+[word_bank.md](../features/word_bank.md#data-model-migration-006))
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | UUID | uuid4 | PK |
+| `user_id` | UUID | - | FK -> users.id, ON DELETE CASCADE; index `ix_bank_words_user_id` |
+| `text` | String(64) | - | normalized word or phrase, case kept; unique per user ignoring case (`uq_bank_words_user_lower_text`) |
+| `created_at` | DateTime(tz) | now() | |
+
+**Junction table:** `bank_word_tags(bank_word_id, tag_id)` with CASCADE deletes on both FKs.
+
+Relationships: `tags` (N:M via bank_word_tags, `lazy="raise"`, `passive_deletes`)
+
 ### SnippetEmbedding
 
 **File:** `app/models/embedding.py`, **Table:** `snippet_embeddings`
@@ -235,6 +251,11 @@ The downgrade drops the presets and splits tags back into one copy per canvas th
 (unused ones go to the user's oldest canvas). An existing database needs `alembic upgrade head`
 before the backend runs this code (startup `create_all` would otherwise create `tag_presets` but
 not alter `tags`).
+
+**File:** `alembic/versions/006_word_bank.py`
+
+Creates `bank_words` (with `ix_bank_words_user_id` and the unique `(user_id, lower(text))` index)
+and `bank_word_tags`. The downgrade drops both tables.
 
 ### Running Migrations
 

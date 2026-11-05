@@ -12,8 +12,9 @@ clients (web and Android implement the same language and follow the API shapes b
   with code point positions and typed errors. Python implementation in
   `backend/app/services/tag_expr/`; web (TypeScript) and Android (`:core:logic`, Kotlin) implement the
   same spec.
-- **Conformance vectors**: `spec/tag_expression_vectors.json` at the repo root. It is byte-identical in
-  every branch, and every implementation's tests read that exact file.
+- **Conformance vectors**: `spec/tag_expression_vectors.json` at the repo root (version 2 since the
+  word bank added typeless eval subjects). It is byte-identical in every branch, and every
+  implementation's tests read that exact file.
 - **Presets**: named, server-stored, normalized expressions per user (`/api/tag-presets`).
 - **Rhyme filter**: `RhymeSuggestRequest.tag_filter` restricts the **notes** source to matching
   snippets.
@@ -104,7 +105,9 @@ An error carries `code`, `position` and a human message. The message text is not
 - **Evaluate** against `{type, tagNames}`:
   - A Tag matches when some tag name equals it under simple lowercasing (Python `str.lower`, JS
     `toLowerCase`, Kotlin `lowercase(Locale.ROOT)`).
-  - A Type matches the snippet type exactly.
+  - A Type matches the snippet type exactly. The type may be null (a typeless subject: a word bank
+    word, see [word_bank.md](./word_bank.md)); then every Type term is false, so `!type:verse` is
+    true. Vectors version 2 adds eval cases with `"type": null`.
   - An unknown tag name matches nothing. It is not an error.
 - **Rename**(expr, from, to): every Tag whose lowercase equals lowercase(from) becomes Tag(to), and
   the result is formatted. Type terms are untouched.
@@ -220,7 +223,8 @@ FastAPI's standard 422 (`detail` is a list).
 
 ```jsonc
 // TagResponse (GET /api/tags, POST /api/tags, PUT /api/tags/{id})
-{"id": "uuid", "name": "late night", "color": "#6366f1", "snippet_count": 3, "created_at": "2026-11-03 10:00:00.123456+00:00"}
+{"id": "uuid", "name": "late night", "color": "#6366f1", "snippet_count": 3, "word_count": 2, "created_at": "2026-11-03 10:00:00.123456+00:00"}
+// word_count (word bank words carrying the tag) was added by the word bank (word_bank.md)
 
 // SnippetTagResponse: embedded in every SnippetResponse.tags (canvas detail, snippet writes, merge, voice takes)
 {"id": "uuid", "name": "late night", "color": "#6366f1"}
@@ -276,7 +280,7 @@ POST /api/tags {name, color}
   tag_service.create_tag(db, owner, TagName, TagColor)
     lower-name lookup -> TagNameTakenError -> 409
     insert, commit (IntegrityError on the unique index -> TagNameTakenError)
-    -> TagSummary(id, name, color, snippet_count, created_at) -> TagResponse
+    -> TagSummary(id, name, color, snippet_count, created_at, word_count) -> TagResponse
 
 PUT /api/tags/{id} {name?, color?}
   tag_service.update_tag

@@ -1,6 +1,6 @@
 # Groups & Tags
 
-Group containers, user-wide tag labels and saved tag-expression presets for organizing snippets.
+Group containers, user-wide tag labels and saved tag-expression presets for organizing snippets (and word bank words).
 
 ## Group Service
 
@@ -59,7 +59,7 @@ backend modules.
 `PresetExpressionTooLongError`); the routes map them to `{"error", "message"}` details.
 
 ```python
-@dataclass(frozen=True) class TagSummary: id, name, color, snippet_count, created_at
+@dataclass(frozen=True) class TagSummary: id, name, color, snippet_count, created_at, word_count
 async def list_tags(db, owner_id) -> list[TagSummary]                       # sorted by lower(name), id
 async def create_tag(db, owner_id, name: TagName, color: TagColor) -> TagSummary
 async def update_tag(db, tag_id, owner_id, name: TagName | None, color: TagColor | None) -> TagSummary
@@ -67,6 +67,9 @@ async def delete_tag(db, tag_id, owner_id) -> None
 async def add_tag_to_snippet(db, snippet_id, tag_id, owner_id) -> None       # both must be the user's; idempotent
 async def remove_tag_from_snippet(db, snippet_id, tag_id, owner_id) -> None  # both must be the user's; idempotent
 ```
+
+- `snippet_count` and `word_count` are correlated `count(*)` subqueries over `snippet_tags` and
+  `bank_word_tags` (one row per tag, no join fan-out).
 
 - `update_tag` with a changed name rewrites every preset of the user through
   `tag_expr.rename_tag` in the same transaction; a rewrite longer than 500 code points rolls the whole
@@ -90,6 +93,16 @@ its links. Deleting a canvas no longer deletes tags (they belong to the user). M
 unions their tag ids (`merge_service.union_tag_ids`); with user-wide tags a tag shared by the
 originals is one link on the merged snippet.
 
+### Tag-Word Association (word bank)
+
+`bank_word_tags(bank_word_id, tag_id)` (migration 006) links the same user-wide tags to word bank
+words, with CASCADE deletes on both FKs: `DELETE /api/tags/{id}` also removes the tag's word links
+(the `Tag` model has no back-reference; the FK cascade does it). Links are written by
+`app/services/word_bank/service.py` (`add_words` with `tag_ids`, `set_tag` link/unlink), only when
+the tag and the word belong to the same user. Words are typeless subjects of tag expressions
+(`SnippetFacts.of(None, names)`: every `type:` term is false). See
+[word_bank.md](../features/word_bank.md).
+
 ### Tag Schemas
 
 **File:** `app/schemas/tag.py`
@@ -98,7 +111,7 @@ originals is one link on the merged snippet.
 |--------|--------|
 | `TagCreate` | name, color (default `"#6366f1"`) |
 | `TagUpdate` | name?, color? |
-| `TagResponse` | id, name, color, snippet_count, created_at |
+| `TagResponse` | id, name, color, snippet_count, word_count, created_at |
 | `SnippetTagResponse` | id, name, color (embedded in `SnippetResponse.tags`) |
 | `TagLinkResponse` | ok |
 | `TagPresetCreate` / `TagPresetUpdate` | name, expression / name?, expression? |
@@ -114,7 +127,7 @@ originals is one link on the merged snippet.
 | GET | `/api/tags` | Bearer | The user's tags (`TagResponse[]`) | 200 |
 | POST | `/api/tags` | Bearer | Create tag (`TagResponse`) | 201/409/422 |
 | PUT | `/api/tags/{id}` | Bearer | Rename/recolor (`TagResponse`); rename rewrites presets | 200/404/409/422 |
-| DELETE | `/api/tags/{id}` | Bearer | Delete tag and its links | 204/404 |
+| DELETE | `/api/tags/{id}` | Bearer | Delete tag and its snippet and word bank links | 204/404 |
 | POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Link (`TagLinkResponse` `{"ok": true}`) | 200/404 |
 | DELETE | `/api/snippets/{id}/tags/{tag_id}` | Bearer | Unlink | 204/404 |
 | GET | `/api/tag-presets` | Bearer | The user's presets (`TagPresetResponse[]`) | 200 |

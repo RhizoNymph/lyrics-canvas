@@ -35,7 +35,7 @@ def preset(name: str = "Dark", expression: str = "night & !love"):
 
 
 def tag_json(t: TagSummary) -> dict:
-    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "created_at": str(t.created_at)}
+    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at)}
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def test_list_tags(client, monkeypatch):
     res = client.get("/api/tags")
     assert res.status_code == 200
     assert res.json() == [tag_json(LOVE), tag_json(NIGHT)]
-    assert list(res.json()[0]) == ["id", "name", "color", "snippet_count", "created_at"]
+    assert list(res.json()[0]) == ["id", "name", "color", "snippet_count", "word_count", "created_at"]
     assert seen == [(USER_ID,)]
 
 

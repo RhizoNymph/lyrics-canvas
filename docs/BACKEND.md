@@ -20,6 +20,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [NLP: Search](./backend/nlp-search.md) | ILIKE full-text search | `nlp/search_service.py` |
 | [Export](./backend/export.md) | Markdown, plain text, PDF generation | `export_service.py`, `export.py` |
 | [Voice Capture](./features/voice_capture.md) | Voice takes: upload, STT client, line assembly, append, recordings storage | `api/voice.py`, `services/voice/`, `recording_service.py` |
+| [Word Bank](./features/word_bank.md) | Per-user tagged words: CRUD, bulk tagging, rhymes / families over the bank, related words by embedding | `api/word_bank.py`, `services/word_bank/`, `models/word_bank.py` |
 
 ## Architecture Summary
 

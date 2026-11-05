@@ -1,6 +1,385 @@
 {
   "components": {
     "schemas": {
+      "BankFamiliesRequest": {
+        "properties": {
+          "k": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "tag_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag Filter"
+          }
+        },
+        "title": "BankFamiliesRequest",
+        "type": "object"
+      },
+      "BankFamiliesResponse": {
+        "properties": {
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/BankFamily"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "unmatched": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Unmatched",
+            "type": "array"
+          }
+        },
+        "required": [
+          "families",
+          "unmatched"
+        ],
+        "title": "BankFamiliesResponse",
+        "type": "object"
+      },
+      "BankFamily": {
+        "properties": {
+          "cohesion": {
+            "title": "Cohesion",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "rhyme_key",
+          "words",
+          "cohesion"
+        ],
+        "title": "BankFamily",
+        "type": "object"
+      },
+      "BankRhymeAnchor": {
+        "properties": {
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "rhyme_key",
+          "syllable_count"
+        ],
+        "title": "BankRhymeAnchor",
+        "type": "object"
+      },
+      "BankRhymeMatch": {
+        "properties": {
+          "match_depth": {
+            "title": "Match Depth",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "word": {
+            "$ref": "#/components/schemas/BankWordResponse"
+          }
+        },
+        "required": [
+          "word",
+          "score",
+          "match_depth"
+        ],
+        "title": "BankRhymeMatch",
+        "type": "object"
+      },
+      "BankRhymesRequest": {
+        "description": "Exactly one of ``word_id`` and ``text``.",
+        "properties": {
+          "k": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "tag_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag Filter"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "word_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Id"
+          }
+        },
+        "title": "BankRhymesRequest",
+        "type": "object"
+      },
+      "BankRhymesResponse": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/BankRhymeAnchor"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/BankRhymeMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          }
+        },
+        "required": [
+          "anchor",
+          "matches"
+        ],
+        "title": "BankRhymesResponse",
+        "type": "object"
+      },
+      "BankWordResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/SnippetTagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "tags",
+          "created_at"
+        ],
+        "title": "BankWordResponse",
+        "type": "object"
+      },
+      "BankWordTagsUpdate": {
+        "properties": {
+          "op": {
+            "enum": [
+              "link",
+              "unlink"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "tag_id": {
+            "title": "Tag Id",
+            "type": "string"
+          },
+          "word_ids": {
+            "description": "1..500 ids; more is too_many_words",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Word Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "word_ids",
+          "tag_id",
+          "op"
+        ],
+        "title": "BankWordTagsUpdate",
+        "type": "object"
+      },
+      "BankWordUpdate": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BankWordUpdate",
+        "type": "object"
+      },
+      "BankWordsCreate": {
+        "properties": {
+          "tag_ids": {
+            "description": "0..20 tag ids; more is too_many_words",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "words": {
+            "description": "1..200 words; more is too_many_words",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "words"
+        ],
+        "title": "BankWordsCreate",
+        "type": "object"
+      },
+      "BankWordsCreateResponse": {
+        "properties": {
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "existing": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Existing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "existing"
+        ],
+        "title": "BankWordsCreateResponse",
+        "type": "object"
+      },
+      "BankWordsDelete": {
+        "properties": {
+          "ids": {
+            "description": "1..500 ids; more is too_many_words",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "BankWordsDelete",
+        "type": "object"
+      },
+      "BankWordsResponse": {
+        "properties": {
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "words"
+        ],
+        "title": "BankWordsResponse",
+        "type": "object"
+      },
       "BatchPositionResult": {
         "properties": {
           "updated": {
@@ -823,6 +1202,57 @@
           "display_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "RelatedWordResult": {
+        "properties": {
+          "bank_word_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Word Id"
+          },
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "similarity",
+          "bank_word_id"
+        ],
+        "title": "RelatedWordResult",
+        "type": "object"
+      },
+      "RelatedWordsResponse": {
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedWordResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "results"
+        ],
+        "title": "RelatedWordsResponse",
         "type": "object"
       },
       "RhymeCandidateModel": {
@@ -2228,6 +2658,10 @@
           "snippet_count": {
             "title": "Snippet Count",
             "type": "integer"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -2235,6 +2669,7 @@
           "name",
           "color",
           "snippet_count",
+          "word_count",
           "created_at"
         ],
         "title": "TagResponse",
@@ -2448,6 +2883,57 @@
           "created"
         ],
         "title": "VoiceTakeResponse",
+        "type": "object"
+      },
+      "WordBankErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "expression_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpressionErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "WordBankErrorBody",
+        "type": "object"
+      },
+      "WordBankErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/WordBankErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "WordBankErrorResponse",
         "type": "object"
       },
       "WordPhonetics": {
@@ -4623,6 +5109,441 @@
         "summary": "Update Tag",
         "tags": [
           "tags"
+        ]
+      }
+    },
+    "/api/word-bank": {
+      "get": {
+        "description": "The whole bank, newest first. Clients filter locally with the shared tag expression evaluator.",
+        "operationId": "list_words_api_word_bank_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BankWordResponse"
+                  },
+                  "title": "Response List Words Api Word Bank Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Words",
+        "tags": [
+          "word-bank"
+        ]
+      },
+      "post": {
+        "description": "Add a batch. One invalid word rejects it (``invalid_word`` + ``index``); words already in the\nbank (ignoring case) come back in ``existing``; ``tag_ids`` are linked to all of them.",
+        "operationId": "add_words_api_word_bank_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankWordsCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWordsCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Words",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/delete": {
+      "post": {
+        "description": "Ids that are not the user's (or not ids at all) are ignored.",
+        "operationId": "delete_words_api_word_bank_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankWordsDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Words",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/families": {
+      "post": {
+        "description": "The filtered bank grouped into rhyme families (at most 1000 words).",
+        "operationId": "families_api_word_bank_families_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankFamiliesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankFamiliesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Families",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/related": {
+      "get": {
+        "description": "Dictionary words related in meaning to ``q`` (a word, phrase or theme). 503\n``related_words_warming`` (with Retry-After) while the index is built, 503\n``related_words_unavailable`` when the embedding model cannot be loaded.",
+        "operationId": "related_api_word_bank_related_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedWordsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Related",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/rhymes": {
+      "post": {
+        "description": "Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text.",
+        "operationId": "rhymes_api_word_bank_rhymes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankRhymesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankRhymesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rhymes",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/tags": {
+      "post": {
+        "description": "Link or unlink one tag on many words; idempotent. Any word that is not the user's is a 404\nand nothing changes.",
+        "operationId": "set_tag_api_word_bank_tags_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankWordTagsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWordsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Tag",
+        "tags": [
+          "word-bank"
+        ]
+      }
+    },
+    "/api/word-bank/{word_id}": {
+      "put": {
+        "operationId": "rename_word_api_word_bank__word_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "word_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Word Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankWordUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankWordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename Word",
+        "tags": [
+          "word-bank"
         ]
       }
     }
