@@ -3,6 +3,7 @@ import SyllableStrip from './SyllableStrip';
 import AlignmentTable from './AlignmentTable';
 import { PROVENANCE_COLORS, PROVENANCE_LABELS, NON_FIT_ALPHA } from './rhymeColors';
 import { btnStyle, primaryBtnStyle, monoStyle } from './sidebarStyles';
+import AddToBankButton from '@/components/wordBank/AddToBankButton';
 
 interface Props {
   candidate: RhymeCandidate;
@@ -60,6 +61,7 @@ export default function CandidateRow({ candidate, anchor, hasSlot, expanded, onT
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+        <AddToBankButton text={candidate.text} />
         <button onClick={onMaterialize} style={{ ...primaryBtnStyle, padding: '2px 8px', fontSize: 11 }} title="Create a snippet from this on the canvas">
           Materialize
         </button>

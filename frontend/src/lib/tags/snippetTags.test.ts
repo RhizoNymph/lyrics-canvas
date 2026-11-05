@@ -9,7 +9,7 @@ const all = () => new Map([a, b, c].map((s) => [s.id, s]));
 
 describe('embedTag', () => {
   it('keeps only id, name and color', () => {
-    expect(embedTag({ id: 'x', name: 'n', color: '#000000', snippet_count: 3, created_at: 'now' })).toEqual({ id: 'x', name: 'n', color: '#000000' });
+    expect(embedTag({ id: 'x', name: 'n', color: '#000000', snippet_count: 3, word_count: 0, created_at: 'now' })).toEqual({ id: 'x', name: 'n', color: '#000000' });
   });
 });
 

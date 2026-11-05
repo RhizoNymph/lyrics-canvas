@@ -19,12 +19,18 @@ export interface TargetInput {
 
 export const ORIGIN: Point = { x: 0, y: 0 };
 
+/**
+ * Where a new snippet goes: the centre of the canvas viewport, or the origin when the canvas was never
+ * measured (also used by word bank drafts).
+ */
+export function newSnippetPosition(viewport: Viewport, canvasViewSize: ViewSize | null): Point {
+  if (canvasViewSize === null || canvasViewSize.width <= 0 || canvasViewSize.height <= 0 || viewport.zoom <= 0) return ORIGIN;
+  return viewportCenter(viewport, canvasViewSize);
+}
+
 export function resolveCaptureTarget({ editingSnippetId, viewport, canvasViewSize }: TargetInput): CaptureTarget {
   if (editingSnippetId !== null) return { kind: 'append', snippetId: editingSnippetId };
-  if (canvasViewSize === null || canvasViewSize.width <= 0 || canvasViewSize.height <= 0 || viewport.zoom <= 0) {
-    return { kind: 'new', position: ORIGIN };
-  }
-  return { kind: 'new', position: viewportCenter(viewport, canvasViewSize) };
+  return { kind: 'new', position: newSnippetPosition(viewport, canvasViewSize) };
 }
 
 export function toWireTarget(target: CaptureTarget): VoiceTakeTarget {

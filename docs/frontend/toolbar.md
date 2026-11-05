@@ -16,7 +16,7 @@ Top bar with canvas title, zoom controls, undo/redo, and tool toggles.
 | Zoom | `-` (zoom / 1.2), `%` display, `+` (zoom * 1.2), Reset (hidden in list mode) |
 | History | Undo (Ctrl+Z), Redo (Ctrl+Shift+Z) |
 | Voice | `● Record` (Alt+Shift+R): `voiceStore.openRecorder()`; appends to the open editor, else a new snippet. Disabled with the tooltip "Recording needs HTTPS" outside a secure context; see [web_voice_capture.md](../features/web_voice_capture.md) |
-| Tools | Search (Ctrl+F), Rhymes (toggle), t-SNE (toggle; hidden in list mode) |
+| Tools | Search (Ctrl+F), Rhymes (toggle), Words (toggle, Ctrl/Cmd+Shift+W or Alt+Shift+W), t-SNE (toggle; hidden in list mode) |
 | Merge | `Merge ⇣` (vertical, Ctrl+Shift+V), `Merge ⇢` (horizontal, Ctrl+Shift+H); disabled unless 2+ snippets are selected; followed by the merge notice when `mergeError` is set |
 | Export | Export button (right-aligned) |
 
@@ -44,6 +44,19 @@ uiStore.toggleRhymeSidebar()
 
 Uses the active style while the sidebar is open. See [rhyme-view.md](./rhyme-view.md).
 
+### Words Toggle
+
+```
+uiStore.toggleWordBank()       also Ctrl/Cmd+Shift+W and Alt+Shift+W (CanvasPage keydown, works while typing)
+  open  -> rightPanel = 'words' (closes the rhyme sidebar) -> CanvasPage mounts WordBankPanel
+  close -> rightPanel = 'none'
+```
+
+`uiStore.rightPanel` is `'none' | 'rhymes' | 'words'`, so the rhyme sidebar and the word bank are never
+open together; Rhymes and Words each use the active style while theirs is open. Browsers reserve
+Ctrl/Cmd+Shift+W in normal tabs, hence the Alt+Shift+W alternative. See
+[web_word_bank.md](../features/web_word_bank.md).
+
 ### Merge Buttons
 
 ```
@@ -60,7 +73,7 @@ server merge is one transaction, so a failure changed nothing). Clicking it call
 | Store | State/Actions Used |
 |-------|-------------------|
 | canvasStore | `canvasTitle`, `canvasId`, `viewport`, `setViewport`, `undo`, `redo`, `tsneMode`, `enterTSNE`, `exitTSNE`, `selectedSnippetIds`, `mergeSelected`, `mergeError`, `clearMergeError` |
-| uiStore | `setSearchModalOpen`, `setExportDialogOpen`, `toggleRhymeSidebar`, `rhymeSidebarOpen` |
+| uiStore | `setSearchModalOpen`, `setExportDialogOpen`, `toggleRhymeSidebar`, `toggleWordBank`, `rightPanel` |
 
 ### Styling
 
@@ -74,8 +87,9 @@ server merge is one transaction, so a failure changed nothing). Clicking it call
 
 **File:** `src/components/toolbar/TagExpressionBar.tsx`
 
-The canvas page's tag filter, below the toolbar; it filters both the canvas and list mode. Full
-description in [web_tag_expressions.md](../features/web_tag_expressions.md); language in
+The canvas page's tag filter, below the toolbar; it filters both the canvas and list mode. It is a thin
+wrapper over the shared `components/tags/TagFilterBar.tsx` (also used by the word bank panel, compact
+layout) bound to `tagFilterStore`. Full description in [web_tag_expressions.md](../features/web_tag_expressions.md); language in
 [tag_expressions.md](../features/tag_expressions.md).
 
 ### Layout
@@ -97,4 +111,6 @@ description in [web_tag_expressions.md](../features/web_tag_expressions.md); lan
 | tagStore | `tags`, `loadState`, `load`, presets (via `PresetPicker`) |
 | canvasStore | `snippets` (count) |
 
-Tags are created, renamed, recolored and deleted from the snippet context menu's tag picker, not here.
+Tags are created, renamed, recolored and deleted from the snippet context menu's tag picker (and the
+word bank's Tags menu), not here. Both pickers are `components/tags/TagChecklist.tsx` over different
+targets.

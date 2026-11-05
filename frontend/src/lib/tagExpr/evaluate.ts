@@ -1,13 +1,17 @@
-/** Evaluate an expression against one snippet. Tag names compare under simple lowercasing. */
+/**
+ * Evaluate an expression against one subject: a snippet, or a typeless word bank word (`type: null`, for
+ * which every `type:` term is false). Tag names compare under simple lowercasing.
+ */
 import type { SnippetType } from '@/types';
 import type { TagExpr, TagExprOrEmpty } from './ast';
 
 export interface EvalSubject {
-  readonly type: SnippetType;
+  /** null for a subject without a type (a word bank word). */
+  readonly type: SnippetType | null;
   readonly tagNames: readonly string[];
 }
 
-function evalNode(e: TagExpr, type: SnippetType, lowerNames: ReadonlySet<string>): boolean {
+function evalNode(e: TagExpr, type: SnippetType | null, lowerNames: ReadonlySet<string>): boolean {
   switch (e.kind) {
     case 'tag':
       return lowerNames.has(e.name.toLowerCase());
