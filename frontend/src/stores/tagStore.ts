@@ -10,13 +10,14 @@ import type { TagOperation, TagResult, TogglePlan } from '@/lib/tags';
 import { useCanvasStore } from './canvasStore';
 import { useTagFilterStore } from './tagFilterStore';
 import { useRhymeStore } from './rhymeStore';
+import { useWordBankStore } from './wordBankStore';
 
 export type LoadState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
  * The user's tags and tag presets (both user-wide, shared by every canvas). Every action resolves to a
  * TagResult and never throws. Tags embedded in loaded snippets are kept in step through
- * canvasStore.updateEmbeddedTags.
+ * canvasStore.updateEmbeddedTags, and those on word bank words through wordBankStore.patchTag/removeTag.
  */
 export interface TagStoreState {
   /** Sorted by lower(name), like the server. */
@@ -38,6 +39,10 @@ export interface TagStoreState {
   createPreset: (name: string, expression: string) => Promise<TagResult<TagPreset>>;
   updatePreset: (id: string, patch: TagPresetUpdateBody) => Promise<TagResult<TagPreset>>;
   deletePreset: (id: string) => Promise<TagResult<void>>;
+  /** Drop a tag the server no longer has, locally everywhere (snippets, words, add box chips). */
+  forgetTag: (id: string) => void;
+  /** Change a tag's word_count after word bank links changed (never below 0). */
+  adjustWordCount: (id: string, delta: number) => void;
 }
 
 const sorted = <T extends { name: string }>(items: readonly T[]): T[] => [...items].sort(byName);
@@ -118,17 +123,16 @@ export const useTagStore = create<TagStoreState>((set, get) => ({
       updated = (await tagApi.update(id, body)).data;
     } catch (err) {
       const error = toTagApiError(err, 'update_tag');
-      if (error.kind === 'tag_not_found') {
-        set({ tags: get().tags.filter((t) => t.id !== id) });
-        useCanvasStore.getState().updateEmbeddedTags((m) => removeEmbeddedTag(m, id));
-      }
+      if (error.kind === 'tag_not_found') get().forgetTag(id);
       return fail(error);
     }
     set({ tags: upsert(get().tags, updated) });
     useCanvasStore.getState().updateEmbeddedTags((m) => patchEmbeddedTag(m, embedTag(updated)));
+    useWordBankStore.getState().patchTag(embedTag(updated));
     if (before !== undefined && before.name !== updated.name) {
       useTagFilterStore.getState().dispatch({ type: 'renameTag', from: before.name, to: updated.name });
       useRhymeStore.getState().renameTagInFilter(before.name, updated.name);
+      useWordBankStore.getState().dispatchFilter({ type: 'renameTag', from: before.name, to: updated.name });
       const refreshed = await get().refreshPresets();
       if (!refreshed.ok) console.warn('tags: presets not refreshed after rename', { tagId: id });
     }
@@ -143,8 +147,7 @@ export const useTagStore = create<TagStoreState>((set, get) => ({
       // Already gone on the server: converge locally, which is what the user asked for.
       if (error.kind !== 'tag_not_found') return fail(error);
     }
-    set({ tags: get().tags.filter((t) => t.id !== id) });
-    useCanvasStore.getState().updateEmbeddedTags((m) => removeEmbeddedTag(m, id));
+    get().forgetTag(id);
     return { ok: true, value: undefined };
   },
 
@@ -227,5 +230,17 @@ export const useTagStore = create<TagStoreState>((set, get) => ({
     }
     set({ presets: get().presets.filter((p) => p.id !== id) });
     return { ok: true, value: undefined };
+  },
+
+  forgetTag: (id) => {
+    set({ tags: get().tags.filter((t) => t.id !== id) });
+    useCanvasStore.getState().updateEmbeddedTags((m) => removeEmbeddedTag(m, id));
+    useWordBankStore.getState().removeTag(id);
+  },
+
+  adjustWordCount: (id, delta) => {
+    const current = get().tags.find((t) => t.id === id);
+    if (current === undefined || delta === 0) return;
+    set({ tags: upsert(get().tags, { ...current, word_count: Math.max(0, current.word_count + delta) }) });
   },
 }));

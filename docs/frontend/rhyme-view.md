@@ -103,7 +103,7 @@ materializations step down from it.
 
 ## Sidebar
 
-Mounted by `CanvasPage` to the right of the canvas column while `uiStore.rhymeSidebarOpen`; 380 px wide, the
+Mounted by `CanvasPage` to the right of the canvas column while `uiStore.rightPanel === 'rhymes'`; 380 px wide, the
 full height of the canvas area, results scroll. Layout top to bottom:
 
 1. Header "Rhymes" with ×.

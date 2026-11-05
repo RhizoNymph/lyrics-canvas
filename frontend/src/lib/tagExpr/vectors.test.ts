@@ -14,7 +14,7 @@ interface Vectors {
   version: number;
   parse_ok: { input: Expandable; normalized: Expandable }[];
   parse_error: { input: Expandable; code: string; position: number }[];
-  eval: { expression: string; snippet: { type: SnippetType; tags: string[] }; matches: boolean }[];
+  eval: { expression: string; snippet: { type: SnippetType | null; tags: string[] }; matches: boolean }[];
   rename: { expression: string; from: string; to: string; result: string }[];
 }
 
@@ -31,12 +31,16 @@ function label(s: string): string {
 }
 
 describe('tag expression vectors', () => {
-  it('is version 1 and non-empty', () => {
-    expect(vectors.version).toBe(1);
+  it('is version 2 and non-empty', () => {
+    expect(vectors.version).toBe(2);
     expect(vectors.parse_ok.length).toBeGreaterThan(0);
     expect(vectors.parse_error.length).toBeGreaterThan(0);
     expect(vectors.eval.length).toBeGreaterThan(0);
     expect(vectors.rename.length).toBeGreaterThan(0);
+  });
+
+  it('has typeless (word bank) eval subjects, which run with the other eval cases', () => {
+    expect(vectors.eval.filter((v) => v.snippet.type === null).length).toBeGreaterThanOrEqual(8);
   });
 
   describe('parse_ok', () => {

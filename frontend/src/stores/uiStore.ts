@@ -8,9 +8,12 @@ interface ContextMenu {
   y: number;
 }
 
+/** The right sidebar: at most one of the rhyme sidebar and the word bank is open. */
+export type RightPanel = 'none' | 'rhymes' | 'words';
+
 interface UIState {
   // Panels
-  rhymeSidebarOpen: boolean;
+  rightPanel: RightPanel;
   similarityPanelOpen: boolean;
   searchModalOpen: boolean;
   exportDialogOpen: boolean;
@@ -26,7 +29,10 @@ interface UIState {
   contextMenu: ContextMenu | null;
 
   // Actions
+  /** Open the rhyme sidebar (closing the word bank), or close it. */
   toggleRhymeSidebar: () => void;
+  /** Open the word bank (closing the rhyme sidebar), or close it. */
+  toggleWordBank: () => void;
   toggleSimilarityPanel: () => void;
   setSearchModalOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -42,7 +48,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
-  rhymeSidebarOpen: false,
+  rightPanel: 'none',
   similarityPanelOpen: false,
   searchModalOpen: false,
   exportDialogOpen: false,
@@ -51,7 +57,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   similarityTargetId: null,
   contextMenu: null,
 
-  toggleRhymeSidebar: () => set((s) => ({ rhymeSidebarOpen: !s.rhymeSidebarOpen })),
+  toggleRhymeSidebar: () => set((s) => ({ rightPanel: s.rightPanel === 'rhymes' ? 'none' : 'rhymes' })),
+  toggleWordBank: () => set((s) => ({ rightPanel: s.rightPanel === 'words' ? 'none' : 'words' })),
   toggleSimilarityPanel: () => set((s) => ({ similarityPanelOpen: !s.similarityPanelOpen })),
   setSearchModalOpen: (open) => set({ searchModalOpen: open }),
   setExportDialogOpen: (open) => set({ exportDialogOpen: open }),

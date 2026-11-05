@@ -58,3 +58,25 @@ describe('tag filter persistence', () => {
     warn.mockRestore();
   });
 });
+
+describe('filter persistence at a fixed key (word bank)', () => {
+  it('stores under lyrics-canvas.wordBankFilter, apart from canvas filters', async () => {
+    const { WORD_BANK_FILTER_KEY, loadFilterAt, saveFilterAt } = await import('./persistence');
+    expect(WORD_BANK_FILTER_KEY).toBe('lyrics-canvas.wordBankFilter');
+    const s = memory();
+    saveFilter(s, 'c1', { text: 'a', appliedText: 'a' });
+    expect(saveFilterAt(s, WORD_BANK_FILTER_KEY, { text: 'love &', appliedText: 'love' })).toEqual({ ok: true });
+    expect(loadFilterAt(s, WORD_BANK_FILTER_KEY)).toEqual({ text: 'love &', appliedText: 'love' });
+    expect(loadFilter(s, 'c1')).toEqual({ text: 'a', appliedText: 'a' });
+    saveFilterAt(s, WORD_BANK_FILTER_KEY, { text: '', appliedText: '' });
+    expect(s.data.has(WORD_BANK_FILTER_KEY)).toBe(false);
+  });
+
+  it('survives throwing storage', async () => {
+    const { loadFilterAt, saveFilterAt } = await import('./persistence');
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(loadFilterAt(throwing, 'k')).toBeNull();
+    expect(saveFilterAt(throwing, 'k', { text: 'x', appliedText: 'x' }).ok).toBe(false);
+    expect(saveFilterAt(null, 'k', { text: 'x', appliedText: 'x' })).toEqual({ ok: false, error: { kind: 'unavailable' } });
+  });
+});

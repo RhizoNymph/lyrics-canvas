@@ -3,7 +3,7 @@ import { checkState, createOffer, pickerTargets, planToggle, searchTags } from '
 import { snippet, tag } from '@/lib/merge/fixtures';
 import type { Tag } from '@/types';
 
-const userTag = (id: string, name: string): Tag => ({ id, name, color: '#123456', snippet_count: 0, created_at: '' });
+const userTag = (id: string, name: string): Tag => ({ id, name, color: '#123456', snippet_count: 0, word_count: 0, created_at: '' });
 
 const a = snippet('a', 'x', { tags: [tag('t1', 'love')] });
 const b = snippet('b', 'y', { tags: [tag('t1', 'love'), tag('t2', 'night')] });

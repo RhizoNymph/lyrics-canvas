@@ -1,10 +1,13 @@
 /**
- * The filter text per canvas, per viewer (browser storage). Storage can be missing or throw; reads then
+ * Filter texts per viewer (browser storage): one per canvas (`filterStorageKey`), plus the word bank's
+ * user-wide one (`WORD_BANK_FILTER_KEY`). Storage can be missing or throw; reads then
  * fall back to no filter and writes report a typed failure, so the in-memory filter always works.
  */
 import type { PersistedFilter } from './state';
 
 export const FILTER_STORAGE_PREFIX = 'lyrics-canvas.tagFilter.';
+/** The word bank's filter, remembered separately from every canvas filter (not per canvas). */
+export const WORD_BANK_FILTER_KEY = 'lyrics-canvas.wordBankFilter';
 
 /** The part of `Storage` this module uses. */
 export interface FilterStorage {
@@ -46,8 +49,16 @@ export function parsePersistedFilter(raw: string | null): PersistedFilter | null
 }
 
 export function loadFilter(storage: FilterStorage | null, canvasId: string): PersistedFilter | null {
+  return loadFilterAt(storage, filterStorageKey(canvasId));
+}
+
+/** An all-empty filter removes the key instead of storing it. */
+export function saveFilter(storage: FilterStorage | null, canvasId: string, filter: PersistedFilter): SaveFilterResult {
+  return saveFilterAt(storage, filterStorageKey(canvasId), filter);
+}
+
+export function loadFilterAt(storage: FilterStorage | null, key: string): PersistedFilter | null {
   if (storage === null) return null;
-  const key = filterStorageKey(canvasId);
   try {
     return parsePersistedFilter(storage.getItem(key));
   } catch (error) {
@@ -57,9 +68,8 @@ export function loadFilter(storage: FilterStorage | null, canvasId: string): Per
 }
 
 /** An all-empty filter removes the key instead of storing it. */
-export function saveFilter(storage: FilterStorage | null, canvasId: string, filter: PersistedFilter): SaveFilterResult {
+export function saveFilterAt(storage: FilterStorage | null, key: string, filter: PersistedFilter): SaveFilterResult {
   if (storage === null) return { ok: false, error: { kind: 'unavailable' } };
-  const key = filterStorageKey(canvasId);
   try {
     if (filter.text === '' && filter.appliedText === '') storage.removeItem(key);
     else storage.setItem(key, JSON.stringify({ v: 1, text: filter.text, appliedText: filter.appliedText }));

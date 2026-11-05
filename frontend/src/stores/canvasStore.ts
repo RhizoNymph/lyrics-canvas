@@ -51,8 +51,17 @@ interface CanvasState {
 
   // Snippet actions
   addSnippet: (position_x: number, position_y: number, snippet_type?: SnippetType) => Promise<void>;
-  /** Create a snippet from text (rhyme-view promotion). Resolves null when no canvas is loaded. */
-  addSnippetFromText: (text: string, x: number, y: number, derived_from?: DerivedFrom) => Promise<Snippet | null>;
+  /**
+   * Create a snippet from text (rhyme-view promotion, word bank drafts). Resolves null when no canvas is
+   * loaded; rejects with the request's error.
+   */
+  addSnippetFromText: (
+    text: string,
+    x: number,
+    y: number,
+    derived_from?: DerivedFrom,
+    snippet_type?: SnippetType,
+  ) => Promise<Snippet | null>;
   updateSnippet: (id: string, data: Partial<Snippet>) => Promise<void>;
   /** Insert or replace a snippet the server returned (e.g. a voice take), with an undo snapshot. */
   applySnippet: (snippet: Snippet) => void;
@@ -148,14 +157,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ snippets: next });
   },
 
-  addSnippetFromText: async (text, x, y, derived_from) => {
+  addSnippetFromText: async (text, x, y, derived_from, snippet_type = 'freestyle') => {
     const { canvasId, snippets } = get();
     if (!canvasId) return null;
     const res = await snippetApi.create(canvasId, {
       raw_text: text,
       position_x: x,
       position_y: y,
-      snippet_type: 'freestyle',
+      snippet_type,
       derived_from,
     });
     const snippet: Snippet = res.data;

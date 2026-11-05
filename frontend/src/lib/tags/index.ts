@@ -6,8 +6,8 @@ export {
   checkName, describeNameProblem, isHexColor, byName, sameName, MAX_NAME_LENGTH, DEFAULT_TAG_COLOR, TAG_COLOR_CHOICES,
 } from './names';
 export type { NameCheck, NameProblem } from './names';
-export { pickerTargets, checkState, planToggle, searchTags, createOffer } from './picker';
-export type { CheckState, TogglePlan, CreateOffer } from './picker';
+export { pickerTargets, checkState, planToggle, planTagToggle, searchTags, createOffer } from './picker';
+export type { CheckState, TogglePlan, TagToggle, Taggable, CreateOffer } from './picker';
 export { embedTag, patchEmbeddedTag, removeEmbeddedTag, setEmbeddedTag } from './snippetTags';
 export type { SnippetMap } from './snippetTags';
 export { checkPresetExpression } from './presets';

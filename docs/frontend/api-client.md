@@ -124,6 +124,26 @@ adapter) and bound in `client.ts` to the authenticated instance. Every method re
 | `fetchAudio(recordingId, signal?)` | GET `/api/recordings/{recordingId}/audio` | `responseType: 'blob'`, bearer token from the interceptor |
 | `deleteRecording(recordingId)` | DELETE `/api/recordings/{recordingId}` | 204 |
 
+#### wordBankApi
+
+Defined in `src/api/wordBank.ts` as `createWordBankApi(http)` and bound in `client.ts`. Every method
+rejects with a `WordBankApiError` (`lib/wordBank/errors.ts`): `invalid_word` (`detail.index` for a batch),
+`word_exists`, `word_not_found`, `too_many_words`, `related_words_warming` (`detail.retryAfterSeconds` from
+`Retry-After`), `related_words_unavailable`, the tag codes (`tag_not_found`, `invalid_tag_expression` with
+its expression error, ...), else `not_found` / `validation` / `network` / `server` / `http`. Types in
+`src/types/wordBank.ts`; see [web_word_bank.md](../features/web_word_bank.md).
+
+| Method | Path | Body/Params |
+|--------|------|-------------|
+| `list(signal?)` | GET `/api/word-bank` | -> `BankWord[]`, newest first |
+| `add(body)` | POST `/api/word-bank` | `{ words (1..200), tag_ids }` -> `{ created, existing }` |
+| `rename(id, text)` | PUT `/api/word-bank/{id}` | `{ text }` -> `BankWord` |
+| `delete(ids)` | POST `/api/word-bank/delete` | `{ ids }` -> 204 |
+| `setTag(wordIds, tagId, op)` | POST `/api/word-bank/tags` | `{ word_ids, tag_id, op: 'link' \| 'unlink' }` -> `{ words }` |
+| `rhymes(body, signal?)` | POST `/api/word-bank/rhymes` | `{ word_id \| text, tag_filter?, min_score, k?, limit? }` |
+| `families(body, signal?)` | POST `/api/word-bank/families` | `{ tag_filter?, min_score, k? }` |
+| `related(q, limit=30, signal?)` | GET `/api/word-bank/related` | `?q=&limit=` |
+
 See [web_voice_capture.md](../features/web_voice_capture.md).
 
 ---
@@ -198,6 +218,7 @@ interface Tag {            // user-wide, GET /api/tags
   name: string;
   color: string;           // #rrggbb
   snippet_count: number;
+  word_count: number;      // word bank words carrying it
   created_at: string;
 }
 

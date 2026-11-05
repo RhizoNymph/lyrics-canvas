@@ -40,7 +40,8 @@ text --lex()--> Token[] (or TagExprError; lexer errors win)
      --parse()--> { ok: true, expr: TagExpr | null } | { ok: false, error: TagExprError }
 TagExpr = or(children>=2) | and(children>=2) | not(child) | tag(name) | type(value: SnippetType)
 format(expr)        normalized text; format(parse(format(x))) == format(x)
-evaluate(expr, {type, tagNames})   tag names compare under toLowerCase; null matches everything
+evaluate(expr, {type, tagNames})   tag names compare under toLowerCase; null matches everything;
+                    type may be null (a word bank word): every type: term is false (vectors v2)
 renameTag(expr, from, to) / renameInText(text, from, to)
 ```
 
@@ -174,7 +175,7 @@ The dictionary source is never filtered (server side). The control notes when th
 | `frontend/src/lib/tagExpr/lexer.ts` | Tokens with code point spans | `lex`, `Token`, `LexResult` |
 | `frontend/src/lib/tagExpr/parser.ts` | Recursive descent with flattening | `parse`, `ParseResult` |
 | `frontend/src/lib/tagExpr/format.ts` | Normalized text, quoting | `format`, `formatTagName`, `isBareTagName` |
-| `frontend/src/lib/tagExpr/evaluate.ts` | Match a snippet | `evaluate`, `EvalSubject` |
+| `frontend/src/lib/tagExpr/evaluate.ts` | Match a snippet or a typeless word bank word | `evaluate`, `EvalSubject` |
 | `frontend/src/lib/tagExpr/rename.ts` | Rename in AST or text | `renameTag`, `renameInText`, `mentionsTag` |
 | `frontend/src/lib/tagExpr/caretContext.ts` | Token under the caret, grammar slot | `caretToken`, `slotAt`, `startsOperandAt`, `GrammarSlot` |
 | `frontend/src/lib/tagExpr/completion.ts` | Suggestions and applying them | `completionContextAt`, `suggestionsFor`, `applySuggestion`, `Suggestion`, `TextEdit` |
@@ -201,9 +202,11 @@ The dictionary source is never filtered (server side). The control notes when th
 | `frontend/src/types/rhyme.ts` | `RhymeSuggestRequest.tag_filter`, `RhymeErrorKind 'invalid_tag_filter'`, `RhymeError.expressionError` | |
 | `frontend/src/components/tags/TagExpressionInput.tsx` | Expression field: validation, autocomplete, `insertTag` handle | default, `TagExpressionInputHandle` |
 | `frontend/src/components/tags/PresetPicker.tsx` | Preset popover | default |
-| `frontend/src/components/tags/TagPicker.tsx` | Context menu tag checklist | default |
+| `frontend/src/components/tags/TagChecklist.tsx` | Tag checklist over any `Taggable` targets (snippets, bank words) | default, `ToggleOutcome`, `fromTagResult` |
+| `frontend/src/components/tags/TagPicker.tsx` | Context menu wrapper of `TagChecklist` over the targeted snippets | default |
+| `frontend/src/components/tags/TagFilterBar.tsx` | Expression filter bar (field, pills, presets, clear, count), shared with the word bank | default |
 | `frontend/src/components/tags/tagStyles.ts` | Shared styles | |
-| `frontend/src/components/toolbar/TagExpressionBar.tsx` | Canvas page filter bar | default |
+| `frontend/src/components/toolbar/TagExpressionBar.tsx` | Canvas page filter bar (`TagFilterBar` bound to `tagFilterStore`) | default |
 | `frontend/src/components/rhyme/NotesTagFilter.tsx` | Rhyme "Only my lines matching" | default |
 | `frontend/src/components/canvas/SnippetContextMenu.tsx` | Hosts `TagPicker`; merge, delete; Esc closes | default |
 

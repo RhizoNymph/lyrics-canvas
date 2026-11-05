@@ -4,6 +4,7 @@ import { installHealthInterceptors } from '@/lib/health/interceptors';
 import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType, Tag, TagPreset } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
 import { createVoiceApi } from './voice';
+import { createWordBankApi } from './wordBank';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -149,5 +150,8 @@ export const exportApi = {
 
 // ---- Voice takes and recordings (see api/voice.ts) ----
 export const voiceApi = createVoiceApi(api);
+
+// ---- Word bank (see api/wordBank.ts) ----
+export const wordBankApi = createWordBankApi(api);
 
 export default api;
