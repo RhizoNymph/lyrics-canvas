@@ -19,6 +19,10 @@ Backspace line split and join).
 - Voice: a "Record" top-bar action (saves pending edits, then records a take appended to this snippet and
   reloads the rows from the result) and a collapsible Recordings section above the hint line; see
   [android_voice_capture.md](../features/android_voice_capture.md).
+- Word bank: with a non-blank text selection in the active row's field, the selection toolbar offers
+  "Add to word bank" (`GridEditorRoute(onAddToWordBank)`, provided to the field through
+  `LocalAddToWordBank`); the host trims, splits on commas / newlines, posts and toasts the result. See
+  [android_word_bank.md](../features/android_word_bank.md).
 
 ## Non-scope
 
@@ -155,7 +159,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 
 | File | Role / key exports |
 |---|---|
-| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier, onSnippetChanged)`: ViewModels per visit (editor, voice capture, recordings), `onSaved` on `Saved`, Record button, recordings section |
+| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier, onSnippetChanged, extraTopBarActions, onAddToWordBank)`: ViewModels per visit (editor, voice capture, recordings), `onSaved` on `Saved`, Record button, recordings section, `LocalAddToWordBank` |
 | `GridEditorViewModel.kt` | `GridEditorViewModel` (+ `flushPendingEdits`, `reloadFrom`), `SYLLABIFY_DEBOUNCE_MS`, `saveRequest(state)`, `selectionIsAllRests(state)` |
 | `GridEditorActions.kt` | `GridEditorActions`: every user intent the screen can send |
 | `EditorUiState.kt` | `EditorUiState` (`rows`, `selection`, `extendMode`, `snippetType`, `save`, `syllabifyError`, derived `rowLines`), sealed `SaveStatus` (`Idle`, `Saving`, `Saved(snippet)`, `Failed(error)`) |
@@ -167,9 +171,11 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 | `ui/EditorRow.kt` | `RowModel` (incl. `caret` request for the row), `EditorRow` (handle, number, strip, count, menu, toolbar, field) |
 | `ui/CellStrip.kt` | Cells, gestures (tap / handles / long-press drag), drop indicator, auto-scroll |
 | `ui/RowToolbar.kt` | `+·`, `−`, ◀, ▶, Extend chip, Clear |
-| `ui/ActiveLineField.kt` | Active row `OutlinedTextField` with the sentinel (IME Next splits at the caret, Backspace at the start joins / deletes an empty row), own "Type lyrics…" overlay |
+| `ui/ActiveLineField.kt` | Active row `OutlinedTextField` with the sentinel (IME Next splits at the caret, Backspace at the start joins / deletes an empty row), own "Type lyrics…" overlay, "Add to word bank" selection toolbar item (`appendTextContextMenuComponents`) |
+| `ui/SelectionActions.kt` | `LocalAddToWordBank`, `selectedText(raw, selection)` (sentinel removed; null when blank or collapsed) |
 | `ui/EditorDimens.kt` | Cell, handle, auto-scroll and control sizes |
 
 Tests under `android/app/src/test/kotlin/dev/nymph/lyrics/app/editor/` (JUnit 5, coroutines-test,
 Turbine; no Robolectric): `GridEditorViewModelTest` (fake repositories in `Fakes.kt`),
-`CellSelectionTest`, `DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`, `GridEditorVoiceTest`.
+`CellSelectionTest`, `DragGeometryTest`, `LineFieldEditTest`, `GridEditorSplitJoinTest`, `GridEditorVoiceTest`,
+`ui/SelectionActionsTest`.

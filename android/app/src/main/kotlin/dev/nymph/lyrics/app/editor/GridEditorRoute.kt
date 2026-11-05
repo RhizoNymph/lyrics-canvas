@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.editor.ui.GridEditorScreen
+import dev.nymph.lyrics.app.editor.ui.LocalAddToWordBank
 import dev.nymph.lyrics.app.ui.userMessage
 import dev.nymph.lyrics.app.voice.recordings.RecordingsSection
 import dev.nymph.lyrics.app.voice.recordings.RecordingsViewModel
@@ -50,6 +52,8 @@ fun GridEditorRoute(
     onSnippetChanged: (Snippet) -> Unit = {},
     /** More top-bar actions from the host (the tag picker's "Tags"). */
     extraTopBarActions: @Composable RowScope.() -> Unit = {},
+    /** "Add to word bank" on a line field's text selection; null hides it. */
+    onAddToWordBank: ((String) -> Unit)? = null,
 ) {
     // One ViewModel per visit: survives rotation (saveable key), fresh when the editor is reopened,
     // even if the host keeps one ViewModelStore across visits.
@@ -100,17 +104,19 @@ fun GridEditorRoute(
         }
     }
 
-    GridEditorScreen(
-        state = state,
-        actions = viewModel,
-        onDiscard = onClose,
-        modifier = modifier,
-        snackbar = snackbar,
-        topBarActions = {
-            extraTopBarActions()
-            TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
-        },
-        bottomPanel = { RecordingsSection(recordingsState, recordings) },
-    )
+    CompositionLocalProvider(LocalAddToWordBank provides onAddToWordBank) {
+        GridEditorScreen(
+            state = state,
+            actions = viewModel,
+            onDiscard = onClose,
+            modifier = modifier,
+            snackbar = snackbar,
+            topBarActions = {
+                extraTopBarActions()
+                TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
+            },
+            bottomPanel = { RecordingsSection(recordingsState, recordings) },
+        )
+    }
     VoiceCaptureHost(voice)
 }

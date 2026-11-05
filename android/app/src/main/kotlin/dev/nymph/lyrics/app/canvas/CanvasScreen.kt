@@ -59,6 +59,8 @@ import dev.nymph.lyrics.logic.tags.TagFilter
 import androidx.compose.foundation.layout.fillMaxWidth
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
+import dev.nymph.lyrics.app.wordbank.QuickAddToasts
+import dev.nymph.lyrics.app.wordbank.wordBankQuickAdd
 import dev.nymph.lyrics.app.voice.ui.voiceCaptureViewModel
 import dev.nymph.lyrics.logic.canvas.ViewSize
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -86,8 +88,16 @@ fun canvasViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit, onOpenEditor: (SnippetId) -> Unit) {
+fun CanvasScreen(
+    container: AppContainer,
+    canvasId: CanvasId,
+    onBack: () -> Unit,
+    onOpenEditor: (SnippetId) -> Unit,
+    onOpenWordBank: () -> Unit = {},
+) {
     val vm = canvasViewModel(container, canvasId)
+    val quickAdd = wordBankQuickAdd(container)
+    QuickAddToasts(quickAdd)
     val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets) }
     val tagsVm = tagsViewModel(container, canvasId, vm)
     val state by vm.state.collectAsStateWithLifecycle()
@@ -161,6 +171,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                         onSetMode = vm::setMode,
                         onToggleRhymes = toggleRhymes,
                         onRecord = if (ready != null) ({ vm.voiceTarget()?.let(voice::open) }) else null,
+                        onWordBank = if (ready != null) onOpenWordBank else null,
                     )
                 }
             },
@@ -216,7 +227,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                 }
                 if (sidePane && rhyme.open) {
                     VerticalDivider(color = Palette.Border)
-                    RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
+                    RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, onAddToBank = quickAdd::add, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
                 }
             }
         }
@@ -226,7 +237,7 @@ fun CanvasScreen(container: AppContainer, canvasId: CanvasId, onBack: () -> Unit
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
                 containerColor = Palette.Sidebar,
             ) {
-                RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, modifier = Modifier.fillMaxSize())
+                RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, onAddToBank = quickAdd::add, modifier = Modifier.fillMaxSize())
             }
         }
     }

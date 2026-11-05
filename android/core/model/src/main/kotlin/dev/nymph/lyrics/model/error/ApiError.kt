@@ -35,19 +35,29 @@ sealed interface ApiError {
 
     /**
      * 400 or 422: the server rejected the request; pydantic messages are joined with "; ".
-     * [expressionError] is the located error of an `invalid_tag_expression` rejection.
+     * [expressionError] is the located error of an `invalid_tag_expression` rejection; [index] is
+     * the structured body's `index` (the first bad word of an `invalid_word` batch).
      */
     data class Validation(
         val status: Int,
         val detail: String,
         override val code: String? = null,
         val expressionError: ExpressionErrorBody? = null,
+        val index: Int? = null,
     ) : ApiError {
         override val message: String get() = detail
     }
 
-    /** 5xx or any other non-2xx status. */
-    data class Server(val status: Int, val detail: String?, override val code: String? = null) : ApiError {
+    /**
+     * 5xx or any other non-2xx status. [retryAfterSeconds] is the `Retry-After` header when it is a
+     * whole number of seconds (e.g. `related_words_warming`).
+     */
+    data class Server(
+        val status: Int,
+        val detail: String?,
+        override val code: String? = null,
+        val retryAfterSeconds: Int? = null,
+    ) : ApiError {
         override val message: String get() = detail ?: "Server error ($status)"
     }
 
@@ -62,17 +72,27 @@ sealed interface ApiError {
     }
 
     companion object {
-        /** Classify a non-2xx response by status, reading FastAPI's `detail` from the body. */
-        fun fromHttp(status: Int, body: String?): ApiError {
+        /**
+         * Classify a non-2xx response by status, reading FastAPI's `detail` from the body and the
+         * [retryAfter] header (seconds) for a 5xx.
+         */
+        fun fromHttp(status: Int, body: String?, retryAfter: String? = null): ApiError {
             val detail = detailFromBody(body)
             val code = errorCodeFromBody(body)
             return when (status) {
                 401, 403 -> Unauthorized(status, detail)
                 404 -> NotFound(detail, code)
-                400, 422 -> Validation(status, detail ?: "Invalid request ($status)", code, expressionErrorFromBody(body))
-                else -> Server(status, detail, code)
+                400, 422 -> Validation(status, detail ?: "Invalid request ($status)", code, expressionErrorFromBody(body), indexFromBody(body))
+                else -> Server(status, detail, code, retryAfterSeconds(retryAfter))
             }
         }
+
+        /** `Retry-After` as delta seconds (>= 0); an HTTP date or garbage is null. */
+        fun retryAfterSeconds(header: String?): Int? = header?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
+
+        /** The integer `detail.index` of a structured body, else null. */
+        fun indexFromBody(body: String?): Int? =
+            ((detailElement(body) as? JsonObject)?.get("index") as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
 
         /**
          * FastAPI error bodies: `{"detail": "text"}` from HTTPException,

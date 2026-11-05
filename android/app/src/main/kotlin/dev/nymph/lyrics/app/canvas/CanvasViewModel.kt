@@ -7,6 +7,8 @@ import dev.nymph.lyrics.app.rhyme.RhymeCanvasPort
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasView
 import dev.nymph.lyrics.app.tags.TagCanvasPort
 import dev.nymph.lyrics.app.ui.userMessage
+import dev.nymph.lyrics.app.wordbank.DraftCreateResult
+import dev.nymph.lyrics.app.wordbank.WordBankCanvasPort
 import dev.nymph.lyrics.data.repository.CanvasRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.logic.canvas.MergeError
@@ -81,7 +83,7 @@ class CanvasViewModel(
     private val persistScope: CoroutineScope,
     private val viewportSaveDelayMs: Long = VIEWPORT_SAVE_DELAY_MS,
     private val savedState: SavedStateHandle = SavedStateHandle(),
-) : ViewModel(), RhymeCanvasPort, TagCanvasPort {
+) : ViewModel(), RhymeCanvasPort, TagCanvasPort, WordBankCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
 
@@ -340,6 +342,22 @@ class CanvasViewModel(
         }
     }
 
+    /**
+     * A word bank draft: create a snippet with [text] and [type] where the FAB would (the viewport
+     * centre), then show it selected (scrolled to in the list) like a new voice take.
+     */
+    override suspend fun createSnippetFromText(text: String, type: SnippetType): DraftCreateResult {
+        val ready = ready() ?: return DraftCreateResult.CanvasNotLoaded
+        val at = viewportCenter(ready.viewport, ready.viewSize)
+        return when (val result = snippets.create(ready.canvasId, SnippetCreateRequest(positionX = at.x, positionY = at.y, snippetType = type, rawText = text))) {
+            is ApiResult.Success -> {
+                showCreated(result.value)
+                DraftCreateResult.Created(result.value)
+            }
+            is ApiResult.Failure -> DraftCreateResult.Failed(result.error)
+        }
+    }
+
     /** The editor saved [snippet]: replace the old copy in place; back in the list, sort it afresh. */
     fun replaceSnippet(snippet: Snippet) {
         updateReady { ready -> ready.copy(snippets = ready.snippets.map { if (it.id == snippet.id) snippet else it }) }
@@ -367,6 +385,10 @@ class CanvasViewModel(
             replaceSnippet(snippet)
             return
         }
+        showCreated(snippet)
+    }
+
+    private fun showCreated(snippet: Snippet) {
         insert(snippet)
         updateReady { it.copy(selection = Selection.of(setOf(snippet.id))) }
         if (ready()?.mode is CanvasMode.SnippetList) _events.trySend(CanvasEvent.RevealSnippet(snippet.id))

@@ -24,6 +24,8 @@ data class UserTag(
     /** Snippets (on any canvas) carrying the tag. */
     @SerialName("snippet_count") val snippetCount: Int = 0,
     @SerialName("created_at") val createdAt: String,
+    /** Word bank words carrying the tag. */
+    @SerialName("word_count") val wordCount: Int = 0,
 ) {
     /** The embedded form a snippet carries. */
     fun toTag(): Tag = Tag(id, name, color)

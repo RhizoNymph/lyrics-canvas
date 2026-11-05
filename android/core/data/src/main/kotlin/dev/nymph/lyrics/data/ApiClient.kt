@@ -63,6 +63,14 @@ class ApiClient(
         readJson(it) { text -> json.decodeFromString(response, text) }
     }
 
+    /** A JSON-body call whose response (e.g. a 204) is ignored. */
+    suspend fun <B> sendNoContent(
+        method: HttpMethod,
+        path: List<String>,
+        body: B,
+        bodySerializer: SerializationStrategy<B>,
+    ): ApiResult<Unit> = call(method, path, json.encodeToString(bodySerializer, body).toRequestBody(JSON_MEDIA_TYPE)) { readJson(it) { } }
+
     /** POST a multipart form (file uploads); the JSON response is decoded with [response]. */
     suspend fun <T> sendMultipart(path: List<String>, body: MultipartBody, response: DeserializationStrategy<T>): ApiResult<T> =
         call(HttpMethod.POST, path, body) { readJson(it) { text -> json.decodeFromString(response, text) } }
@@ -157,7 +165,7 @@ class ApiClient(
         } catch (e: IOException) {
             return ApiResult.Failure(ApiError.Network(e))
         }
-        if (!response.isSuccessful) return ApiResult.Failure(ApiError.fromHttp(response.code, text))
+        if (!response.isSuccessful) return ApiResult.Failure(ApiError.fromHttp(response.code, text, response.header("Retry-After")))
         return try {
             ApiResult.Success(decode(text))
         } catch (e: SerializationException) {

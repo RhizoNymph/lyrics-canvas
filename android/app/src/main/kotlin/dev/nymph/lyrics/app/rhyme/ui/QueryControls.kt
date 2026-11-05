@@ -44,7 +44,7 @@ import java.util.Locale
 /** Search box, anchor chips, k, min score, slot, sources, rare words (QueryControls.tsx), "Only my lines matching". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState) {
+fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             OutlinedTextField(
@@ -136,7 +136,7 @@ fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState) {
 
 /** "Only my lines matching": restricts the notes source (never the dictionary) to snippets matching an expression. */
 @Composable
-private fun TagFilterControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState) {
+private fun TagFilterControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Label("Only my lines matching")
         ExpressionInput(

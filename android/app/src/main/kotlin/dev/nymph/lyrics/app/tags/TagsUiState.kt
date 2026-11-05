@@ -5,18 +5,18 @@ import dev.nymph.lyrics.logic.tags.PickerRow
 import dev.nymph.lyrics.logic.tags.TagError
 import dev.nymph.lyrics.logic.tags.createOffer
 import dev.nymph.lyrics.logic.tags.pickerRows
-import dev.nymph.lyrics.model.SnippetId
+import dev.nymph.lyrics.model.TaggedItemId
 import dev.nymph.lyrics.model.TagId
 import dev.nymph.lyrics.model.TagPreset
 import dev.nymph.lyrics.model.TagPresetId
 import dev.nymph.lyrics.model.UserTag
 
-/** The open tag picker: which snippets it edits and their current tag ids. */
-data class PickerSession(
-    val snippetIds: Set<SnippetId>,
+/** The open tag picker: which items (snippets or words) it edits and their current tag ids. */
+data class PickerSession<K : TaggedItemId>(
+    val ids: Set<K>,
     val query: String = "",
-    /** Tag ids of each picked snippet, as the server confirmed them. */
-    val links: Map<SnippetId, Set<TagId>>,
+    /** Tag ids of each picked item, as the server confirmed them. */
+    val links: Map<K, Set<TagId>>,
     /** Tags with a link / unlink in flight (their rows are disabled). */
     val pending: Set<TagId> = emptySet(),
     /** A create from the query is in flight. */
@@ -48,15 +48,15 @@ data class PresetEditor(
     }
 }
 
-/** User-wide tags and presets, plus this canvas's filter bar and tag picker. */
-data class TagsUiState(
+/** User-wide tags and presets, plus one filter bar and the tag picker for items of id [K]. */
+data class TagsUiState<K : TaggedItemId>(
     /** Sorted by lowercase name. */
     val tags: List<UserTag> = emptyList(),
     /** Sorted by lowercase name. */
     val presets: List<TagPreset> = emptyList(),
     val loadError: TagError? = null,
     val filterBar: FilterBarState = FilterBarState.restored(""),
-    val picker: PickerSession? = null,
+    val picker: PickerSession<K>? = null,
     val tagEditor: TagEditor? = null,
     val presetEditor: PresetEditor? = null,
 ) {

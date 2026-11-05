@@ -4,9 +4,11 @@ import dev.nymph.lyrics.model.SnippetType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import java.io.File
 
@@ -40,6 +43,16 @@ class TagExpressionVectorsTest {
 
     /** A display name: JSON-quoted (blank inputs are vectors too), long inputs shortened. */
     private fun label(text: String): String = JsonPrimitive(if (text.length > 40) text.take(40) + "…(${text.length})" else text).toString()
+
+    @Test
+    fun `vectors are version 2`() {
+        assertEquals(2, root.getValue("version").jsonPrimitive.int)
+    }
+
+    @Test
+    fun `typeless eval subjects are covered`() {
+        assertTrue(section("eval").count { it.getValue("snippet").jsonObject.getValue("type") is JsonNull } >= 8)
+    }
 
     @TestFactory
     fun `every section is present and non-empty`(): List<DynamicTest> = listOf("parse_ok", "parse_error", "eval", "rename").map { name ->
@@ -77,12 +90,13 @@ class TagExpressionVectorsTest {
     fun `eval vectors`(): List<DynamicTest> = section("eval").map { v ->
         val expression = v.getValue("expression").jsonPrimitive.content
         val snippet = v.getValue("snippet").jsonObject
-        val type = snippet.getValue("type").jsonPrimitive.content
+        // A null type is a typeless subject (a word bank word; vectors v2).
+        val type = snippet.getValue("type").jsonPrimitive.contentOrNull
         val tags = snippet.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
         val matches = v.getValue("matches").jsonPrimitive.boolean
         DynamicTest.dynamicTest("$expression on $type $tags") {
             val filter = (parseTagExpression(expression) as TagExprParse.Valid).filter
-            val snippetType = SnippetType.entries.single { it.wire == type }
+            val snippetType = type?.let { wire -> SnippetType.entries.single { it.wire == wire } }
             assertEquals(matches, filter.matches(snippetType, tags))
         }
     }

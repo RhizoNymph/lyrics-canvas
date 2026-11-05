@@ -13,7 +13,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +37,7 @@ import java.util.Locale
 
 /**
  * One result (CandidateRow.tsx): text (tap = search for it instead), score, depth, fit badge,
- * provenance; the syllable strip; tap the row to expand the alignment; Materialize / Dismiss.
+ * provenance; the syllable strip; tap the row to expand the alignment; Materialize / + bank / Dismiss.
  */
 @Composable
 fun CandidateRow(
@@ -46,6 +51,10 @@ fun CandidateRow(
     onMaterialize: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "+ bank": add the text to the word bank; null hides the action. */
+    onAddToBank: (() -> Unit)? = null,
+    /** Why the text cannot be a word bank entry (the action is disabled with this tooltip), or null. */
+    bankProblem: String? = null,
 ) {
     val colour = Palette.provenance(candidate.provenance)
     val dimmed = hasSlot && !candidate.fitsSlot
@@ -90,7 +99,26 @@ fun CandidateRow(
                 enabled = !materializing,
                 contentPadding = ButtonDefaults.TextButtonContentPadding,
             ) { Text(if (materializing) "Adding…" else "Materialize", fontSize = 12.sp) }
+            if (onAddToBank != null) AddToBankButton(onAddToBank, bankProblem)
             OutlinedButton(onClick = onDismiss, contentPadding = ButtonDefaults.TextButtonContentPadding) { Text("Dismiss", fontSize = 12.sp) }
         }
     }
+}
+
+/** "+ bank"; disabled with a tooltip (long press) saying why when the text is not a valid word. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddToBankButton(onClick: () -> Unit, problem: String?) {
+    val button = @Composable {
+        OutlinedButton(onClick = onClick, enabled = problem == null, contentPadding = ButtonDefaults.TextButtonContentPadding) { Text("+ bank", fontSize = 12.sp) }
+    }
+    if (problem == null) {
+        button()
+        return
+    }
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text("Can't add to the word bank: $problem") } },
+        state = rememberTooltipState(),
+    ) { button() }
 }
