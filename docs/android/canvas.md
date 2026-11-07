@@ -8,7 +8,8 @@ its own milestone.
 ## Scope
 
 - Navigation: login / register -> canvas list -> canvas -> editor; sign-out on any 401.
-- Canvas list: list, create (title dialog), open, refresh, sign out.
+- Canvas list: list, create (title dialog), open, refresh, sign out; overflow (⋮) -> "Voice dataset" stats
+  dialog (see [android_voice_capture.md](../features/android_voice_capture.md)).
 - Canvas screen: web-identical card drawing in a Compose `Canvas`, culling, pan / pinch zoom, tap to
   edit, long-press selection mode, long-press-drag move, contextual bar (Merge ⇣ / ⇢, Delete, Rhymes, ✕),
   FAB new snippet, viewport persistence.
@@ -238,7 +239,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | File | Role / key exports |
 |---|---|
 | `MainActivity.kt` | `setContent { LyricsTheme { AppNavHost(container) } }` |
-| `nav/Routes.kt` | `AuthRoute`, `CanvasListRoute`, `CanvasRoute(canvasId)`, `EditorRoute(canvasId, snippetId)` (type-safe, `@Serializable`) |
+| `nav/Routes.kt` | `AuthRoute`, `CanvasListRoute`, `CanvasRoute(canvasId)`, `EditorRoute(canvasId, snippetId)`, `WordBankRoute(canvasId)`, `CheckTranscriptRoute(snippetId, recordingId)` (type-safe, `@Serializable`) |
 | `nav/AppNavHost.kt` | `AppNavHost(container)`: session-driven start / sign-out navigation; editor destination sharing the canvas entry's ViewModel |
 | `di/ProcessScope.kt` | `ProcessScope.scope`: process-lifetime scope for saves that must outlive a screen |
 | `session/SessionViewModel.kt` | `SessionState` (`Unknown`, `SignedOut`, `SignedIn`), `SessionViewModel` (`state`, `signOut`) |
