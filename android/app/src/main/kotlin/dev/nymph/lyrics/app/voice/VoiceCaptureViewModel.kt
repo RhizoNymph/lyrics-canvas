@@ -61,6 +61,9 @@ class VoiceCaptureViewModel(
     /** The persisted silence auto-stop choice. */
     val silence: StateFlow<SilenceTimeout> = settings.silence.stateIn(viewModelScope, SharingStarted.Eagerly, SilenceTimeout.Default)
 
+    /** The persisted "Use word bank as hints" choice, sent with every upload. */
+    val vocabularyHints: StateFlow<Boolean> = settings.vocabularyHints.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     private val _saved = Channel<VoiceTakeSaved>(Channel.BUFFERED)
 
     /** One element per stored take, for the host screen. */
@@ -98,6 +101,11 @@ class VoiceCaptureViewModel(
     fun setSilence(value: SilenceTimeout) {
         viewModelScope.launch { settings.setSilence(value) }
         dispatch(RecorderEvent.SetSilence(value))
+    }
+
+    /** Persist the hints choice; the next upload (or retry) sends it. */
+    fun setVocabularyHints(enabled: Boolean) {
+        viewModelScope.launch { settings.setVocabularyHints(enabled) }
     }
 
     private fun dispatch(event: RecorderEvent) {
@@ -156,7 +164,7 @@ class VoiceCaptureViewModel(
     private fun upload(target: VoiceTakeTarget, take: CapturedTake) {
         uploadJob?.cancel()
         uploadJob = viewModelScope.launch {
-            val result = voice.uploadTake(canvasId, File(take.audio.path), take.audio.mime, take.meta(target))
+            val result = voice.uploadTake(canvasId, File(take.audio.path), take.audio.mime, take.meta(target, vocabularyHints.value))
             ensureActive()
             dispatch(
                 when (result) {

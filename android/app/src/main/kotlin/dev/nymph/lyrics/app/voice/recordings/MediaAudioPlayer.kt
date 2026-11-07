@@ -7,8 +7,8 @@ import java.io.IOException
 
 private const val TAG = "VoicePlayer"
 
-/** [AudioPlayer] on [MediaPlayer]; one player per [play], released on [stop] or completion. */
-class MediaAudioPlayer : AudioPlayer {
+/** [SeekableAudioPlayer] on [MediaPlayer]; one player per [play], released on [stop] or completion. */
+class MediaAudioPlayer : SeekableAudioPlayer {
     private var player: MediaPlayer? = null
 
     override fun play(file: File, onComplete: () -> Unit): Boolean {
@@ -51,6 +51,25 @@ class MediaAudioPlayer : AudioPlayer {
             active.start()
         } catch (e: IllegalStateException) {
             Log.w(TAG, "event=player_resume_failed message=${e.message}")
+        }
+    }
+
+    override fun positionMs(): Long {
+        val active = player ?: return 0
+        return try {
+            active.currentPosition.toLong()
+        } catch (e: IllegalStateException) {
+            Log.d(TAG, "event=player_position_failed message=${e.message}")
+            0
+        }
+    }
+
+    override fun seekTo(positionMs: Long) {
+        val active = player ?: return
+        try {
+            active.seekTo(positionMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "event=player_seek_failed position_ms=$positionMs message=${e.message}")
         }
     }
 

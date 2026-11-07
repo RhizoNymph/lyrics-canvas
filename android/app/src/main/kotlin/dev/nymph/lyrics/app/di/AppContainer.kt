@@ -32,8 +32,9 @@ import dev.nymph.lyrics.app.voice.DataStoreVoiceSettings
 import dev.nymph.lyrics.app.voice.VoiceSettingsStore
 import dev.nymph.lyrics.app.voice.recorder.AudioRecorder
 import dev.nymph.lyrics.app.voice.recorder.MediaRecorderAudioRecorder
-import dev.nymph.lyrics.app.voice.recordings.AudioPlayer
 import dev.nymph.lyrics.app.voice.recordings.MediaAudioPlayer
+import dev.nymph.lyrics.app.voice.recordings.RecordingUpdates
+import dev.nymph.lyrics.app.voice.recordings.SeekableAudioPlayer
 import java.io.File
 import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -102,7 +103,7 @@ class AppContainer(
 
     val voice: VoiceRepository = HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health))
 
-    /** Silence auto-stop and other per-device voice settings. */
+    /** Silence auto-stop, "Use word bank as hints" and other per-device voice settings (DataStore `voice`). */
     val voiceSettings: VoiceSettingsStore = DataStoreVoiceSettings(appContext.voiceDataStore)
 
     /** Downloaded recording audio, played from here. */
@@ -111,5 +112,8 @@ class AppContainer(
     /** A recorder writing takes into the app cache (one per voice modal). */
     fun newRecorder(): AudioRecorder = MediaRecorderAudioRecorder(appContext, File(appContext.cacheDir, "voice-takes"))
 
-    fun newAudioPlayer(): AudioPlayer = MediaAudioPlayer()
+    fun newAudioPlayer(): SeekableAudioPlayer = MediaAudioPlayer()
+
+    /** Recordings changed on the Check transcript screen, for the editor's list. */
+    val recordingUpdates: RecordingUpdates = RecordingUpdates()
 }

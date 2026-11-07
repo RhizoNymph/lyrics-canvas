@@ -10,7 +10,8 @@ data class AudioFile(val path: String, val mime: AudioMime)
 
 /** A finished take, kept until it is uploaded or discarded. Breaks are ms since the recorder started. */
 data class CapturedTake(val audio: AudioFile, val durationMs: Long, val breaksMs: List<Long>) {
-    fun meta(target: VoiceTakeTarget): VoiceTakeMeta = VoiceTakeMeta.of(breaksMs, durationMs, target)
+    fun meta(target: VoiceTakeTarget, vocabularyHints: Boolean = true): VoiceTakeMeta =
+        VoiceTakeMeta.of(breaksMs, durationMs, target, vocabularyHints)
 }
 
 /** Where the microphone permission stands while [RecorderState.Permission] is shown. */

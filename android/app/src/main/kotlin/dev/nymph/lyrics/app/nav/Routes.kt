@@ -19,3 +19,7 @@ data class EditorRoute(val canvasId: String, val snippetId: String)
 /** The word bank, opened from the canvas below it on the back stack (drafts become snippets there). */
 @Serializable
 data class WordBankRoute(val canvasId: String)
+
+/** Check transcript for one recording of the snippet open in the editor below it. */
+@Serializable
+data class CheckTranscriptRoute(val snippetId: String, val recordingId: String)

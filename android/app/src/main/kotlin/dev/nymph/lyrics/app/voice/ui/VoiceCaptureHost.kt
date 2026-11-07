@@ -59,6 +59,7 @@ private fun Activity?.micRationale(): Boolean = this != null && ActivityCompat.s
 fun VoiceCaptureHost(vm: VoiceCaptureViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     val silence by vm.silence.collectAsStateWithLifecycle()
+    val vocabularyHints by vm.vocabularyHints.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
     val currentActivity by rememberUpdatedState(activity)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -88,6 +89,7 @@ fun VoiceCaptureHost(vm: VoiceCaptureViewModel) {
     VoiceCaptureDialog(
         state = shown,
         silence = silence,
+        vocabularyHints = vocabularyHints,
         actions = VoiceCaptureActions(
             onTap = vm::tap,
             onStop = vm::stop,
@@ -95,6 +97,7 @@ fun VoiceCaptureHost(vm: VoiceCaptureViewModel) {
             onRetry = vm::retry,
             onDiscard = vm::discard,
             onSilence = vm::setSilence,
+            onVocabularyHints = vm::setVocabularyHints,
             onAskAgain = vm::requestPermissionAgain,
             onOpenSettings = {
                 currentActivity?.let { a ->
