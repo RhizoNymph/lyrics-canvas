@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { voiceApi } from '@/api/client';
-import { describeVoiceError, toVoiceError } from '@/lib/voice/errors';
+import { describeVoiceError, isRecordingGone, toVoiceError } from '@/lib/voice/errors';
+import { withVerification } from '@/lib/voice/recordingView';
 import { IDLE_PLAYBACK, reducePlayback } from '@/lib/voice/playback';
 import type { PlaybackEvent, PlaybackState } from '@/lib/voice/playback';
 import { VoiceError } from '@/lib/voice/types';
 import type { RecordingResponse } from '@/lib/voice/types';
 import { useVoiceStore } from '@/stores/voiceStore';
 import RecordingsListView from './RecordingsListView';
+import CheckTranscriptModal from './check/CheckTranscriptModal';
 
 interface Props {
   snippetId: string;
@@ -19,7 +22,8 @@ type ListState = { kind: 'loading' } | { kind: 'loaded'; recordings: RecordingRe
  * Recordings of the snippet open in the inline editor. Loads `GET /api/snippets/{id}/recordings` on open
  * and whenever a take is stored; plays audio fetched with the bearer token into blob URLs (one audio
  * element, one recording at a time; every URL is revoked on delete and unmount); deletes after an
- * inline confirmation. A failed list load hides the section (logged), e.g. against a backend without
+ * inline confirmation. "Check" opens CheckTranscriptModal (portal on document.body) for one recording and
+ * pauses the list's playback; its save/uncheck response replaces the row. A failed list load hides the section (logged), e.g. against a backend without
  * the endpoint.
  */
 function failureMessage(err: unknown): string {
@@ -36,6 +40,7 @@ export default function RecordingsSection({ snippetId, scale }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [playback, setPlayback] = useState<PlaybackState>(IDLE_PLAYBACK);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
 
   const playbackRef = useRef<PlaybackState>(IDLE_PLAYBACK);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -164,8 +169,9 @@ export default function RecordingsSection({ snippetId, scale }: Props) {
         if (!mounted.current) return;
         const error = toVoiceError(err);
         console.warn('recordings: delete failed', { recordingId: id, kind: error.kind, status: error.status });
-        setDeleteError(error.kind === 'not_found' ? 'That recording was already deleted' : `Delete failed: ${describeVoiceError(error).title}`);
-        if (error.kind === 'not_found') {
+        const gone = isRecordingGone(error);
+        setDeleteError(gone ? 'That recording was already deleted' : `Delete failed: ${describeVoiceError(error).title}`);
+        if (gone) {
           setList((prev) => (prev.kind === 'loaded' ? { kind: 'loaded', recordings: prev.recordings.filter((r) => r.id !== id) } : prev));
           setConfirmingId(null);
         }
@@ -174,25 +180,40 @@ export default function RecordingsSection({ snippetId, scale }: Props) {
     );
   };
 
+  const onUpdated = useCallback((updated: RecordingResponse) => {
+    if (!mounted.current) return;
+    setList((prev) => (prev.kind === 'loaded' ? { kind: 'loaded', recordings: withVerification(prev.recordings, updated) } : prev));
+  }, []);
+  const closeCheck = useCallback(() => setCheckingId(null), []);
+
   if (list.kind !== 'loaded') return null;
+  const checking = checkingId === null ? null : (list.recordings.find((r) => r.id === checkingId) ?? null);
 
   return (
-    <RecordingsListView
-      recordings={list.recordings}
-      expanded={expanded}
-      playback={playback}
-      confirmingId={confirmingId}
-      deletingId={deletingId}
-      deleteError={deleteError}
-      scale={scale}
-      onToggleExpanded={() => setExpanded((v) => !v)}
-      onTogglePlay={(id) => dispatch({ type: 'toggle', id })}
-      onAskDelete={(id) => {
-        setDeleteError(null);
-        setConfirmingId(id);
-      }}
-      onConfirmDelete={confirmDelete}
-      onCancelDelete={() => setConfirmingId(null)}
-    />
+    <>
+      <RecordingsListView
+        recordings={list.recordings}
+        expanded={expanded}
+        playback={playback}
+        confirmingId={confirmingId}
+        deletingId={deletingId}
+        deleteError={deleteError}
+        scale={scale}
+        onToggleExpanded={() => setExpanded((v) => !v)}
+        onTogglePlay={(id) => dispatch({ type: 'toggle', id })}
+        onAskDelete={(id) => {
+          setDeleteError(null);
+          setConfirmingId(id);
+        }}
+        onConfirmDelete={confirmDelete}
+        onCancelDelete={() => setConfirmingId(null)}
+        onCheck={(id) => {
+          if (playback.kind === 'playing') dispatch({ type: 'toggle', id: playback.id });
+          setCheckingId(id);
+        }}
+      />
+      {checking &&
+        createPortal(<CheckTranscriptModal recording={checking} onUpdated={onUpdated} onClose={closeCheck} />, document.body)}
+    </>
   );
 }

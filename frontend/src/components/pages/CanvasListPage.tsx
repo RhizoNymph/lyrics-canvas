@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { canvasApi } from '@/api/client';
+import VoiceDatasetDialog from '@/components/voice/dataset/VoiceDatasetDialog';
 import { useAuthStore } from '@/stores/authStore';
 import type { Canvas } from '@/types';
 
@@ -8,6 +9,7 @@ export default function CanvasListPage() {
   const [canvases, setCanvases] = useState<Canvas[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
+  const [datasetOpen, setDatasetOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
@@ -51,6 +53,14 @@ export default function CanvasListPage() {
         <h1 style={{ fontSize: 20, fontWeight: 'bold' }}>Lyrics Canvas</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 13, color: '#888' }}>{user?.display_name || user?.email}</span>
+          <button
+            type="button"
+            onClick={() => setDatasetOpen(true)}
+            title="Voice takes and checked transcripts: stats and dataset export"
+            style={{ background: '#2a2a4a', color: '#ccc', border: '1px solid #3a3a5a', borderRadius: 4, padding: '6px 14px', cursor: 'pointer', fontSize: 12 }}
+          >
+            Voice dataset
+          </button>
           <button
             onClick={logout}
             style={{ background: '#2a2a4a', color: '#ccc', border: '1px solid #3a3a5a', borderRadius: 4, padding: '6px 14px', cursor: 'pointer', fontSize: 12 }}
@@ -138,6 +148,7 @@ export default function CanvasListPage() {
           ))}
         </div>
       </main>
+      {datasetOpen && <VoiceDatasetDialog onClose={() => setDatasetOpen(false)} />}
     </div>
   );
 }
