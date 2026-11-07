@@ -29,6 +29,7 @@ import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
 import dev.nymph.lyrics.app.voice.ui.voiceCaptureViewModel
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.error.ApiResult
+import dev.nymph.lyrics.model.voice.RecordingId
 import dev.nymph.lyrics.model.voice.VoiceTakeTarget
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -54,6 +55,8 @@ fun GridEditorRoute(
     extraTopBarActions: @Composable RowScope.() -> Unit = {},
     /** "Add to word bank" on a line field's text selection; null hides it. */
     onAddToWordBank: ((String) -> Unit)? = null,
+    /** A recording's "Check transcript" (the host navigates to the check screen). */
+    onCheckTranscript: (RecordingId) -> Unit = {},
 ) {
     // One ViewModel per visit: survives rotation (saveable key), fresh when the editor is reopened,
     // even if the host keeps one ViewModelStore across visits.
@@ -63,7 +66,13 @@ fun GridEditorRoute(
     }
     val voice = voiceCaptureViewModel(container, snippet.canvasId, key = "voice-editor-${snippet.id.value}-$visit")
     val recordings = viewModel(key = "recordings-${snippet.id.value}-$visit") {
-        RecordingsViewModel(snippet.id, container.voice, container.recordingsCacheDir, container.newAudioPlayer())
+        RecordingsViewModel(
+            snippet.id,
+            container.voice,
+            container.recordingsCacheDir,
+            container.newAudioPlayer(),
+            container.recordingUpdates.updates,
+        )
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recordingsState by recordings.state.collectAsStateWithLifecycle()
@@ -115,7 +124,12 @@ fun GridEditorRoute(
                 extraTopBarActions()
                 TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
             },
-            bottomPanel = { RecordingsSection(recordingsState, recordings) },
+            bottomPanel = {
+                RecordingsSection(recordingsState, recordings, onCheckTranscript = { recording ->
+                    recordings.stopPlayback()
+                    onCheckTranscript(recording.id)
+                })
+            },
         )
     }
     VoiceCaptureHost(voice)

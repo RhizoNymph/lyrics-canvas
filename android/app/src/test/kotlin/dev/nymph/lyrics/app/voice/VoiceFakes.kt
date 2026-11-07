@@ -3,6 +3,7 @@ package dev.nymph.lyrics.app.voice
 import dev.nymph.lyrics.app.fakes.snippet
 import dev.nymph.lyrics.app.voice.recorder.AudioRecorder
 import dev.nymph.lyrics.app.voice.recorder.RecorderStart
+import dev.nymph.lyrics.app.voice.recordings.SeekableAudioPlayer
 import dev.nymph.lyrics.data.repository.VoiceRepository
 import dev.nymph.lyrics.logic.voice.AudioFile
 import dev.nymph.lyrics.logic.voice.RecorderFailure
@@ -15,6 +16,7 @@ import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.AudioMime
 import dev.nymph.lyrics.model.voice.Recording
 import dev.nymph.lyrics.model.voice.RecordingId
+import dev.nymph.lyrics.model.voice.RecordingStats
 import dev.nymph.lyrics.model.voice.SplitMode
 import dev.nymph.lyrics.model.voice.VoiceTakeMeta
 import dev.nymph.lyrics.model.voice.VoiceTakeResponse
@@ -110,17 +112,104 @@ class FakeVoiceRepository : VoiceRepository {
         return deleteResult
     }
 
+    val verifications = mutableListOf<Pair<RecordingId, String>>()
+    var verifyResult: (RecordingId, String) -> ApiResult<Recording> = { id, text ->
+        ApiResult.Success(recording(id.value).copy(verifiedText = text, verifiedAt = "2026-11-06T10:00:00Z"))
+    }
+    var verifyGate: CompletableDeferred<Unit>? = null
+    val clears = mutableListOf<RecordingId>()
+    var clearResult: (RecordingId) -> ApiResult<Recording> = { id -> ApiResult.Success(recording(id.value)) }
+    var statsResult: ApiResult<RecordingStats> = ApiResult.Success(RecordingStats(0, 0, 0, 0, 0))
+    var statsCalls = 0
+    var statsGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun saveVerification(recordingId: RecordingId, text: String): ApiResult<Recording> {
+        verifications += recordingId to text
+        verifyGate?.await()
+        return verifyResult(recordingId, text)
+    }
+
+    override suspend fun clearVerification(recordingId: RecordingId): ApiResult<Recording> {
+        clears += recordingId
+        return clearResult(recordingId)
+    }
+
+    override suspend fun stats(): ApiResult<RecordingStats> {
+        statsCalls++
+        statsGate?.await()
+        return statsResult
+    }
+
     companion object {
         val STT_DOWN: ApiResult<VoiceTakeResponse> =
             ApiResult.Failure(ApiError.Server(503, "STT down", "stt_unavailable"))
     }
 }
 
-class FakeVoiceSettings(initial: SilenceTimeout = SilenceTimeout.OFF) : VoiceSettingsStore {
+class FakeVoiceSettings(initial: SilenceTimeout = SilenceTimeout.OFF, initialHints: Boolean = true) : VoiceSettingsStore {
     val value = MutableStateFlow(initial)
     override val silence: Flow<SilenceTimeout> = value
 
     override suspend fun setSilence(value: SilenceTimeout) {
         this.value.value = value
     }
+
+    val hints = MutableStateFlow(initialHints)
+    override val vocabularyHints: Flow<Boolean> = hints
+
+    override suspend fun setVocabularyHints(enabled: Boolean) {
+        hints.value = enabled
+    }
 }
+
+/** A [SeekableAudioPlayer] that records calls; position is set by the test. */
+class FakeSeekablePlayer : SeekableAudioPlayer {
+    val played = mutableListOf<File>()
+    var canPlay = true
+    var playing = false
+    var position = 0L
+    val seeks = mutableListOf<Long>()
+    var pauses = 0
+    var resumes = 0
+    var stops = 0
+    var onComplete: (() -> Unit)? = null
+
+    override fun play(file: File, onComplete: () -> Unit): Boolean {
+        played += file
+        this.onComplete = onComplete
+        playing = canPlay
+        position = 0
+        return canPlay
+    }
+
+    override fun pause() {
+        pauses++
+        playing = false
+    }
+
+    override fun resume() {
+        resumes++
+        playing = true
+    }
+
+    override fun stop() {
+        stops++
+        playing = false
+    }
+
+    override fun positionMs(): Long = position
+
+    override fun seekTo(positionMs: Long) {
+        seeks += positionMs
+        position = positionMs
+    }
+
+    /** The platform reports the end of the file. */
+    fun complete() {
+        playing = false
+        onComplete?.invoke()
+    }
+}
+
+/** For ViewModels that are never asked to play. */
+typealias SilentPlayer = FakeSeekablePlayer

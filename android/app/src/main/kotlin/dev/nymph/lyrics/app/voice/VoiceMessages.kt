@@ -19,6 +19,8 @@ fun VoiceUploadError.userMessage(): String = when (this) {
         VoiceErrorCode.STT_DISABLED -> "Speech to text is not set up on this server."
         VoiceErrorCode.STT_UNAVAILABLE -> "Speech to text is not available right now. Try again in a moment."
         VoiceErrorCode.STT_FAILED -> "Transcription failed. Try again."
+        VoiceErrorCode.INVALID_VERIFICATION -> "The server could not save this transcript: it is empty or too long."
+        VoiceErrorCode.EXPORT_TOO_LARGE -> "The dataset is too large to export."
     }
     VoiceUploadError.SessionExpired -> SESSION_EXPIRED
     is VoiceUploadError.Http -> message

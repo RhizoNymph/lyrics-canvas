@@ -6,7 +6,6 @@ import dev.nymph.lyrics.app.ui.userMessage
 import dev.nymph.lyrics.data.repository.VoiceRepository
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.error.ApiResult
-import dev.nymph.lyrics.model.voice.AudioMime
 import dev.nymph.lyrics.model.voice.Recording
 import dev.nymph.lyrics.model.voice.RecordingId
 import kotlinx.coroutines.Job
@@ -14,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -59,13 +59,14 @@ data class RecordingsUiState(
 /**
  * The editor's recordings section: list, play / pause (audio fetched once into [cacheDir] with the
  * bearer token, then played from the file), delete with confirmation. Failures become snackbar
- * [messages]; nothing throws.
+ * [messages]; nothing throws. Rows changed elsewhere (a checked transcript) arrive on [updates].
  */
 class RecordingsViewModel(
     private val snippetId: SnippetId,
     private val voice: VoiceRepository,
     private val cacheDir: File,
     private val player: AudioPlayer,
+    updates: Flow<Recording> = emptyFlow(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecordingsUiState())
     val state: StateFlow<RecordingsUiState> = _state.asStateFlow()
@@ -77,6 +78,14 @@ class RecordingsViewModel(
 
     init {
         refresh()
+        viewModelScope.launch { updates.collect(::replace) }
+    }
+
+    /** Replace the row of [recording] (same id) in place; other snippets' recordings are ignored. */
+    private fun replace(recording: Recording) = _state.update { s ->
+        val list = s.list as? RecordingsList.Loaded ?: return@update s
+        if (list.items.none { it.id == recording.id }) return@update s
+        s.copy(list = RecordingsList.Loaded(list.items.map { if (it.id == recording.id) recording else it }))
     }
 
     fun refresh() {
@@ -116,8 +125,7 @@ class RecordingsViewModel(
         player.stop()
         setPlayback(Playback.Loading(id))
         viewModelScope.launch {
-            val file = cacheFile(recording)
-            val ready = if (file.isFile && file.length() > 0) ApiResult.Success(file) else voice.downloadAudio(id, file)
+            val ready = ensureRecordingAudio(voice, cacheDir, recording)
             if (_state.value.playback != Playback.Loading(id)) return@launch
             when (ready) {
                 is ApiResult.Success -> {
@@ -173,7 +181,7 @@ class RecordingsViewModel(
                 s.copy(list = nextList, deleting = s.deleting - id)
             }
             when (result) {
-                is ApiResult.Success -> cacheFile(recording).delete()
+                is ApiResult.Success -> recordingCacheFile(cacheDir, recording).delete()
                 is ApiResult.Failure -> _messages.trySend(result.error.userMessage())
             }
         }
@@ -182,11 +190,6 @@ class RecordingsViewModel(
     private fun loadedItems(): List<Recording> = (_state.value.list as? RecordingsList.Loaded)?.items ?: emptyList()
 
     private fun setPlayback(playback: Playback) = _state.update { it.copy(playback = playback) }
-
-    private fun cacheFile(recording: Recording): File {
-        val extension = AudioMime.parse(recording.mimeType)?.extension ?: "audio"
-        return File(cacheDir, "recording-${recording.id.value}.$extension")
-    }
 
     override fun onCleared() {
         player.stop()
