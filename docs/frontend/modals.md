@@ -1,6 +1,7 @@
 # Modals
 
-Full-screen overlay dialogs for search and export, and the voice capture recorder.
+Full-screen overlay dialogs for search and export, the voice capture recorder, the check transcript
+view and the voice dataset dialog.
 
 ## VoiceCaptureModal
 
@@ -13,7 +14,31 @@ Shown while `voiceStore.request` is set. The whole overlay is the tap target whi
 while uploading, then typed error states with Retry / Save audio / Discard. It is `role="dialog"` and
 `aria-modal`, traps focus (Tab wraps, focus is restored on close), Escape cancels, and it stops key
 propagation so page shortcuts cannot act behind it. See
+[web_voice_capture.md](../features/web_voice_capture.md). Below the silence select a "Use word bank as
+hints" switch (`role="switch"`) sets `voiceStore.vocabHints`.
+
+## CheckTranscriptModal
+
+**Files:** `src/components/voice/check/CheckTranscriptModal.tsx` (requests via `reduceCheck`, keys),
+`CheckTranscriptView.tsx` (presentational), `AudioPlayerBar.tsx`, `TranscriptReferenceView.tsx`,
+`useRecordingPlayer.ts`
+
+Opened by a recording's Check button in the editor's Recordings section, rendered in a portal on
+`document.body` with `data-keep-editor-open`. Player (play/pause, scrubber, time), read-only Whisper
+reference (tappable words with the playing word highlighted when the recording has timings), correction
+textarea with the contract hint, Save as checked / Mark unchecked (checked only) / Cancel (asks when
+dirty), inline typed errors. Keys: Ctrl/Cmd+Enter save, Ctrl+Space play/pause, Alt+Left/Right seek 3 s,
+Escape cancel, Tab trapped; it stops key propagation. See
 [web_voice_capture.md](../features/web_voice_capture.md).
+
+## VoiceDatasetDialog
+
+**Files:** `src/components/voice/dataset/VoiceDatasetDialog.tsx`, `VoiceDatasetView.tsx`, `saveBlob.ts`
+
+Opened by the canvas list page's "Voice dataset" header button. Shows the stats line from
+`GET /api/recordings/stats`, an "Include unchecked takes" checkbox and "Download dataset (.zip)", which
+fetches the export with the bearer token into a blob and saves it under the server's file name. Escape,
+Close or a backdrop press close it and abort pending requests.
 
 ## SearchModal
 

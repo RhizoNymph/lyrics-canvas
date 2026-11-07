@@ -230,7 +230,8 @@ Each row also has `+·` / `−` buttons (shown while that row holds the selectio
 - The editor registers an `EditorBridge` (`editorBridge.ts`) for its snippet id: `flush()` saves the
   current rows and type via `updateSnippet` without closing; `reload(snippet)` replaces the rows with
   `initEditorState(snippet.raw_text, snippet.grid_data)` after a server-side append.
-- Below the grid body: `RecordingsSection` (collapsed `Recordings (n)`, hidden when there are none).
+- Below the grid body: `RecordingsSection` (collapsed `Recordings (n)`, hidden when there are none;
+  each row has a Checked / Not checked badge and a Check button that opens `CheckTranscriptModal`).
   See [web_voice_capture.md](../features/web_voice_capture.md).
 
 ### Layout
