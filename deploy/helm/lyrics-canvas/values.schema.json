@@ -119,6 +119,15 @@
             "cacheDir": { "type": "string" }
           }
         },
+        "voice": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vocabHints": { "type": "boolean" },
+            "vocabHintMaxChars": { "type": "integer", "minimum": 0 },
+            "exportMaxBytes": { "type": "integer", "minimum": 0 }
+          }
+        },
         "modelCache": {
           "type": "object",
           "additionalProperties": false,
