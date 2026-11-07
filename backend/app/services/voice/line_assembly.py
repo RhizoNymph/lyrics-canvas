@@ -12,6 +12,11 @@ Two modes:
   per target line length ``T`` (so lines are balanced against a common length), and is compared with
   keeping the take as one line. Short takes, and takes where no split beats one line, stay single.
 
+Every result also carries the cleaned words it was built from and, per line, the ``[start, end)``
+word span behind it (``spans``): contiguous, non-overlapping, covering the words in order, and
+``" ".join(words[start:end])`` is the line's text. These are stored on the recording
+(docs/features/voice_dataset.md).
+
 All scoring weights are named constants below and collected in ``AutoSplitParams``; the rationale and
 worked examples are in docs/features/voice_capture.md ("Auto-split scoring").
 """
@@ -22,7 +27,7 @@ import re
 import statistics
 from bisect import bisect_right
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from app.models.recording import SplitMode
@@ -67,17 +72,26 @@ class LineAssemblyError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class TimedWord:
-    """One transcribed word; times in ms since the recording started."""
+    """One transcribed word; times in ms since the recording started.
+
+    ``probability`` is the STT word confidence when the service gave one. It is metadata only and
+    takes no part in equality (two words with the same text and times are the same word)."""
 
     text: str
     start_ms: int
     end_ms: int
+    probability: float | None = field(default=None, compare=False)
+
+
+WordSpan = tuple[int, int]  # [start, end) word indices of one line
 
 
 @dataclass(frozen=True, slots=True)
 class AssembledLines:
     lines: tuple[str, ...]  # at least one, none blank
     split_mode: SplitMode
+    words: tuple[TimedWord, ...]  # the cleaned words (trimmed, blanks dropped) the lines index
+    spans: tuple[WordSpan, ...]  # one per line, tiling ``words``
 
 
 class WordOracle(Protocol):
@@ -176,6 +190,25 @@ def lines_from_boundaries(words: Sequence[TimedWord], boundaries: Sequence[int])
         lines.append(" ".join(w.text for w in words[start : boundary + 1]))
         start = boundary + 1
     return tuple(lines)
+
+
+def spans_from_boundaries(word_count: int, boundaries: Sequence[int]) -> tuple[WordSpan, ...]:
+    """The ``[start, end)`` word span of each line ``lines_from_boundaries`` would build."""
+    spans: list[WordSpan] = []
+    start = 0
+    for boundary in [*boundaries, word_count - 1]:
+        spans.append((start, boundary + 1))
+        start = boundary + 1
+    return tuple(spans)
+
+
+def _assembled(words: Sequence[TimedWord], boundaries: Sequence[int], mode: SplitMode) -> AssembledLines:
+    return AssembledLines(
+        lines=lines_from_boundaries(words, boundaries),
+        split_mode=mode,
+        words=tuple(words),
+        spans=spans_from_boundaries(len(words), boundaries),
+    )
 
 
 # ---- auto split ----
@@ -301,13 +334,13 @@ def assemble_lines(
     params: AutoSplitParams = DEFAULT_PARAMS,
 ) -> AssembledLines:
     """Lines for a take: by taps when any break resolves to a boundary, else by the auto split."""
-    cleaned = [TimedWord(w.text.strip(), w.start_ms, w.end_ms) for w in words if w.text.strip()]
+    cleaned = [replace(w, text=w.text.strip()) for w in words if w.text.strip()]
     if not cleaned:
         raise LineAssemblyError("no words to assemble")
     taps = tap_boundaries(cleaned, breaks_ms)
     if taps:
-        return AssembledLines(lines_from_boundaries(cleaned, taps), SplitMode.taps)
+        return _assembled(cleaned, taps, SplitMode.taps)
     auto = auto_boundaries(cleaned, oracle, params)
     if auto:
-        return AssembledLines(lines_from_boundaries(cleaned, auto), SplitMode.auto)
-    return AssembledLines(lines_from_boundaries(cleaned, []), SplitMode.single)
+        return _assembled(cleaned, auto, SplitMode.auto)
+    return _assembled(cleaned, [], SplitMode.single)

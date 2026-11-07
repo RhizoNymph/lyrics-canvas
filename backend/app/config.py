@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     stt_url: str = ""
     stt_timeout_seconds: float = 120.0
     voice_max_upload_bytes: int = 25 * 1024 * 1024
+    # Vocabulary hints and the dataset export (docs/features/voice_dataset.md). Hints send the
+    # user's word bank to STT as Whisper's initial_prompt (a take can opt out with
+    # meta.vocabulary_hints=false); the prompt is at most this many code points.
+    voice_vocab_hints: bool = True
+    voice_vocab_hint_max_chars: int = 600
+    # GET /api/recordings/export refuses (413 export_too_large) more audio than this.
+    voice_export_max_bytes: int = 1024 * 1024 * 1024
     # Word bank related words (docs/features/word_bank.md#related-words). Warmup builds the
     # vocabulary embedding index at startup instead of on the first request; the cache dir holds
     # the matrix (empty = $HF_HOME/lyrics-canvas, else ~/.cache/lyrics-canvas).

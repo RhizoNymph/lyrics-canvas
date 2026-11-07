@@ -102,6 +102,12 @@ spec:
             - name: RELATED_WORDS_CACHE_DIR
               value: {{ . | quote }}
             {{- end }}
+            - name: VOICE_VOCAB_HINTS
+              value: {{ $b.voice.vocabHints | quote }}
+            - name: VOICE_VOCAB_HINT_MAX_CHARS
+              value: {{ $b.voice.vocabHintMaxChars | quote }}
+            - name: VOICE_EXPORT_MAX_BYTES
+              value: {{ int64 $b.voice.exportMaxBytes | quote }}
             {{- if .Values.stt.enabled }}
             - name: STT_URL
               value: {{ include "lyrics-canvas.stt.url" . | quote }}
