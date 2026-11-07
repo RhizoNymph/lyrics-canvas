@@ -1,6 +1,7 @@
 package dev.nymph.lyrics.data.repository
 
 import dev.nymph.lyrics.data.ApiClient
+import dev.nymph.lyrics.data.HttpMethod
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.LyricsJson
 import dev.nymph.lyrics.model.SnippetId
@@ -8,6 +9,8 @@ import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.AudioMime
 import dev.nymph.lyrics.model.voice.Recording
 import dev.nymph.lyrics.model.voice.RecordingId
+import dev.nymph.lyrics.model.voice.RecordingStats
+import dev.nymph.lyrics.model.voice.VerificationRequest
 import dev.nymph.lyrics.model.voice.VoiceTakeMeta
 import dev.nymph.lyrics.model.voice.VoiceTakeResponse
 import kotlinx.serialization.builtins.ListSerializer
@@ -31,6 +34,15 @@ interface VoiceRepository {
     suspend fun downloadAudio(recordingId: RecordingId, target: File): ApiResult<File>
 
     suspend fun deleteRecording(recordingId: RecordingId): ApiResult<Unit>
+
+    /** Save the checked transcript (the server normalises it); returns the updated recording. */
+    suspend fun saveVerification(recordingId: RecordingId, text: String): ApiResult<Recording>
+
+    /** Clear the checked transcript (idempotent); returns the updated recording. */
+    suspend fun clearVerification(recordingId: RecordingId): ApiResult<Recording>
+
+    /** The caller's dataset totals across all canvases. */
+    suspend fun stats(): ApiResult<RecordingStats>
 }
 
 class HttpVoiceRepository(private val api: ApiClient) : VoiceRepository {
@@ -51,4 +63,20 @@ class HttpVoiceRepository(private val api: ApiClient) : VoiceRepository {
 
     override suspend fun deleteRecording(recordingId: RecordingId): ApiResult<Unit> =
         api.delete(listOf("api", "recordings", recordingId.value))
+
+    override suspend fun saveVerification(recordingId: RecordingId, text: String): ApiResult<Recording> = api.send(
+        HttpMethod.PUT,
+        verificationPath(recordingId),
+        VerificationRequest(text),
+        VerificationRequest.serializer(),
+        Recording.serializer(),
+    )
+
+    override suspend fun clearVerification(recordingId: RecordingId): ApiResult<Recording> =
+        api.sendQuery(HttpMethod.DELETE, verificationPath(recordingId), emptyList(), Recording.serializer())
+
+    override suspend fun stats(): ApiResult<RecordingStats> =
+        api.get(listOf("api", "recordings", "stats"), RecordingStats.serializer())
+
+    private fun verificationPath(id: RecordingId) = listOf("api", "recordings", id.value, "verification")
 }

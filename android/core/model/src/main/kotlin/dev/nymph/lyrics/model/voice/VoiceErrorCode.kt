@@ -34,6 +34,12 @@ enum class VoiceErrorCode(val wire: String) {
 
     /** 502: the speech-to-text service answered with an error. */
     STT_FAILED("stt_failed"),
+
+    /** 422: a checked transcript that is empty after normalising, or over 10 000 code points. */
+    INVALID_VERIFICATION("invalid_verification"),
+
+    /** 413: the dataset export holds more audio than the server allows (web only; Android never exports). */
+    EXPORT_TOO_LARGE("export_too_large"),
     ;
 
     companion object {
