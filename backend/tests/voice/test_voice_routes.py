@@ -29,6 +29,7 @@ from app.services.voice.errors import (
 )
 from app.services.voice.line_assembly import TimedWord
 from app.services.voice.stt_client import SttClient, Transcript
+from app.services.voice.timings import spans_json, words_json
 from tests.route_fakes import fake_snippet
 from tests.voice.timeline import timeline
 
@@ -48,9 +49,11 @@ class FakeTranscriber:
     def __init__(self, result: Transcript | Exception = FOUR_WORDS):
         self.result = result
         self.calls: list[tuple[bytes, str]] = []
+        self.prompts: list[str | None] = []
 
-    async def transcribe(self, audio: bytes, mime_type: str) -> Transcript:
+    async def transcribe(self, audio: bytes, mime_type: str, initial_prompt: str | None = None) -> Transcript:
         self.calls.append((audio, mime_type))
+        self.prompts.append(initial_prompt)
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
@@ -66,6 +69,12 @@ def recording_row(snippet_id: uuid.UUID, recording: recording_service.NewRecordi
         transcript=recording.transcript,
         split_mode=recording.split_mode,
         created_at=CREATED,
+        words=None if recording.timings is None else words_json(recording.timings.words),
+        line_spans=None if recording.timings is None else spans_json(recording.timings.spans),
+        language=recording.language,
+        initial_prompt=recording.initial_prompt,
+        verified_text=None,
+        verified_at=None,
     )
     fields.update(overrides)
     return SimpleNamespace(**fields)
@@ -86,6 +95,10 @@ class FakeStore:
         self.audio: dict[uuid.UUID, tuple[str, bytes]] = {}
         self.deleted: list[uuid.UUID] = []
         self.fail_with: Exception | None = None
+        self.bank_words: list = []  # HintWord rows for the vocabulary prompt
+
+    async def bank_hint_words(self, db, owner_id):
+        return list(self.bank_words) if owner_id == USER else []
 
     def owner_of_snippet(self, snippet_id):
         snippet = self.snippets.get(snippet_id)
@@ -143,7 +156,7 @@ def store(monkeypatch) -> FakeStore:
     fake = FakeStore()
     for name in (
         "canvas_owned", "snippet_in_canvas", "create_snippet_with_recording", "append_with_recording",
-        "list_recordings", "get_audio", "delete_recording",
+        "list_recordings", "get_audio", "delete_recording", "bank_hint_words",
     ):
         monkeypatch.setattr(recording_service, name, getattr(fake, name))
     return fake
@@ -439,7 +452,10 @@ def test_list_recordings_newest_first_without_audio(client, store):
     assert res.status_code == 200, res.text
     body = res.json()
     assert [r["id"] for r in body] == [str(newer.id), str(older.id)]
-    assert set(body[0]) == {"id", "snippet_id", "mime_type", "duration_ms", "byte_size", "transcript", "split_mode", "created_at"}
+    assert set(body[0]) == {
+        "id", "snippet_id", "mime_type", "duration_ms", "byte_size", "transcript", "split_mode", "created_at",
+        "lines", "has_timings", "words", "line_spans", "language", "initial_prompt", "verified_text", "verified_at",
+    }
     assert body[0]["created_at"] == str(newer.created_at)
     assert body[0]["split_mode"] == "taps"
 
