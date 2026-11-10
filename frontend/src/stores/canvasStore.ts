@@ -1,11 +1,38 @@
 import { create } from 'zustand';
-import { canvasApi, snippetApi, groupApi } from '@/api/client';
-import type { Snippet, Group, CanvasDetail, SnippetType, GridMode, MergeResponse } from '@/types';
+import { canvasApi, snippetApi, groupApi, placementApi } from '@/api/client';
+import type { SnippetUpdateBody } from '@/api/placements';
+import type {
+  Snippet,
+  Group,
+  CanvasDetail,
+  SnippetType,
+  Canvas,
+  CanvasRef,
+  MergeResponse,
+  TransferMode,
+  TransferResponse,
+} from '@/types';
 import type { SnippetMap } from '@/lib/tags/snippetTags';
 import type { DerivedFrom } from '@/types/rhyme';
 import { MergeError, toMergeError } from '@/lib/merge';
 import type { MergeMode, MergeResult } from '@/lib/merge';
 import type { ViewSize } from '@/lib/rhyme/geometry';
+import {
+  PlacementError,
+  checkCanvasTitle,
+  checkTransferIds,
+  dropSnapshotsWith,
+  mapSnapshotSnippets,
+  renameCanvasRef,
+  showOnTarget,
+  titleProblemMessage,
+  toPlacementError,
+  withCanvasRef,
+} from '@/lib/placements';
+import type { HistorySnapshot, PlacementResult, RemovalSummary } from '@/lib/placements';
+
+export type { RemovalSummary } from '@/lib/placements';
+
 
 interface Viewport {
   x: number;
@@ -30,9 +57,9 @@ interface CanvasState {
   // Selection (tags and the tag filter live in tagStore / tagFilterStore)
   selectedSnippetIds: Set<string>;
 
-  // Undo/redo
-  past: Array<{ snippets: Map<string, Snippet>; groups: Map<string, Group> }>;
-  future: Array<{ snippets: Map<string, Snippet>; groups: Map<string, Group> }>;
+  // Undo/redo (local snapshots; see docs/features/web_snippet_placements.md for the non-undoable operations)
+  past: HistorySnapshot[];
+  future: HistorySnapshot[];
 
   // Per-snippet scale factors (visual zoom)
   snippetScales: Map<string, number>;
@@ -62,10 +89,29 @@ interface CanvasState {
     derived_from?: DerivedFrom,
     snippet_type?: SnippetType,
   ) => Promise<Snippet | null>;
-  updateSnippet: (id: string, data: Partial<Snippet>) => Promise<void>;
+  /** PUT with the open canvas's id: content is shared, layout fields go to this canvas's placement. */
+  updateSnippet: (id: string, data: SnippetUpdateBody) => Promise<void>;
   /** Insert or replace a snippet the server returned (e.g. a voice take), with an undo snapshot. */
   applySnippet: (snippet: Snippet) => void;
-  deleteSnippet: (id: string) => Promise<void>;
+  /**
+   * Remove the snippets from this canvas (the plain Delete; a snippet on no other canvas is deleted for good).
+   * Not undoable: drops every history entry holding a removed snippet. Never throws.
+   */
+  removeFromCanvas: (ids: readonly string[]) => Promise<RemovalSummary>;
+  /** Delete the snippets on every canvas, with their recordings. Not undoable, like removeFromCanvas. */
+  deleteEverywhere: (ids: readonly string[]) => Promise<RemovalSummary>;
+  /**
+   * Move the snippets to `target`, or also show them there. Atomic server-side: a failure changes nothing.
+   * Not undoable: a move drops the history entries holding the moved snippets; a show patches their
+   * `canvases` in every entry. Never throws.
+   */
+  transferSnippets: (
+    ids: readonly string[],
+    target: CanvasRef,
+    mode: TransferMode,
+  ) => Promise<PlacementResult<TransferResponse>>;
+  /** Rename the open canvas (trimmed, 1..255 characters; checked locally first). Never throws. */
+  renameCanvas: (title: string) => Promise<PlacementResult<Canvas>>;
   moveSnippet: (id: string, x: number, y: number) => void;
   commitPositions: () => Promise<void>;
   /**
@@ -106,6 +152,73 @@ interface CanvasState {
   exitTSNE: () => void;
 }
 
+type GetState = () => CanvasState;
+type SetState = (partial: Partial<CanvasState>) => void;
+
+/** The id of the most recent loadCanvas call. */
+let latestLoad: string | null = null;
+
+/**
+ * Take snippets off the open canvas after the server removed them here: the map, the selection, scales,
+ * group membership, and every undo/redo entry holding one of them (so undo cannot resurrect them).
+ */
+function dropLocally(get: GetState, set: SetState, ids: readonly string[]): void {
+  if (ids.length === 0) return;
+  const gone = new Set(ids);
+  const state = get();
+  const snippets = new Map(state.snippets);
+  const snippetScales = new Map(state.snippetScales);
+  for (const id of gone) {
+    snippets.delete(id);
+    snippetScales.delete(id);
+  }
+  const groups = new Map<string, Group>();
+  state.groups.forEach((g, id) => {
+    const members = g.snippet_ids.filter((sid) => !gone.has(sid));
+    groups.set(id, members.length === g.snippet_ids.length ? g : { ...g, snippet_ids: members });
+  });
+  set({
+    snippets,
+    snippetScales,
+    groups,
+    selectedSnippetIds: new Set([...state.selectedSnippetIds].filter((id) => !gone.has(id))),
+    past: dropSnapshotsWith(state.past, gone),
+    future: dropSnapshotsWith(state.future, gone),
+  });
+}
+
+/**
+ * Run `remove` for each id on the open canvas in parallel and drop the successful ones locally. An error of
+ * kind `goneKind` means the server no longer has it here, which counts as removed.
+ */
+async function removeEach(
+  get: GetState,
+  set: SetState,
+  ids: readonly string[],
+  goneKind: 'placement_not_found' | 'not_found',
+  remove: (canvasId: string, id: string) => Promise<boolean>,
+): Promise<RemovalSummary> {
+  const summary: RemovalSummary = { removed: [], deletedForGood: [], failures: [] };
+  const { canvasId, snippets } = get();
+  if (!canvasId) return summary;
+  const targets = [...new Set(ids)].filter((id) => snippets.has(id));
+  const operation = goneKind === 'not_found' ? 'delete_everywhere' : 'remove_from_canvas';
+  const outcomes = await Promise.allSettled(targets.map((id) => remove(canvasId, id)));
+  outcomes.forEach((outcome, i) => {
+    const id = targets[i];
+    if (outcome.status === 'fulfilled') {
+      summary.removed.push(id);
+      if (outcome.value) summary.deletedForGood.push(id);
+      return;
+    }
+    const error = toPlacementError(outcome.reason, operation);
+    if (error.kind === goneKind) summary.removed.push(id);
+    else summary.failures.push({ id, error });
+  });
+  if (get().canvasId === canvasId) dropLocally(get, set, summary.removed);
+  return summary;
+}
+
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasId: null,
   canvasTitle: '',
@@ -122,8 +235,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   mergeError: null,
 
   loadCanvas: async (id) => {
+    latestLoad = id;
     const res = await canvasApi.get(id);
     const data: CanvasDetail = res.data;
+    // A slower load of a canvas the user already left must not replace the one now open.
+    if (latestLoad !== id) return;
     const snippets = new Map<string, Snippet>();
     data.snippets.forEach((s) => snippets.set(s.id, s));
     const groups = new Map<string, Group>();
@@ -135,6 +251,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       snippets,
       groups,
       selectedSnippetIds: new Set(),
+      snippetScales: new Map(),
       past: [],
       future: [],
     });
@@ -176,10 +293,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   updateSnippet: async (id, data) => {
-    const { snippets } = get();
-    const res = await snippetApi.update(id, data as Record<string, unknown>);
-    const updated: Snippet = res.data;
-    const next = new Map(snippets);
+    const { canvasId } = get();
+    if (!canvasId) return;
+    const updated = await placementApi.updateSnippet(id, canvasId, data);
+    // The user may have opened another canvas meanwhile, or the snippet left this one.
+    if (get().canvasId !== canvasId || !get().snippets.has(id)) return;
+    const next = new Map(get().snippets);
     next.set(id, updated);
     get().pushUndoState();
     set({ snippets: next });
@@ -193,15 +312,83 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ snippets: next });
   },
 
-  deleteSnippet: async (id) => {
-    const { snippets, selectedSnippetIds } = get();
-    await snippetApi.delete(id);
-    const next = new Map(snippets);
-    next.delete(id);
-    const sel = new Set(selectedSnippetIds);
-    sel.delete(id);
-    get().pushUndoState();
-    set({ snippets: next, selectedSnippetIds: sel });
+  removeFromCanvas: (ids) =>
+    removeEach(get, set, ids, 'placement_not_found', async (canvasId, id) =>
+      (await placementApi.removeFromCanvas(canvasId, id)).snippet_deleted,
+    ),
+
+  deleteEverywhere: (ids) =>
+    removeEach(get, set, ids, 'not_found', async (_canvasId, id) => {
+      await placementApi.deleteEverywhere(id);
+      return true;
+    }),
+
+  transferSnippets: async (ids, target, mode) => {
+    const fail = (error: PlacementError) => ({ ok: false as const, error });
+    const { canvasId, snippets } = get();
+    if (!canvasId) return fail(new PlacementError('no_canvas', 'transfer', ''));
+    if (target.id === canvasId) return fail(new PlacementError('same_canvas', 'transfer', ''));
+    const check = checkTransferIds(ids.filter((id) => snippets.has(id)));
+    if (!check.ok) return fail(new PlacementError(check.kind, 'transfer', ''));
+
+    let response: TransferResponse;
+    try {
+      response = await placementApi.transfer(canvasId, { snippet_ids: check.ids, target_canvas_id: target.id, mode });
+    } catch (err) {
+      // The server transfer is one transaction: a failure changed nothing.
+      return fail(toPlacementError(err, 'transfer'));
+    }
+    if (get().canvasId !== canvasId) return { ok: true, value: response };
+
+    if (response.removed_from_source) {
+      dropLocally(get, set, check.ids);
+    } else {
+      const affected = new Set(check.ids);
+      const addTarget = (s: Snippet) => {
+        const canvases = withCanvasRef(s.canvases, target);
+        return canvases === s.canvases ? s : { ...s, canvases };
+      };
+      const state = get();
+      set({
+        snippets: showOnTarget(state.snippets, check.ids, target),
+        past: mapSnapshotSnippets(state.past, affected, addTarget),
+        future: mapSnapshotSnippets(state.future, affected, addTarget),
+      });
+    }
+    return { ok: true, value: response };
+  },
+
+  renameCanvas: async (raw) => {
+    const { canvasId } = get();
+    if (!canvasId) return { ok: false, error: new PlacementError('no_canvas', 'rename_canvas', '') };
+    const check = checkCanvasTitle(raw);
+    if (!check.ok) {
+      return { ok: false, error: new PlacementError('invalid_canvas_title', 'rename_canvas', titleProblemMessage(check.problem)) };
+    }
+    let canvas: Canvas;
+    try {
+      canvas = await placementApi.renameCanvas(canvasId, check.title);
+    } catch (err) {
+      return { ok: false, error: toPlacementError(err, 'rename_canvas') };
+    }
+    if (get().canvasId !== canvasId) return { ok: true, value: canvas };
+    const title = canvas.title;
+    const rename = (s: Snippet) => {
+      const canvases = renameCanvasRef(s.canvases, canvasId, title);
+      return canvases === s.canvases ? s : { ...s, canvases };
+    };
+    const state = get();
+    const all = new Set(state.snippets.keys());
+    for (const snap of [...state.past, ...state.future]) for (const id of snap.snippets.keys()) all.add(id);
+    const snippets = new Map<string, Snippet>();
+    state.snippets.forEach((s, id) => snippets.set(id, rename(s)));
+    set({
+      canvasTitle: title,
+      snippets,
+      past: mapSnapshotSnippets(state.past, all, rename),
+      future: mapSnapshotSnippets(state.future, all, rename),
+    });
+    return { ok: true, value: canvas };
   },
 
   moveSnippet: (id, x, y) => {
@@ -214,13 +401,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   commitPositions: async () => {
-    const { snippets } = get();
+    const { canvasId, snippets } = get();
+    if (!canvasId || snippets.size === 0) return;
     const updates = Array.from(snippets.values()).map((s) => ({
       id: s.id,
       position_x: s.position_x,
       position_y: s.position_y,
     }));
-    await snippetApi.batchPosition(updates);
+    await placementApi.batchPosition(canvasId, updates);
   },
 
   mergeSelected: async (mode) => {
@@ -325,7 +513,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateEmbeddedTags: (update) => {
     const { snippets, past, future } = get();
     const next = update(snippets);
-    const patchSnapshot = (snap: { snippets: Map<string, Snippet>; groups: Map<string, Group> }) => {
+    const patchSnapshot = (snap: HistorySnapshot) => {
       const patched = update(snap.snippets);
       return patched === snap.snippets ? snap : { ...snap, snippets: new Map(patched) };
     };
