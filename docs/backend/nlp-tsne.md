@@ -73,7 +73,8 @@ Body: { "n_components": 2, "perplexity": 30.0 }
 ```
 
 Flow:
-1. Fetch all non-empty snippets in canvas (verify ownership)
+1. Fetch all non-empty snippets placed on the canvas (verify ownership). Nothing is written: the
+   clients preview the positions and restore the saved layout on exit
 2. Compute embeddings on-the-fly: `compute_embedding(s.raw_text)` for each snippet
 3. If < 2 valid embeddings, return fixed zero positions
 4. Run `compute_tsne()` with request parameters

@@ -21,9 +21,12 @@ async def search_snippets(
 Currently uses PostgreSQL `ILIKE` pattern matching:
 
 ```sql
-SELECT * FROM snippets
-WHERE canvas_id = :canvas_id
+SELECT snippets.* FROM snippets
+JOIN snippet_placements p ON p.snippet_id = snippets.id
+JOIN canvases c ON c.id = p.canvas_id
+WHERE p.canvas_id = :canvas_id AND c.owner_id = :owner_id
   AND raw_text ILIKE '%query%'
+ORDER BY p.created_at, p.id
 LIMIT 20
 ```
 

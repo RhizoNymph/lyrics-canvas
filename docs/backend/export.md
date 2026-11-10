@@ -8,9 +8,10 @@ Export canvas snippets as Markdown, plain text, or PDF.
 
 Snippets are sorted in reading order before export:
 ```python
-sorted(canvas.snippets, key=lambda s: (s.position_y, s.position_x))
+sorted(placed_on_canvas(db, canvas.id), key=lambda p: (p.position_y, p.position_x))
 ```
-Primary: top to bottom. Secondary: left to right.
+Primary: top to bottom. Secondary: left to right, by each snippet's placement on this canvas (a snippet
+on several canvases has a different position on each).
 
 ## Formats
 
@@ -86,12 +87,12 @@ All responses include `Content-Disposition: attachment` header for browser downl
 ### Database Query
 
 ```python
-select(Canvas)
-    .options(selectinload(Canvas.snippets).selectinload(Snippet.tags))
-    .where(Canvas.id == canvas_id, Canvas.owner_id == user.id)
+select(Canvas).where(Canvas.id == canvas_id, Canvas.owner_id == user.id)
+placements.queries.placed_on_canvas(db, canvas.id)   # placement -> snippet, tags selectin-loaded
 ```
 
-Eager-loads snippets with their tags in a single query for the markdown format (which includes tag hashtags).
+The snippets placed on the canvas are loaded with their tags for the markdown format (which includes
+tag hashtags).
 
 ## Schema
 

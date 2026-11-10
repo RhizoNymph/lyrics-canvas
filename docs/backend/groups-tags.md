@@ -10,10 +10,20 @@ Group containers, user-wide tag labels and saved tag-expression presets for orga
 
 ```python
 async def create_group(db, canvas_id, owner_id, name, **kwargs) -> Group | None
-async def get_group(db, group_id) -> Group | None              # Eager-loads snippets
+async def get_group(db, group_id) -> Group | None              # Eager-loads placements
 async def update_group(db, group_id, owner_id, **kwargs) -> Group | None
-async def delete_group(db, group_id, owner_id) -> bool         # Unassigns snippets
+async def delete_group(db, group_id, owner_id) -> bool         # Ungroups its placements
 ```
+
+### Members
+
+A group belongs to one canvas; its members are **placements** of that canvas
+(`snippet_placements.group_id`, see [snippet_placements.md](../features/snippet_placements.md#groups)).
+A snippet on several canvases has one placement per canvas, so it can be in a different group on each.
+Membership is set through the placement: `group_id` on `POST /api/canvases/{cid}/snippets` or
+`PUT /api/snippets/{id}?canvas_id={cid}` must be a group of `cid` (else 404 `group_not_found`).
+`GroupResponse.snippet_ids` lists the `snippet_id` of the group's placements. A transfer never copies
+a group (target placements start ungrouped).
 
 ### Ownership
 
@@ -21,7 +31,7 @@ All operations verify ownership by joining `Group -> Canvas -> User`. Returns No
 
 ### Delete Behavior
 
-Deleting a group sets `group_id = None` on all contained snippets (unassign). Does NOT delete the snippets themselves.
+Deleting a group sets `group_id = None` on its placements (unassign; the FK is also ON DELETE SET NULL). Does NOT delete the snippets, and leaves their placements on other canvases (and their groups there) alone.
 
 ## Group Schemas
 
@@ -31,7 +41,7 @@ Deleting a group sets `group_id = None` on all contained snippets (unassign). Do
 |--------|--------|
 | `GroupCreate` | name, position_x=0, position_y=0 |
 | `GroupUpdate` | name?, position_x?, position_y? |
-| `GroupResponse` | id, canvas_id, name, position_x/y, snippet_ids[], created_at |
+| `GroupResponse` | id, canvas_id, name, position_x/y, snippet_ids[] (from the group's placements), created_at |
 
 ## Group Routes
 
@@ -69,7 +79,9 @@ async def remove_tag_from_snippet(db, snippet_id, tag_id, owner_id) -> None  # b
 ```
 
 - `snippet_count` and `word_count` are correlated `count(*)` subqueries over `snippet_tags` and
-  `bank_word_tags` (one row per tag, no join fan-out).
+  `bank_word_tags` (one row per tag, no join fan-out). A snippet placed on several canvases is one
+  snippet with one set of tags, so it counts once.
+- Snippet ownership for linking is `Snippet.owner_id`.
 
 - `update_tag` with a changed name rewrites every preset of the user through
   `tag_expr.rename_tag` in the same transaction; a rewrite longer than 500 code points rolls the whole
@@ -89,7 +101,9 @@ normalized from `tag_values.preset_expression` (empty -> `EmptyPresetError`, unp
 ### Tag-Snippet Association
 
 `snippet_tags` junction table with CASCADE deletes on both FKs: deleting a tag or a snippet removes
-its links. Deleting a canvas no longer deletes tags (they belong to the user). Merging snippets
+its links. Deleting a canvas no longer deletes tags (they belong to the user); it deletes only the
+snippets left with no placement, and their links with them. Tags are content: they follow the snippet
+onto every canvas it is placed on. Merging snippets
 unions their tag ids (`merge_service.union_tag_ids`); with user-wide tags a tag shared by the
 originals is one link on the merged snippet.
 
