@@ -19,11 +19,15 @@ import { useTagFilterStore } from '@/stores/tagFilterStore';
 import { isRecordShortcut } from '@/lib/voice/keys';
 import { isWordBankShortcut } from '@/lib/wordBank/keys';
 import { useRhymeQuery } from '@/hooks/useRhymeQuery';
+import { removalFailureNotice } from '@/lib/placements';
+import { usePlacementNoticeStore } from '@/stores/placementNoticeStore';
+import PlacementToast from '@/components/placements/PlacementToast';
+import CanvasesPopover from '@/components/placements/CanvasesPopover';
 
 export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { loadCanvas, undo, redo, deleteSnippet, mergeSelected } = useCanvasStore();
+  const { loadCanvas, undo, redo, removeFromCanvas, mergeSelected } = useCanvasStore();
   const { setSearchModalOpen, rightPanel, viewMode, toggleViewMode } = useUIStore();
   useRhymeQuery();
 
@@ -37,8 +41,12 @@ export default function CanvasPage() {
       useTagFilterStore.getState().open(id);
       loadCanvas(id).catch(() => navigate('/'));
     }
-    // Leaving the canvas closes the recorder (its session releases the mic on unmount).
-    return () => useVoiceStore.getState().closeRecorder();
+    // Leaving the canvas closes the recorder (its session releases the mic on unmount), and the editor and
+    // menus, whose snippet belongs to the canvas left (another canvas may open in this same page).
+    return () => {
+      useVoiceStore.getState().closeRecorder();
+      useUIStore.getState().leaveCanvas();
+    };
   }, [id]);
 
   // Keyboard shortcuts
@@ -89,14 +97,16 @@ export default function CanvasPage() {
         const ids = useCanvasStore.getState().selectedSnippetIds;
         if (ids.size === 0) return;
         e.preventDefault();
-        for (const sid of ids) {
-          deleteSnippet(sid);
-        }
+        // The plain Delete: removes from this canvas (deletes for good what is on no other canvas).
+        void removeFromCanvas([...ids]).then((summary) => {
+          const failure = removalFailureNotice(summary, 'remove');
+          if (failure !== null) usePlacementNoticeStore.getState().show(failure, 'error');
+        });
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, setSearchModalOpen, deleteSnippet, mergeSelected, toggleViewMode]);
+  }, [undo, redo, setSearchModalOpen, removeFromCanvas, mergeSelected, toggleViewMode]);
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -114,6 +124,8 @@ export default function CanvasPage() {
       <ExportDialog />
       <VoiceCaptureModal />
       <WordBankToast />
+      <PlacementToast />
+      <CanvasesPopover />
     </div>
   );
 }

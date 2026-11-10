@@ -2,6 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { SNIPPET_TYPE_COLORS } from '@/types';
 import type { Snippet } from '@/types';
 import InlineGridEditor from '@/components/canvas/InlineGridEditor';
+import CanvasBadge from '@/components/placements/CanvasBadge';
 import GridPreview from './GridPreview';
 
 interface Props {
@@ -12,10 +13,12 @@ interface Props {
   onContextMenu: (e: ReactMouseEvent) => void;
   /** Keyboard open (Enter on a focused row). */
   onOpen: () => void;
+  /** The "⧉ N" badge was clicked: list the snippet's canvases at this screen point. */
+  onShowCanvases: (x: number, y: number) => void;
 }
 
 /** One snippet in list mode: the card's header (type colour, tags) and its beat grid, or the editor in place. */
-export default function ListRow({ snippet, selected, editing, onClick, onContextMenu, onOpen }: Props) {
+export default function ListRow({ snippet, selected, editing, onClick, onContextMenu, onOpen, onShowCanvases }: Props) {
   const color = SNIPPET_TYPE_COLORS[snippet.snippet_type] || '#6b7280';
   const lines = snippet.grid_data?.lines ?? [];
 
@@ -70,6 +73,7 @@ export default function ListRow({ snippet, selected, editing, onClick, onContext
         }}
       >
         <span style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 0.3 }}>{snippet.snippet_type.toUpperCase()}</span>
+        <CanvasBadge snippet={snippet} onOpen={onShowCanvases} />
         <span style={{ flex: 1 }} />
         {snippet.tags.map((tag) => (
           <span
