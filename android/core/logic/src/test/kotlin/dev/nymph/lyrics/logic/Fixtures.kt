@@ -1,9 +1,11 @@
 package dev.nymph.lyrics.logic
 
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
 import dev.nymph.lyrics.model.GridMode
+import dev.nymph.lyrics.model.PlacementId
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
@@ -20,9 +22,11 @@ fun snippet(
     zIndex: Int = 0,
     createdAt: String = "",
     contentUpdatedAt: String = "",
+    canvases: List<CanvasRef> = listOf(CanvasRef(CanvasId("c1"), "Song")),
 ): Snippet = Snippet(
     id = SnippetId(id),
     canvasId = CanvasId("c1"),
+    placementId = PlacementId("p-$id"),
     snippetType = SnippetType.VERSE,
     gridMode = GridMode.AUTO,
     gridData = gridData,
@@ -35,6 +39,7 @@ fun snippet(
     createdAt = createdAt,
     updatedAt = "",
     contentUpdatedAt = contentUpdatedAt,
+    canvases = canvases,
 )
 
 /** Rest cells render as "·", others as their syllable (the TS tests' `syls`). */
