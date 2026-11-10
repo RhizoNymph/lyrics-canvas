@@ -23,6 +23,9 @@ interface CanvasRepository {
     /** Persist the camera (the web saves it the same way, through the canvas update route). */
     suspend fun saveViewport(id: CanvasId, viewport: ViewportState): ApiResult<Canvas> =
         update(id, CanvasUpdateRequest(viewportState = viewport))
+
+    /** Rename (`PUT /api/canvases/{id}` with only `title`); a bad title is 422 `invalid_canvas_title`. */
+    suspend fun rename(id: CanvasId, title: String): ApiResult<Canvas> = update(id, CanvasUpdateRequest(title = title))
 }
 
 class HttpCanvasRepository(private val api: ApiClient) : CanvasRepository {

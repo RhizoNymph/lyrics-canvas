@@ -52,4 +52,20 @@ class CanvasRepositoryTest : MockServerTest() {
         assertEquals(ApiResult.Failure(ApiError.NotFound("Canvas not found")), repo.update(CanvasId("zz"), CanvasUpdateRequest(title = "t")))
         assertRequest(take(), "PUT", "/api/canvases/zz", """{"title":"t"}""")
     }
+
+    @Test
+    fun `rename puts only the title`() = runTest {
+        enqueue(200, Bodies.CANVAS)
+        assertEquals("Night drive", (repo.rename(CanvasId("c1"), "Night drive") as ApiResult.Success).value.title)
+        assertRequest(take(), "PUT", "/api/canvases/c1", """{"title":"Night drive"}""")
+    }
+
+    @Test
+    fun `rename maps invalid_canvas_title to a coded validation error`() = runTest {
+        enqueue(422, """{"detail":{"error":"invalid_canvas_title","message":"Title must be 1-255 characters"}}""")
+        val error = (repo.rename(CanvasId("c1"), " ") as ApiResult.Failure).error as ApiError.Validation
+        assertEquals("invalid_canvas_title", error.code)
+        assertEquals("Title must be 1-255 characters", error.message)
+        assertEquals(422, error.status)
+    }
 }

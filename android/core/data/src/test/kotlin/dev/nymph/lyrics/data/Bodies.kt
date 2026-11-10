@@ -6,7 +6,7 @@ object Bodies {
     const val USER = """{"id":"u1","email":"a@b.c","display_name":"Nym","oauth_provider":null,"created_at":"2026-09-01"}"""
     const val CANVAS = """{"id":"c1","owner_id":"u1","title":"Night drive","is_public":false,"share_token":null,
         "viewport_state":{"x":1.0,"y":2.0,"zoom":0.5},"created_at":"2026-09-01","updated_at":"2026-09-01"}"""
-    const val SNIPPET = """{"id":"s1","canvas_id":"c1","snippet_type":"freestyle","grid_mode":"auto","beats_per_line":null,
+    const val SNIPPET = """{"id":"s1","canvas_id":"c1","placement_id":"p1","canvases":[{"id":"c1","title":"Night drive"}],"snippet_type":"freestyle","grid_mode":"auto","beats_per_line":null,
         "grid_data":{"lines":[{"cells":[{"syllable":"tin","stress":1,"word_index":0}],"syllable_count":1,"raw_text":"tin"}]},
         "raw_text":"tin","position_x":340.0,"position_y":100.0,"width":200.0,"height":80.0,"z_index":0,"group_id":null,
         "tags":[],"phonetics":{"dialect_digest":"d","lines":[],"overrides":{}},"derived_from":null,
