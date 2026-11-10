@@ -24,6 +24,7 @@ export default function ListView() {
   const editingSnippetId = useUIStore((s) => s.editingSnippetId);
   const setEditingSnippet = useUIStore((s) => s.setEditingSnippet);
   const setContextMenu = useUIStore((s) => s.setContextMenu);
+  const setCanvasesPopover = useUIStore((s) => s.setCanvasesPopover);
   const anchor = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const revealSnippetId = useVoiceStore((s) => s.revealSnippetId);
@@ -109,6 +110,7 @@ export default function ListView() {
               onClick={(e) => onRowClick(id, e)}
               onContextMenu={(e) => onRowContextMenu(id, e)}
               onOpen={() => openRow(id)}
+              onShowCanvases={(x, y) => setCanvasesPopover({ snippetId: id, x, y })}
             />
           );
         })}

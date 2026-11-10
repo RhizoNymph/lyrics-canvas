@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { apiHealthChannel } from '@/lib/health/channel';
 import { installHealthInterceptors } from '@/lib/health/interceptors';
-import type { GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType, Tag, TagPreset } from '@/types';
+import type { CanvasDetail, GridData, GridMode, MergeMode, MergeResponse, Snippet, SnippetType, Tag, TagPreset } from '@/types';
 import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/types/rhyme';
+import { createPlacementApi } from './placements';
 import { createVoiceApi } from './voice';
 import { createWordBankApi } from './wordBank';
 
@@ -45,10 +46,10 @@ export const authApi = {
 };
 
 // ---- Canvases ----
+// List, create and rename live in `placementApi` (typed, PlacementError rejections).
 export const canvasApi = {
-  list: () => api.get('/api/canvases'),
-  create: (title: string) => api.post('/api/canvases', { title }),
-  get: (id: string) => api.get(`/api/canvases/${id}`),
+  get: (id: string) => api.get<CanvasDetail>(`/api/canvases/${id}`),
+  /** Generic update (e.g. `viewport_state`); renames go through `placementApi.renameCanvas`. */
   update: (id: string, data: Record<string, unknown>) => api.put(`/api/canvases/${id}`, data),
   delete: (id: string) => api.delete(`/api/canvases/${id}`),
   share: (id: string) => api.post(`/api/canvases/${id}/share`),
@@ -77,12 +78,12 @@ export interface SnippetCreateBody {
 export const snippetApi = {
   create: (canvasId: string, data: SnippetCreateBody) =>
     api.post<Snippet>(`/api/canvases/${canvasId}/snippets`, data),
-  update: (id: string, data: Record<string, unknown>) =>
-    api.put(`/api/snippets/${id}`, data),
-  delete: (id: string) => api.delete(`/api/snippets/${id}`),
-  batchPosition: (updates: Array<{ id: string; position_x: number; position_y: number }>) =>
-    api.patch('/api/snippets/batch-position', { updates }),
+  // Update, batch-position (both need the open canvas's id), remove-from-canvas, delete-everywhere and
+  // transfer live in `placementApi`.
 };
+
+// ---- Canvas rename and snippet placements (see api/placements.ts) ----
+export const placementApi = createPlacementApi(api);
 
 // ---- Groups ----
 export const groupApi = {

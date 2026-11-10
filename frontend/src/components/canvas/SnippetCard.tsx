@@ -7,6 +7,7 @@ import type { Snippet } from '@/types';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { markSnippetInteraction } from './CanvasViewport';
+import { canvasBadge } from '@/lib/placements';
 import {
   CELL_HEIGHT,
   PADDING,
@@ -28,7 +29,7 @@ const RESIZE_HANDLE_SIZE = 14;
 
 export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) {
   const { selectSnippet, moveSnippet, selectedSnippetIds, snippetScales, setSnippetScale } = useCanvasStore();
-  const { setEditingSnippet, setContextMenu } = useUIStore();
+  const { setEditingSnippet, setContextMenu, setCanvasesPopover } = useUIStore();
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, sx: 0, sy: 0 });
@@ -216,6 +217,33 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
     [snippet.id, snippet.position_x, snippet.position_y, selectSnippet, setEditingSnippet, setContextMenu, snippetScale, w, h, zoom]
   );
 
+  // "⧉ N" link badge after the type label, for a snippet on more than one canvas.
+  const badge = canvasBadge(snippet);
+  const badgeX = (PADDING + snippet.snippet_type.length * 7.5 + 8) * s;
+  const badgeW = (badge ? badge.label.length * 6 + 10 : 0) * s;
+  const badgeH = 16 * s;
+  const badgeY = (HEADER_HEIGHT * s - badgeH) / 2;
+  const drawBadge = useCallback(
+    (g: PixiGraphics) => {
+      g.clear();
+      g.lineStyle(1, 0xffffff, 0.6);
+      g.beginFill(0x000000, 0.25);
+      g.drawRoundedRect(0, 0, badgeW, badgeH, badgeH / 2);
+      g.endFill();
+    },
+    [badgeW, badgeH],
+  );
+  const onBadgeDown = useCallback(
+    (e: FederatedPointerEvent) => {
+      // The badge lists the canvases; it never starts a drag or selects.
+      e.stopPropagation();
+      markSnippetInteraction();
+      const nativeEvent = e.nativeEvent as PointerEvent;
+      setCanvasesPopover({ snippetId: snippet.id, x: nativeEvent.clientX, y: nativeEvent.clientY + 10 });
+    },
+    [snippet.id, setCanvasesPopover],
+  );
+
   // Text styles that scale with both canvas zoom and snippet scale
   const headerStyle = useMemo(() => new TextStyle({
     fontSize: 11 * s,
@@ -278,6 +306,13 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         x={PADDING * s}
         y={7 * s}
       />
+      {/* Link badge: on other canvases too (click lists them) */}
+      {badge && (
+        <Container x={badgeX} y={badgeY} eventMode="static" cursor="pointer" pointerdown={onBadgeDown}>
+          <Graphics draw={drawBadge} />
+          <Text text={badge.label} style={tagLabelStyle} x={5 * s} y={(badgeH - 9 * s) / 2 - 1 * s} />
+        </Container>
+      )}
       {/* Tag labels in header */}
       {snippet.tags.map((tag, i) => tagPillPositions[i] && (
         <Text

@@ -8,6 +8,13 @@ interface ContextMenu {
   y: number;
 }
 
+/** The "⧉ N" badge popover: the canvases holding a snippet, anchored at a screen point. */
+export interface CanvasesPopover {
+  snippetId: string;
+  x: number;
+  y: number;
+}
+
 /** The right sidebar: at most one of the rhyme sidebar and the word bank is open. */
 export type RightPanel = 'none' | 'rhymes' | 'words';
 
@@ -27,6 +34,7 @@ interface UIState {
 
   // Context menu
   contextMenu: ContextMenu | null;
+  canvasesPopover: CanvasesPopover | null;
 
   // Actions
   /** Open the rhyme sidebar (closing the word bank), or close it. */
@@ -45,6 +53,10 @@ interface UIState {
   setSimilarityTarget: (id: string | null) => void;
   setContextMenu: (menu: ContextMenu | null) => void;
   closeContextMenu: () => void;
+  /** Open the badge popover (closing the context menu), or close it with null. */
+  setCanvasesPopover: (popover: CanvasesPopover | null) => void;
+  /** Close the editor, context menu and badge popover when the open canvas changes. */
+  leaveCanvas: () => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -56,6 +68,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editingSnippetId: null,
   similarityTargetId: null,
   contextMenu: null,
+  canvasesPopover: null,
 
   toggleRhymeSidebar: () => set((s) => ({ rightPanel: s.rightPanel === 'rhymes' ? 'none' : 'rhymes' })),
   toggleWordBank: () => set((s) => ({ rightPanel: s.rightPanel === 'words' ? 'none' : 'words' })),
@@ -65,7 +78,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setViewMode: (mode) => {
     // A failed write is already logged; the in-memory mode still applies for this session.
     saveViewMode(browserStorage(), mode);
-    set({ viewMode: mode, editingSnippetId: null, contextMenu: null });
+    set({ viewMode: mode, editingSnippetId: null, contextMenu: null, canvasesPopover: null });
   },
   toggleViewMode: () => get().setViewMode(get().viewMode === 'canvas' ? 'list' : 'canvas'),
   setEditingSnippet: (id) => set({ editingSnippetId: id }),
@@ -75,4 +88,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSimilarityTarget: (id) => set({ similarityTargetId: id, similarityPanelOpen: true }),
   setContextMenu: (menu) => set({ contextMenu: menu }),
   closeContextMenu: () => set({ contextMenu: null }),
+  setCanvasesPopover: (popover) => set(popover === null ? { canvasesPopover: null } : { canvasesPopover: popover, contextMenu: null }),
+  leaveCanvas: () => set({ editingSnippetId: null, contextMenu: null, canvasesPopover: null }),
 }));

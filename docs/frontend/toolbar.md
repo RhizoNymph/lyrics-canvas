@@ -8,6 +8,9 @@ Top-level control bars for canvas editing and the tag expression filter.
 
 Top bar with canvas title, zoom controls, undo/redo, and tool toggles.
 
+The title (`toolbar/CanvasTitle.tsx`) is click-to-edit: Enter renames via `canvasStore.renameCanvas`,
+Escape cancels, errors show inline (see [web_snippet_placements.md](../features/web_snippet_placements.md)).
+
 ### Button Groups
 
 | Group | Controls |

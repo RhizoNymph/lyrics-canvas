@@ -3,10 +3,11 @@ import { useUIStore } from '@/stores/uiStore';
 import { nlpApi, exportApi } from '@/api/client';
 import RecordButton from '@/components/voice/RecordButton';
 import { WORD_BANK_SHORTCUT_LABEL } from '@/lib/wordBank/keys';
+import CanvasTitle from './CanvasTitle';
 
 export default function Toolbar() {
   const {
-    canvasTitle, canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
+    canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
     selectedSnippetIds, mergeSelected, mergeError, clearMergeError,
   } = useCanvasStore();
   const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, toggleWordBank, rightPanel, viewMode, toggleViewMode } = useUIStore();
@@ -71,9 +72,7 @@ export default function Toolbar() {
         flexShrink: 0,
       }}
     >
-      <span style={{ fontWeight: 'bold', fontSize: 15, marginRight: 16, color: '#e0e0e0' }}>
-        {canvasTitle || 'Lyrics Canvas'}
-      </span>
+      <CanvasTitle />
 
       <button
         onClick={toggleViewMode}
