@@ -190,8 +190,15 @@ One row per voice take ([voice_capture.md](../features/voice_capture.md)).
 | `transcript` | Text | - | Assembled lines joined by `\n` |
 | `split_mode` | Enum `recording_split_mode` | - | `taps` / `auto` / `single` (`SplitMode`) |
 | `created_at` | DateTime(tz), NOT NULL | now() | Returned on insert (`eager_defaults`) |
+| `words` | JSONB, null | - | Migration 007: STT words `[{text, start_ms, end_ms, probability}]` |
+| `line_spans` | JSONB, null | - | `[start, end)` word indices per transcript line |
+| `language` | String(8), null | - | STT language |
+| `initial_prompt` | Text, null | - | Exact prompt sent to STT (word-bank vocabulary hints) |
+| `verified_text` | Text, null | - | The user's checked transcript |
+| `verified_at` | DateTime(tz), null | - | Set iff `verified_text` is (`ck_snippet_recordings_verified_pair`) |
 
-Index: `ix_snippet_recordings_snippet_created (snippet_id, created_at)`.
+Index: `ix_snippet_recordings_snippet_created (snippet_id, created_at)`. The dataset columns are
+described in [voice_dataset.md](../features/voice_dataset.md).
 
 No ORM relationship on `Snippet` (snippet loads never touch audio); deletes rely on the FK cascade,
 including canvas deletion (ORM cascade to snippets, then the FK). A merge moves the originals'
@@ -256,6 +263,13 @@ not alter `tags`).
 
 Creates `bank_words` (with `ix_bank_words_user_id` and the unique `(user_id, lower(text))` index)
 and `bank_word_tags`. The downgrade drops both tables.
+
+**File:** `alembic/versions/007_recording_dataset.py`
+
+Adds the nullable `words`, `line_spans` (jsonb), `language` (varchar(8)), `initial_prompt`,
+`verified_text` (text) and `verified_at` (timestamptz) columns to `snippet_recordings`, plus the check
+constraint `ck_snippet_recordings_verified_pair` (`verified_text` and `verified_at` both null or both
+set). Existing rows keep nulls. The downgrade drops the constraint and all six columns.
 
 ### Running Migrations
 

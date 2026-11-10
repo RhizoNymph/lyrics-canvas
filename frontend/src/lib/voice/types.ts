@@ -19,9 +19,32 @@ export interface VoiceTakeMeta {
   breaks_ms: number[];
   duration_ms: number;
   target: VoiceTakeTarget;
+  /**
+   * Transcribe with the user's word bank as Whisper's initial prompt (dataset contract §2). The app
+   * always sends it; it is omitted only when a caller passes no preference (the server defaults to true).
+   */
+  vocabulary_hints?: boolean;
 }
 
-/** A stored recording without its audio bytes. */
+/** One STT word of a take, in service order. */
+export interface TimedWord {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  probability: number | null;
+}
+
+/** `[start, end)` word indices into `words` for one assembled line; a blank line is `[i, i)`. */
+export type LineSpan = readonly [number, number];
+
+/**
+ * A stored recording without its audio bytes.
+ *
+ * The fields after `created_at` come from the voice dataset contract (§3). They are optional because a
+ * backend without migration 007 does not send them, and nullable because older rows store nothing.
+ * Read them through `lib/voice/recordingView.ts` (`verificationOf`, `referenceOf`), which turns the
+ * wire shape into states where "checked without a date" or "timings without spans" cannot occur.
+ */
 export interface RecordingResponse {
   id: string;
   snippet_id: string;
@@ -32,6 +55,32 @@ export interface RecordingResponse {
   transcript: string;
   split_mode: SplitMode;
   created_at: string;
+  /** `transcript.split("\n")`. */
+  lines?: string[];
+  /** `words` and `line_spans` are both stored. */
+  has_timings?: boolean;
+  words?: TimedWord[] | null;
+  line_spans?: LineSpan[] | null;
+  language?: string | null;
+  initial_prompt?: string | null;
+  /** The user's corrected transcript, lines separated by `\n`; set together with `verified_at`. */
+  verified_text?: string | null;
+  verified_at?: string | null;
+}
+
+/** `GET /api/recordings/stats`: the current user's recordings across all canvases. */
+export interface VoiceDatasetStats {
+  total: number;
+  verified: number;
+  total_duration_ms: number;
+  verified_duration_ms: number;
+  with_timings: number;
+}
+
+/** A downloaded dataset export: the zip bytes and the file name to save it under. */
+export interface DatasetDownload {
+  blob: Blob;
+  filename: string;
 }
 
 /** 201 body of `POST /api/canvases/{id}/voice-takes`. */
@@ -54,6 +103,9 @@ export const VOICE_SERVER_ERROR_CODES = [
   'stt_disabled',
   'stt_unavailable',
   'stt_failed',
+  'recording_not_found',
+  'invalid_verification',
+  'export_too_large',
 ] as const;
 
 /** `detail.error` values the voice endpoints return. */

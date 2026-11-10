@@ -108,4 +108,4 @@ committed at [docs/api/openapi.json](./api/README.md) and a test fails when it d
 - **Ownership verification**: All CRUD checks Canvas.owner_id
 - **Typed responses**: response models keep the historical wire shape (`tests/test_response_shapes.py`); grids are emitted exactly as stored
 - **Server-side merge**: `POST /api/canvases/{id}/merge` replaces 2+ snippets in one transaction ([merge_blocks.md](./features/merge_blocks.md))
-- **Voice takes**: `POST /api/canvases/{id}/voice-takes` transcribes via the STT service (`STT_URL`) and creates or appends in one transaction; contract error codes in `detail.error` ([voice_capture.md](./features/voice_capture.md))
+- **Voice takes**: `POST /api/canvases/{id}/voice-takes` transcribes via the STT service (`STT_URL`) and creates or appends in one transaction; contract error codes in `detail.error` ([voice_capture.md](./features/voice_capture.md)); word-bank vocabulary hints as Whisper `initial_prompt`, stored STT words / line spans, transcript verification, stats and zip dataset export ([voice_dataset.md](./features/voice_dataset.md))

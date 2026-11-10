@@ -125,6 +125,6 @@ def test_downgrade_drops_both_tables_and_upgrade_restores_them():
     alembic("downgrade", "005")
     assert not ({"bank_words", "bank_word_tags"} & tables())
     assert "tags" in tables()
-    alembic("upgrade", "head")
+    alembic("upgrade", "006")
     assert {"bank_words", "bank_word_tags"} <= tables()
     assert one("SELECT version_num FROM alembic_version")[0][0] == "006"

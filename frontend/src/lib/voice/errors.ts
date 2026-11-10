@@ -24,7 +24,12 @@ function parseDetail(data: unknown): { code: VoiceServerErrorCode | null; messag
   return { code: isServerCode(error) ? error : null, message: typeof message === 'string' ? message : null };
 }
 
-function kindForStatus(status: number): VoiceErrorKind {
+/** Per-endpoint overrides of the status fallback, e.g. `{ 413: 'export_too_large' }` for the export. */
+export type StatusKinds = Partial<Record<number, VoiceErrorKind>>;
+
+function kindForStatus(status: number, overrides: StatusKinds): VoiceErrorKind {
+  const override = overrides[status];
+  if (override !== undefined) return override;
   switch (status) {
     case 413:
       return 'audio_too_large';
@@ -41,15 +46,18 @@ function kindForStatus(status: number): VoiceErrorKind {
   }
 }
 
-/** Map anything a voice API call threw into a VoiceError. */
-export function toVoiceError(err: unknown): VoiceError {
+/**
+ * Map anything a voice API call threw into a VoiceError. A contract code in the body always wins;
+ * otherwise the status decides, with `statusKinds` overriding the upload-oriented defaults.
+ */
+export function toVoiceError(err: unknown, statusKinds: StatusKinds = {}): VoiceError {
   if (err instanceof VoiceError) return err;
   if (axios.isAxiosError(err)) {
     if (err.code === axios.AxiosError.ERR_CANCELED) return new VoiceError('aborted', 'Upload cancelled');
     const response = err.response;
     if (!response) return new VoiceError('network', err.message || 'Network error');
     const { code, message } = parseDetail(response.data);
-    const kind = code ?? kindForStatus(response.status);
+    const kind = code ?? kindForStatus(response.status, statusKinds);
     return new VoiceError(kind, message ?? err.message ?? `HTTP ${response.status}`, response.status);
   }
   if (err instanceof Error) return new VoiceError('http', err.message);
@@ -74,12 +82,28 @@ const VOICE_DESCRIPTIONS: Record<VoiceErrorKind, ErrorDescription> = {
   network: { title: 'Could not reach the server', hint: 'Check your connection.', retryable: true },
   aborted: { title: 'The upload was cancelled', hint: null, retryable: true },
   editor_save_failed: { title: 'Saving the open editor failed', hint: 'Nothing was uploaded yet.', retryable: true },
+  recording_not_found: { title: 'This recording no longer exists', hint: null, retryable: false },
+  invalid_verification: {
+    title: 'The transcript cannot be saved',
+    hint: 'It must not be empty and must be at most 10 000 characters.',
+    retryable: false,
+  },
+  export_too_large: {
+    title: 'The dataset is too large to export',
+    hint: 'Export only checked takes, or delete recordings you do not need.',
+    retryable: false,
+  },
   not_found: { title: 'Not found', hint: null, retryable: false },
   http: { title: 'The upload failed', hint: null, retryable: true },
 };
 
 export function describeVoiceError(error: VoiceError): ErrorDescription {
   return VOICE_DESCRIPTIONS[error.kind];
+}
+
+/** A 404 on a recording route: the contract code, or a bare 404 from an older backend or proxy. */
+export function isRecordingGone(error: VoiceError): boolean {
+  return error.kind === 'recording_not_found' || error.kind === 'not_found';
 }
 
 const CAPTURE_DESCRIPTIONS: Record<CaptureErrorKind, ErrorDescription> = {

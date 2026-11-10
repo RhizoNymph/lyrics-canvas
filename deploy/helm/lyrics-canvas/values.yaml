@@ -70,6 +70,17 @@ backend:
     # survives pod restarts when modelCache.persistence is enabled.
     cacheDir: ""
 
+  # Voice takes and the recording dataset (docs/features/voice_dataset.md).
+  voice:
+    # VOICE_VOCAB_HINTS: send the user's word bank to the STT service as
+    # Whisper's initial_prompt (a take can still opt out per request).
+    vocabHints: true
+    # VOICE_VOCAB_HINT_MAX_CHARS: longest prompt, in characters.
+    vocabHintMaxChars: 600
+    # VOICE_EXPORT_MAX_BYTES: GET /api/recordings/export refuses (413
+    # export_too_large) more audio than this. Default 1 GiB.
+    exportMaxBytes: 1073741824
+
   # sentence-transformers downloads all-MiniLM-L6-v2 on first use into HF_HOME.
   # Without persistence it is re-downloaded whenever the pod is recreated.
   modelCache:

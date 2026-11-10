@@ -82,11 +82,18 @@ faster-whisper STT service (cluster-internal) transcribe it, breaks the words in
 auto-splits by pause, syllable balance and end rhyme when there were none) and creates a new freestyle
 snippet or appends the lines to the snippet open in the editor, keeping its hand-arranged grid. The audio
 is stored with the snippet (`snippet_recordings`) for playback and deletion from the editor, follows the
-snippet into merges and is deleted with it. `STT_URL` empty turns the feature off. On Android the
+snippet into merges and is deleted with it. `STT_URL` empty turns the feature off. Each take is
+transcribed with the user's word bank as vocabulary hints (Whisper `initial_prompt`), and each
+recording keeps its STT words and line spans so the user can check its transcript against the audio
+and export the checked recordings as a zip dataset (original audio + JSONL) for STT fine-tuning. On web the recorder
+has a "Use word bank as hints" switch (per viewer, default on, sent as `meta.vocabulary_hints`); each
+editor recording can be opened in a Check transcript modal (player, tappable Whisper words, correction
+saved as the recording's `verified_text`), and the canvas list page's "Voice dataset" dialog shows the
+stats and downloads the dataset zip ([web_voice_capture.md](./features/web_voice_capture.md)). On Android the
 recorder has a "Use word bank as hints" switch (sent as `meta.vocabulary_hints`), each editor recording
 opens a full-screen Check transcript screen (player, tappable timed Whisper words, a correction saved on
 the recording only), and the canvas list overflow shows the voice dataset stats (export stays on web). See
-[voice_capture.md](./features/voice_capture.md).
+[voice_capture.md](./features/voice_capture.md) and [voice_dataset.md](./features/voice_dataset.md).
 
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
@@ -116,10 +123,11 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
+| [Voice Dataset](./features/voice_dataset.md) | Word-bank vocabulary hints (Whisper `initial_prompt`), stored STT words / line spans (migration 007), transcript verification, recording stats and the zip dataset export format, fine-tuning outline |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
-| [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop), upload to voice-takes, editor recordings list |
+| [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -206,10 +214,10 @@ User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
 | Groups | 3 (CRUD) | Bearer |
 | NLP | 6 (syllabify, search, similar, tsne, rhymes, rhyme-suggest) | Mixed |
 | Export | 1 (text/md/pdf) | Bearer |
-| Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
+| Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
 | Health | 1 | Public |
-| **Total** | **50 endpoints** | |
+| **Total** | **54 endpoints** | |
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -496,7 +504,7 @@ Features Index:
     depends_on: [android_app, android_release]
     doc: docs/features/android_health_banner.md
   web_voice_capture:
-    description: Web client for voice takes (contract in docs/features/voice_capture.md). The toolbar Record button (canvas and list view), the Rec button in the inline editor, or Alt+Shift+R opens a full-screen recorder modal. A pointerdown or Space/Enter is a line break, timed at the first tap and committed after 300 ms. A second tap within 300 ms stops and drops that break. An optional energy-VAD silence auto-stop (minimum-statistics noise floor, arms after speech; off/2/3/5/8/10 s per viewer in localStorage) can also end the take. Built from pure tested reducers (recorder machine, gestures, VAD, playback) driven by a DOM-free VoiceSession, plus a thin MediaRecorder/AnalyserNode adapter (webm/opus, else mp4). Uploads the take as multipart to POST /api/canvases/{id}/voice-takes. With the editor open it saves the editor first, appends, and reloads the editor rows from the response; otherwise it creates a snippet at the viewport centre (list view - the last canvas viewport or 0,0), selects it and scrolls to it. Contract error codes map to typed errors with Retry (same blob), Save audio and Discard. The editor's Recordings section lists, plays (bearer-token blob URLs) and deletes takes. Disabled with "Recording needs HTTPS" outside secure contexts.
+    description: Web client for voice takes (contract in docs/features/voice_capture.md). The toolbar Record button (canvas and list view), the Rec button in the inline editor, or Alt+Shift+R opens a full-screen recorder modal. A pointerdown or Space/Enter is a line break, timed at the first tap and committed after 300 ms. A second tap within 300 ms stops and drops that break. An optional energy-VAD silence auto-stop (minimum-statistics noise floor, arms after speech; off/2/3/5/8/10 s per viewer in localStorage) can also end the take. Built from pure tested reducers (recorder machine, gestures, VAD, playback) driven by a DOM-free VoiceSession, plus a thin MediaRecorder/AnalyserNode adapter (webm/opus, else mp4). Uploads the take as multipart to POST /api/canvases/{id}/voice-takes. With the editor open it saves the editor first, appends, and reloads the editor rows from the response; otherwise it creates a snippet at the viewport centre (list view - the last canvas viewport or 0,0), selects it and scrolls to it. Contract error codes map to typed errors with Retry (same blob), Save audio and Discard. The editor's Recordings section lists, plays (bearer-token blob URLs) and deletes takes, badges each Checked / Not checked and opens a Check transcript modal (audio player with scrubber, read-only Whisper reference whose words seek and highlight while playing when has_timings, correction field prefilled with verified_text or the lines; Save as checked = PUT /api/recordings/{id}/verification, Mark unchecked = DELETE, dirty Cancel confirms; Ctrl/Cmd+Enter, Ctrl+Space, Alt+Left/Right). The recorder's "Use word bank as hints" switch (localStorage lyrics-canvas.voice.vocabHints, default on) is sent as meta.vocabulary_hints. The canvas list page header's "Voice dataset" dialog shows GET /api/recordings/stats and downloads GET /api/recordings/export (blob, server file name, "Include unchecked takes"). Disabled with "Recording needs HTTPS" outside secure contexts.
     entry_points:
       - frontend/src/lib/voice/
       - frontend/src/api/voice.ts (createVoiceApi; client.ts voiceApi)
@@ -507,7 +515,10 @@ Features Index:
       - frontend/src/components/toolbar/Toolbar.tsx (Record button)
       - frontend/src/components/pages/CanvasPage.tsx (Alt+Shift+R, VoiceCaptureModal)
       - frontend/src/components/list/ListView.tsx (reveal new snippet)
-    depends_on: [voice_capture, list_mode, grid_rearrange, snippet_crud, health_banner]
+      - frontend/src/components/voice/check/ (CheckTranscriptModal)
+      - frontend/src/components/voice/dataset/ (VoiceDatasetDialog)
+      - frontend/src/components/pages/CanvasListPage.tsx (Voice dataset button)
+    depends_on: [voice_capture, voice_dataset, list_mode, grid_rearrange, snippet_crud, health_banner]
     doc: docs/features/web_voice_capture.md
   tag_expressions:
     description: User-wide tags (one list per user shared by all canvases, names unique per user ignoring case; migration 005 backfills user_id from the canvas owner and merges same-named tags into the smallest id, repointing snippet links) and a boolean tag expression language shared by backend, web and Android - bare or quoted tag names, type:<verse|chorus|bridge|hook|freestyle>, ! > & > | with juxtaposition as AND, and/or/not keywords, code point error positions with typed codes (too_long, unexpected_character, unterminated_string, invalid_escape, empty_name, unknown_type, unexpected_token, unexpected_end, unclosed_paren, empty_group, too_deep), a normalizer, case-insensitive evaluation and rename, conformance vectors in spec/tag_expression_vectors.json read in place by every implementation. Server-stored named presets (normalized, non-empty) are rewritten in the same transaction when a tag is renamed. API - GET/POST /api/tags, PUT/DELETE /api/tags/{id}, snippet link/unlink (both owned), /api/tag-presets CRUD; TagResponse {id, name, color, snippet_count, word_count, created_at} (word_count added by word_bank), snippets embed SnippetTagResponse {id, name, color}; errors {"error", "message"} plus expression_error {code, position, message}. POST /api/canvases/{id}/tags and the canvas-detail tags list are removed. RhymeSuggestRequest.tag_filter restricts the notes source to matching snippets (dictionary never filtered).
@@ -555,6 +566,20 @@ Features Index:
       - deploy/helm/lyrics-canvas/values.yaml (backend.relatedWords)
     depends_on: [tag_expressions, rhyme_view, typed_api, helm_deployment]
     doc: docs/features/word_bank.md
+  voice_dataset:
+    description: Word-bank vocabulary hints and the recording dataset. Each voice take (meta.vocabulary_hints, default true, and VOICE_VOCAB_HINTS) sends a pure-built Whisper initial_prompt "Vocabulary: w1, ..., wn." of the user's bank words with a letter, ranked rarest first (wordfreq Zipf, unknown 0), then newest, then lower(text), kept while within VOICE_VOCAB_HINT_MAX_CHARS (600) code points and emitted most important last; none fits or empty bank -> no form field. Migration 007 adds nullable words / line_spans (jsonb), language, initial_prompt, verified_text, verified_at to snippet_recordings (check constraint keeps the verified pair together); line assembly exposes the [start, end) word span of every line in all split modes. RecordingResponse gains lines, has_timings, words, line_spans, language, initial_prompt, verified_text, verified_at. PUT /api/recordings/{id}/verification normalizes (CRLF/CR -> LF, rstrip lines, trim blank edges, collapse blank runs; 1..10000 code points else 422 invalid_verification) and sets verified_at = now(); DELETE clears both, idempotent. GET /api/recordings/stats (total, verified, durations, with_timings across canvases). GET /api/recordings/export?include_unverified=false streams a zip (audio/<id>.<ext> original bytes, metadata.jsonl oldest first, dataset.json format_version 1) built off the event loop into a SpooledTemporaryFile; more audio than VOICE_EXPORT_MAX_BYTES (1 GiB) -> 413 export_too_large. Helm backend.voice.{vocabHints, vocabHintMaxChars, exportMaxBytes}.
+    entry_points:
+      - backend/app/api/voice.py (PUT/DELETE /api/recordings/{recording_id}/verification, GET /api/recordings/stats, GET /api/recordings/export, _vocabulary_prompt)
+      - backend/app/services/voice/hints.py
+      - backend/app/services/voice/timings.py
+      - backend/app/services/voice/verification.py
+      - backend/app/services/voice/dataset_export.py
+      - backend/app/services/voice/line_assembly.py (AssembledLines.words / spans)
+      - backend/app/services/recording_service.py (bank_hint_words, set_verification, clear_verification, recording_stats, export_recordings)
+      - backend/alembic/versions/007_recording_dataset.py
+      - deploy/helm/lyrics-canvas/values.yaml (backend.voice)
+    depends_on: [voice_capture, word_bank, stt_service, helm_deployment, typed_api]
+    doc: docs/features/voice_dataset.md
   android_word_bank:
     description: Android client of the word bank. :core:logic word text rules (NFC, strip, whitespace collapse, 1-64 code points, <= 4 words, letters / apostrophes / hyphens / spaces, >= 1 letter) and the add splitter (commas / newlines, case-insensitive de-dup, 200 per batch); typeless tag evaluation (null type, vectors v2). DTOs and HttpWordBankRepository for every /api/word-bank route, UserTag.word_count, typed WordBankError for invalid_word (index), word_exists, word_not_found, too_many_words, related_words_warming (Retry-After), related_words_unavailable plus tag codes. Full-screen Word bank from the canvas top bar - filter bar and presets shared with the canvas (generalized TagControlsViewModel / TagTarget; own DataStore key word_bank_filter), add box with tag chips, "N words (M shown)", checkbox / long-press selection, inline rename, delete (confirm > 5), tag picker on the selection, Families (min score 0.8, select all per family, unmatched last) and Rhymes with (one selected word or typed text, min score 0.5), Related search (warming retry <= 10, unavailable message, "+" / "in bank"), Make snippet draft sheet created at the canvas viewport centre. "+ bank" on rhyme candidates (disabled with tooltip when invalid) and "Add to word bank" in the editor selection toolbar.
     entry_points:
