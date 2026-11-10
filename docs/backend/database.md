@@ -40,13 +40,11 @@ def new_uuid():
 All models use UUID primary keys and server-side timestamp defaults.
 
 ```
-User 1──N Canvas 1──N Snippet N──M Tag
-                   │           │
-                   1──N Group ─┘ (via group_id)
-                               │
-                         SnippetEmbedding (1:1, Vector(384))
-                               │
-                         SnippetRecording (N:1, ON DELETE CASCADE)
+User 1──N Canvas 1──N SnippetPlacement N──1 Snippet N──M Tag
+               │            │                │
+               1──N Group ──┘ (group_id)     ├── owner_id → User (ON DELETE CASCADE)
+                                             ├── SnippetEmbedding (1:1, Vector(384))
+                                             └── SnippetRecording (N:1, ON DELETE CASCADE)
 
 User 1──N Tag        (user-wide tags, ON DELETE CASCADE)
 User 1──N TagPreset  (saved tag expressions, ON DELETE CASCADE)
@@ -67,7 +65,9 @@ User 1──N TagPreset  (saved tag expressions, ON DELETE CASCADE)
 | `created_at` | DateTime(tz) | now() | |
 | `updated_at` | DateTime(tz) | now() | Auto-updates |
 
-Relationships: `owner`, `snippets`, `groups` (all cascade: all, delete-orphan)
+Relationships: `owner`, `groups` (cascade: all, delete-orphan), `placements` (passive deletes, the FK
+cascades; `lazy="raise"`). `canvas_service.delete_canvas` deletes placements, groups and the canvas
+explicitly, then the snippets left with no placement.
 
 ### Snippet
 
@@ -76,25 +76,42 @@ Relationships: `owner`, `snippets`, `groups` (all cascade: all, delete-orphan)
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
 | `id` | UUID | uuid4 | PK |
-| `canvas_id` | UUID | - | FK -> canvases.id |
+| `owner_id` | UUID | - | FK -> users.id **ON DELETE CASCADE**, NOT NULL, indexed (`ix_snippets_owner_id`) |
 | `snippet_type` | Enum | freestyle | verse/chorus/bridge/hook/freestyle |
 | `grid_mode` | Enum | auto | auto/fixed |
 | `beats_per_line` | Integer | null | For fixed mode |
 | `grid_data` | JSONB | `{lines:[]}` | Syllabified beat grid |
 | `raw_text` | Text | '' | |
-| `position_x` | Float | 0.0 | |
-| `position_y` | Float | 0.0 | |
-| `width` | Float | 300.0 | |
-| `height` | Float | 200.0 | |
-| `z_index` | Integer | 0 | |
-| `group_id` | UUID | null | FK -> groups.id |
 | `phonetics` | JSONB | null | `SnippetPhonetics` (`app/schemas/phonetics.py`): per-line words/syllables, stress, rhyme keys, overrides, dialect digest |
 | `derived_from` | JSONB | null | `DerivedFromModel`: provenance of a snippet promoted from a rhyme candidate |
 | `created_at` | DateTime(tz) | now() | |
-| `updated_at` | DateTime(tz) | now() | Auto-updates on every write, moves and resizes included |
+| `updated_at` | DateTime(tz) | now() | Auto-updates on every write to the row (layout is on the placement and does not move it) |
 | `content_updated_at` | DateTime(tz), NOT NULL | now() | Last content edit (text, type, grid); bumped by `snippet_service.update_snippet` (content edits) and `recording_service.append_with_recording` (voice-take append), never by layout or tags. See [snippet_content_timestamp](../features/snippet_content_timestamp.md) |
 
-Relationships: `canvas`, `group`, `tags` (N:M via snippet_tags), `embedding` (1:1, cascade)
+Relationships: `placements` (1:N, passive deletes, `lazy="raise"`), `tags` (N:M via snippet_tags),
+`embedding` (1:1, cascade)
+
+Layout (`canvas_id`, position, size, `z_index`, `group_id`) moved to `snippet_placements` in migration
+008: one snippet can be on several canvases. See
+[snippet_placements.md](../features/snippet_placements.md).
+
+### SnippetPlacement
+
+**File:** `app/models/placement.py`, **Table:** `snippet_placements`
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | UUID | uuid4 | PK (`placement_id` on the wire) |
+| `snippet_id` | UUID | - | FK -> snippets.id **ON DELETE CASCADE**, NOT NULL, indexed |
+| `canvas_id` | UUID | - | FK -> canvases.id **ON DELETE CASCADE**, NOT NULL, indexed |
+| `position_x`, `position_y` | Float, NOT NULL | 0 | |
+| `width`, `height` | Float, NOT NULL | 300 / 200 | |
+| `z_index` | Integer, NOT NULL | 0 | |
+| `group_id` | UUID | null | FK -> groups.id **ON DELETE SET NULL**; a group of `canvas_id` (service-enforced) |
+| `created_at` | DateTime(tz), NOT NULL | now() | |
+
+Unique `(snippet_id, canvas_id)` (`uq_snippet_placements_snippet_canvas`). Invariant: every snippet
+has at least one placement (`app/services/placements/removal.py`).
 
 `phonetics` is computed with `grid_data` on create/update (`app/api/snippets.py`) and backfilled
 for older rows by `scripts/backfill_phonetics.py`; see [nlp-phonetics](./nlp-phonetics.md).
@@ -112,7 +129,7 @@ for older rows by `scripts/backfill_phonetics.py`; see [nlp-phonetics](./nlp-pho
 | `position_y` | Float | 0.0 | |
 | `created_at` | DateTime(tz) | now() | |
 
-Relationships: `canvas`, `snippets` (1:N via group_id)
+Relationships: `canvas`, `placements` (1:N via `snippet_placements.group_id`; the group's members)
 
 ### Tag
 
@@ -201,9 +218,10 @@ Index: `ix_snippet_recordings_snippet_created (snippet_id, created_at)`. The dat
 described in [voice_dataset.md](../features/voice_dataset.md).
 
 No ORM relationship on `Snippet` (snippet loads never touch audio); deletes rely on the FK cascade,
-including canvas deletion (ORM cascade to snippets, then the FK). A merge moves the originals'
-recordings to the merged snippet before deleting them
-(`snippet_service.replace_with_merged(..., reparent=recording_service.reassign_recordings)`).
+including canvas deletion (a snippet left with no placement is deleted, then the FK). A merge moves
+the recordings of the originals it deletes to the merged snippet first
+(`snippet_service.replace_with_merged(..., reparent=recording_service.reassign_recordings)`); an
+original also placed on another canvas keeps its recordings.
 
 ## Alembic Migrations
 
@@ -271,6 +289,15 @@ Adds the nullable `words`, `line_spans` (jsonb), `language` (varchar(8)), `initi
 constraint `ck_snippet_recordings_verified_pair` (`verified_text` and `verified_at` both null or both
 set). Existing rows keep nulls. The downgrade drops the constraint and all six columns.
 
+**File:** `alembic/versions/008_snippet_placements.py`
+
+Creates `snippet_placements` and copies one placement per snippet from its layout columns (a group of
+another canvas is dropped), adds `snippets.owner_id` from the canvas owner, then drops
+`snippets.canvas_id, position_x, position_y, width, height, z_index, group_id`. The downgrade restores
+the columns from each snippet's oldest placement and turns every other placement into a duplicated
+snippet row (content and tag links copied, recordings not), then drops `owner_id` and the table. Details:
+[snippet_placements.md](../features/snippet_placements.md#migration-008).
+
 ### Running Migrations
 
 ```bash
@@ -294,4 +321,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 ```
 
-Tables are auto-created on startup in development. Use Alembic migrations in production.
+Tables are auto-created on startup in development. Use Alembic migrations in production. On a dev
+database created before migration 008, run `alembic upgrade head` before starting the backend:
+`create_all` would otherwise create an empty `snippet_placements` table and the migration's
+`CREATE TABLE` would then fail.

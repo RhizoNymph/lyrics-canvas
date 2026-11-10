@@ -21,4 +21,5 @@ class Group(Base):
     )
 
     canvas = relationship("Canvas", back_populates="groups")
-    snippets = relationship("Snippet", back_populates="group")
+    # Members are placements of this group's canvas; deleting the group nulls their group_id (FK SET NULL).
+    placements = relationship("SnippetPlacement", back_populates="group", passive_deletes=True)

@@ -43,6 +43,9 @@ def legacy_canvas(canvas) -> dict:
 def legacy_snippet(s) -> dict:
     return {
         "id": str(s.id),
+        # snippet placements: layout fields come from the placement on canvas_id
+        # (docs/features/snippet_placements.md)
+        "placement_id": str(s.placement_id),
         "canvas_id": str(s.canvas_id),
         "snippet_type": s.snippet_type.value,
         "grid_mode": s.grid_mode.value,
@@ -62,6 +65,7 @@ def legacy_snippet(s) -> dict:
         "created_at": str(s.created_at),
         "updated_at": str(s.updated_at),
         "content_updated_at": str(s.content_updated_at),
+        "canvases": [{"id": str(c.id), "title": c.title} for c in s.canvases],
     }
 
 
@@ -72,7 +76,7 @@ def legacy_group(g) -> dict:
         "name": g.name,
         "position_x": g.position_x,
         "position_y": g.position_y,
-        "snippet_ids": [str(s.id) for s in (g.snippets or [])],
+        "snippet_ids": [str(p.snippet_id) for p in (g.placements or [])],
         "created_at": str(g.created_at),
     }
 
@@ -235,7 +239,7 @@ def test_update_snippet(client, monkeypatch):
         return snippet
 
     monkeypatch.setattr(snippet_service, "update_snippet", fake_update)
-    res = client.put(f"/api/snippets/{snippet.id}", json={"position_x": 1})
+    res = client.put(f"/api/snippets/{snippet.id}", params={"canvas_id": str(CANVAS_ID)}, json={"position_x": 1})
     assert res.status_code == 200, res.text
     assert_same_wire(res, legacy_snippet(snippet))
 
@@ -252,22 +256,25 @@ def test_update_snippet_stores_a_typed_grid_verbatim(client, monkeypatch):
 
     monkeypatch.setattr(snippet_service, "get_owned_snippet", fake_owned)
     monkeypatch.setattr(snippet_service, "update_snippet", fake_update)
-    res = client.put(f"/api/snippets/{uuid.uuid4()}", json={"grid_data": RICH_GRID})
+    res = client.put(f"/api/snippets/{uuid.uuid4()}", params={"canvas_id": str(CANVAS_ID)}, json={"grid_data": RICH_GRID})
     assert res.status_code == 200, res.text
     assert seen["grid_data"] == RICH_GRID
 
 
 def test_update_snippet_rejects_a_malformed_grid(client):
-    res = client.put(f"/api/snippets/{uuid.uuid4()}", json={"grid_data": {"lines": [{"cells": "x"}]}})
+    res = client.put(f"/api/snippets/{uuid.uuid4()}", params={"canvas_id": str(CANVAS_ID)}, json={"grid_data": {"lines": [{"cells": "x"}]}})
     assert res.status_code == 422
 
 
 def test_batch_position(client, monkeypatch):
-    async def fake_batch(db, updates, owner_id):
+    async def fake_batch(db, canvas_id, updates, owner_id):
         return 2
 
     monkeypatch.setattr(snippet_service, "batch_update_positions", fake_batch)
-    res = client.patch("/api/snippets/batch-position", json={"updates": [{"id": str(uuid.uuid4()), "position_x": 1, "position_y": 2}]})
+    res = client.patch(
+        "/api/snippets/batch-position",
+        json={"canvas_id": str(CANVAS_ID), "updates": [{"id": str(uuid.uuid4()), "position_x": 1, "position_y": 2}]},
+    )
     assert_same_wire(res, {"updated": 2})
 
 

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.models.canvas import Canvas
+from app.models.placement import SnippetPlacement
 from app.models.snippet import Snippet, SnippetType
 from app.models.tag import snippet_tags
 from app.models.user import User
@@ -64,8 +65,11 @@ async def make_user(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
 
 
 async def add_snippet(db: AsyncSession, canvas_id: uuid.UUID, text: str = "la la", snippet_type: SnippetType = SnippetType.verse) -> uuid.UUID:
-    snippet = Snippet(canvas_id=canvas_id, raw_text=text, snippet_type=snippet_type)
+    # a snippet is owned by its user and placed on the canvas (docs/features/snippet_placements.md)
+    canvas = await db.get(Canvas, canvas_id)
+    snippet = Snippet(id=uuid.uuid4(), owner_id=canvas.owner_id, raw_text=text, snippet_type=snippet_type)
     db.add(snippet)
+    db.add(SnippetPlacement(snippet_id=snippet.id, canvas_id=canvas_id))
     await db.commit()
     return snippet.id
 

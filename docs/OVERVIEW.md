@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering. On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
+A **canvas** is a user's titled workspace (1-255 characters after trimming; `invalid_canvas_title` otherwise; a new canvas without a title is "Untitled Canvas"), created and renamed from the canvas list and from inside the canvas. A **snippet** is a rectangular card holding lyrics text, owned by its user. Its **content** (text, type, grid mode, beats, grid, phonetics, tags, recordings) is shared, and its **layout** lives on a **placement** per canvas (`snippet_placements`: position, size, stacking order, group), so one snippet can be on several canvases with an independent layout on each. Every snippet has at least one placement. A snippet can be **moved** to another canvas or **also shown** on one (`POST /api/canvases/{id}/snippets/transfer`: same position and size, stacked on top, ungrouped). Plain delete removes it from the current canvas only, deleting it for good when that was its last canvas; **delete everywhere** removes it from all of them; deleting a canvas keeps its snippets that are also on other canvases. Each snippet in a canvas response carries its `placement_id` and the `canvases` holding it. Layout saves (PUT, batch-position) name the canvas (`canvas_id`, required). Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves, resizes and placements do not count), for "last edited" ordering. See [snippet_placements.md](./features/snippet_placements.md). On web, a canvas is renamed from the pencil on its list card or by clicking the header title, and the right-click menu moves snippets to another canvas or also shows them there (canvas picker with "New canvas…", result toast with Open), removes them from this canvas or deletes them everywhere (confirmed); a "⧉ N" badge on cards and list rows lists the other canvases holding a snippet (see [web_snippet_placements.md](./features/web_snippet_placements.md)). On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)).
@@ -123,10 +123,12 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
+| [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: `snippet_placements` and `snippets.owner_id` (migration 008, both directions), the at-least-one-placement invariant, PUT / batch-position with `canvas_id`, remove from canvas, delete everywhere, transfer (move / show), merge, voice, groups, fork, readers, canvas title validation, typed errors |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [Voice Dataset](./features/voice_dataset.md) | Word-bank vocabulary hints (Whisper `initial_prompt`), stored STT words / line spans (migration 007), transcript verification, recording stats and the zip dataset export format, fine-tuning outline |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
+| [Web Snippet Placements](./features/web_snippet_placements.md) | Web canvas rename (list card pencil, header title) and snippet placements: typed placement API with `canvas_id` on every layout save, Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and canvases popover, editor "Also on", undo/redo rule for non-undoable cross-canvas operations |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
@@ -191,13 +193,11 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 ## Data Model (Simplified)
 
 ```
-User 1──N Canvas 1──N Snippet N──M Tag N──1 User (user-wide)
-                   │           │
-                   1──N Group ─┘ (via group_id)
-                               │
-                         SnippetEmbedding (1:1, Vector(384))
-                               │
-                         SnippetRecording (N:1, audio bytea; ON DELETE CASCADE, moved on merge)
+User 1──N Canvas 1──N SnippetPlacement N──1 Snippet N──M Tag N──1 User (user-wide)
+               │            │                │
+               1──N Group ──┘ (group_id)     ├── owner_id N──1 User
+                                             ├── SnippetEmbedding (1:1, Vector(384))
+                                             └── SnippetRecording (N:1, audio bytea; ON DELETE CASCADE, moved on merge)
 
 User 1──N TagPreset (named, normalized tag expressions)
 User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
@@ -209,7 +209,7 @@ User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
 |------|-----------|------|
 | Authentication | 4 (register, login, google, me) | Public / Bearer |
 | Canvases | 8 (CRUD + share + fork) | Bearer (shared is public) |
-| Snippets | 5 (CRUD + batch position + merge) | Bearer |
+| Snippets | 7 (create, update, delete everywhere, remove from canvas, batch position, transfer, merge) | Bearer |
 | Tags | 6 (list, create, update, delete, link/unlink) | Bearer |
 | Tag presets | 4 (list, create, update, delete) | Bearer |
 | Groups | 3 (CRUD) | Bearer |
@@ -218,7 +218,7 @@ User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
 | Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
 | Health | 1 | Public |
-| **Total** | **54 endpoints** | |
+| **Total** | **56 endpoints** | |
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -242,6 +242,22 @@ All services hot-reload via bind-mounted source volumes.
 
 ```yaml
 Features Index:
+  snippet_placements:
+    description: Snippet content separated from per-canvas layout so one snippet can be on several canvases. Migration 008 adds snippet_placements (snippet_id, canvas_id, position_x/y, width/height, z_index, group_id ON DELETE SET NULL, created_at; unique (snippet_id, canvas_id)) and snippets.owner_id, copying one placement per snippet and dropping the layout columns; the downgrade restores them from the oldest placement and splits every other placement into a duplicated snippet (content and tag links copied, recordings not). Invariant - every snippet has at least one placement - enforced (row locks + delete of snippets left with none, same transaction) on canvas delete, remove from canvas, move and merge. SnippetResponse gains placement_id and canvases [{id, title}] (lower(title), id; only the shared canvas in the shared view); layout fields come from the placement on the canvas in context. PUT /api/snippets/{id}?canvas_id= and PATCH batch-position {canvas_id, updates} require canvas_id; DELETE /api/canvases/{cid}/snippets/{sid} -> {snippet_deleted}; DELETE /api/snippets/{id} deletes everywhere; POST /api/canvases/{cid}/snippets/transfer {snippet_ids 1..500, target_canvas_id, mode move|show} -> {target_canvas_id, placed, already_on_target, removed_from_source}, all or nothing, same layout, z = target max + 1 + source z rank, ungrouped. Merge removes originals from this canvas only (shared ones keep their recordings). Voice append needs a placement on the take's canvas. Groups hold placements of their canvas. Fork copies content into new snippets of the forker. Search, similarity (optional canvas_id), t-SNE (read only), export and the shared view read the canvas's placements; rhyme notes read owner_id once per snippet. Canvas titles stripped, 1-255 code points (invalid_canvas_title). Typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas, group_not_found.
+    entry_points:
+      - backend/alembic/versions/008_snippet_placements.py
+      - backend/app/models/placement.py
+      - backend/app/services/placements/ (errors, view, queries, removal, transfer)
+      - backend/app/services/canvas_title.py
+      - backend/app/services/snippet_service.py
+      - backend/app/services/canvas_service.py
+      - backend/app/api/placements.py (DELETE /api/canvases/{cid}/snippets/{sid}, POST /api/canvases/{cid}/snippets/transfer)
+      - backend/app/api/snippets.py (PUT ?canvas_id=, batch-position canvas_id)
+      - backend/app/api/canvases.py (title validation, _snippet_response)
+      - backend/app/api/placement_errors.py
+      - backend/app/schemas/placement.py
+    depends_on: [snippet_crud, merge_blocks, voice_capture, tag_expressions, typed_api]
+    doc: docs/features/snippet_placements.md
   web_word_bank:
     description: Web client of the word bank. Typed wire shapes and API (api/wordBank.ts) rejecting only with WordBankApiError (invalid_word with batch index, word_exists, word_not_found, too_many_words, related_words_warming with Retry-After, related_words_unavailable, plus tag codes). Client mirror of the word text rules (NFC, strip, collapse whitespace, 1-64 code points, at most 4 words, letters/apostrophes/hyphens/spaces, a letter) and the add box splitter (commas, newlines). wordBankStore loads the whole bank, filters it locally with the shared evaluator on a typeless subject (spec vectors v2), persists the filter at localStorage lyrics-canvas.wordBankFilter, keeps the selection within the shown words, adds batches with tags, renames, deletes, links/unlinks via POST /api/word-bank/tags, keeps word pills and Tag.word_count in step with tagStore, and creates a draft snippet at the viewport centre. wordBankQueryStore runs rhyme families (min score 0.8), rhymes with (one selected word or typed text, min score 0.5) and the related search (at most 10 tries after Retry-After). Right sidebar via the Words toggle / Ctrl/Cmd+Shift+W / Alt+Shift+W, exclusive with the rhyme sidebar; "+ bank" on rhyme candidates; editor context menu "Add to word bank" and Ctrl/Cmd+Shift+B. The canvas filter bar and the snippet tag picker are generalized into TagFilterBar and TagChecklist, shared with the panel.
     entry_points:
@@ -290,7 +306,7 @@ Features Index:
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
   merge_blocks:
-    description: Select two or more snippets and merge them vertically (stacked) or horizontally (joined line by line) into one snippet at the first block's position, in canvas-position order, keeping rests and stress; the server builds the merged snippet and deletes the originals in one transaction (POST /api/canvases/{id}/merge), shared by the web and Android clients.
+    description: Select two or more snippets and merge them vertically (stacked) or horizontally (joined line by line) into one snippet at the first block's position, in canvas-position order, keeping rests and stress; the server builds the merged snippet and its placement and takes the originals off the canvas in one transaction (an original also on other canvases stays there with its recordings; one only here is deleted and its recordings move to the merged snippet) (POST /api/canvases/{id}/merge), shared by the web and Android clients.
     entry_points:
       - backend/app/api/merge.py (POST /api/canvases/{canvas_id}/merge)
       - backend/app/services/merge_service.py
@@ -592,6 +608,20 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppNavHost.kt (WordBankDestination)
     depends_on: [word_bank, android_tag_expressions, android_app, rhyme_view]
     doc: docs/features/android_word_bank.md
+  web_snippet_placements:
+    description: Web client of canvas rename and snippet placements (one snippet on several canvases, layout per canvas). Snippet gains placement_id and canvases; typed placementApi (createPlacementApi over the app axios instance, PlacementError only) for list / create / rename canvases, PUT /api/snippets/{id}?canvas_id=, batch-position with canvas_id, DELETE /api/canvases/{cid}/snippets/{sid}, DELETE /api/snippets/{id} and POST /api/canvases/{cid}/snippets/transfer; typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas. Rename inline on the canvas list (pencil) and in the header (click-to-edit), local trim + 1..255 code point check, server error inline. Context menu (multi-selection aware) Move to canvas… / Also show on canvas… with a searchable picker (newest updated first, New canvas… creates then acts) and a result toast with Open; plain delete removes from this canvas (labelled Remove from this canvas when shared), Delete everywhere confirms naming the other canvases. "⧉ N" badge on Pixi cards and list rows opening a popover of canvases that navigate; editor "Also on" links. Undo/redo - move, remove and delete everywhere drop every snapshot holding an affected snippet; also-show and rename patch the snapshots.
+    entry_points:
+      - frontend/src/api/placements.ts
+      - frontend/src/lib/placements/
+      - frontend/src/stores/canvasStore.ts (removeFromCanvas, deleteEverywhere, transferSnippets, renameCanvas, updateSnippet, commitPositions)
+      - frontend/src/stores/placementNoticeStore.ts
+      - frontend/src/stores/uiStore.ts (canvasesPopover, leaveCanvas)
+      - frontend/src/components/placements/ (TitleEditor, CanvasPicker, PlacementToast, CanvasesPopover, CanvasBadge)
+      - frontend/src/components/canvas/SnippetContextMenu.tsx
+      - frontend/src/components/toolbar/CanvasTitle.tsx
+      - frontend/src/components/pages/CanvasListPage.tsx
+    depends_on: [snippet_placements, web_tag_expressions, list_mode, merge_blocks, typed_api]
+    doc: docs/features/web_snippet_placements.md
 ```
   android_snippet_placements:
     description: Android client of snippet placements and canvas rename. Snippet DTO gains placement_id and canvases; typed TransferRequest (1..500 distinct ids) / TransferResponse / RemovePlacementResponse and PlacementErrorCode (invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas). PUT /api/snippets/{id}?canvas_id= and batch-position with canvas_id from the open canvas; removeFromCanvas, deleteEverywhere, transfer, rename. Rename dialog from canvas list rows (long-press / ⋮) and the canvas title (trim, 1-255 code points, server error inline; list, header and badges update without reload via CanvasUpdates). Selection bar ⋮ - Move to canvas… / Also show on canvas… (bottom-sheet picker, search, newest updated first, New canvas… creating then acting; snackbar with Open navigating to the target), Remove from this canvas (placement delete, confirm only for last copies) vs Delete everywhere (confirm naming the other canvases), On other canvases… (the badge's list). "⧉ N" badge on cards and list rows; editor "Also on" with buttons. No undo on Android, so no history to clear.

@@ -125,7 +125,7 @@ is keyed by snippet id in both views, so switching straight from one snippet to 
 | `frontend/src/stores/canvasStore.ts` | `setSelection(ids)` | |
 | `frontend/src/types/index.ts` | `Snippet.content_updated_at` | |
 | `frontend/src/components/list/ListView.tsx` | List orchestration: order, clicks, context menu, empty states | default `ListView` |
-| `frontend/src/components/list/ListRow.tsx` | One row: header, tags, `GridPreview`, or the inline editor | default `ListRow` |
+| `frontend/src/components/list/ListRow.tsx` | One row: header, "⧉ N" badge (`onShowCanvases`, see web_snippet_placements.md), tags, `GridPreview`, or the inline editor | default `ListRow` |
 | `frontend/src/components/list/GridPreview.tsx` | Read-only DOM beat grid | default `GridPreview` |
 | `frontend/src/components/list/useFrozenOrder.ts` | Freezes row order while an editor is open | `useFrozenOrder` |
 | `frontend/src/components/canvas/gridCellText.ts` | Cell label, tone kind and colours shared by `gridDraw` (Pixi) and `GridPreview` (DOM) | `cellTextKind`, `cellLabel`, `GRID_TEXT_COLORS`, `GRID_ROW_BAND`, `GRID_LINE_COLOR` |

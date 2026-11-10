@@ -78,11 +78,14 @@ The primary store managing all canvas data and interactions.
 |--------|---------|-------|
 | `addSnippet(x, y, type)` | `POST /api/canvases/{id}/snippets` | Pushes undo state |
 | `addSnippetFromText(text, x, y, derived_from?)` | `POST /api/canvases/{id}/snippets` | Body `{ raw_text, position_x, position_y, snippet_type: 'freestyle', derived_from }`; inserts the returned snippet, pushes undo state, returns it (`null` when no canvas is loaded). Used by the rhyme sidebar's Materialize |
-| `updateSnippet(id, data)` | `PUT /api/snippets/{id}` | Pushes undo state |
+| `updateSnippet(id, data)` | `PUT /api/snippets/{id}?canvas_id=` | Pushes undo state; a response for a canvas no longer open is dropped |
 | `applySnippet(snippet)` | None | Upsert a snippet the server already returned (voice take), pushes undo state; ignored for another canvas |
-| `deleteSnippet(id)` | `DELETE /api/snippets/{id}` | Pushes undo state |
+| `removeFromCanvas(ids)` | `DELETE /api/canvases/{cid}/snippets/{sid}` per id | The plain delete; returns `RemovalSummary`, never throws. Not undoable: drops every undo/redo snapshot holding a removed snippet |
+| `deleteEverywhere(ids)` | `DELETE /api/snippets/{id}` per id | Like `removeFromCanvas`; deletes on every canvas |
+| `transferSnippets(ids, target, mode)` | `POST /api/canvases/{cid}/snippets/transfer` | Move or also show; returns `PlacementResult<TransferResponse>`, never throws. Move drops the snapshots holding the moved snippets; show patches `canvases` in the live map and every snapshot |
+| `renameCanvas(title)` | `PUT /api/canvases/{id}` `{title}` | Local check first; updates `canvasTitle` and the embedded `canvases` (live and snapshots) |
 | `moveSnippet(id, x, y)` | None | Local only (optimistic) |
-| `commitPositions()` | `PATCH /api/snippets/batch-position` | Sends all positions |
+| `commitPositions()` | `PATCH /api/snippets/batch-position` | Sends `canvas_id` and all positions |
 | `mergeSelected(mode)` | `POST /api/canvases/{id}/merge` (`canvasApi.merge`) | Needs 2+ selected snippets that exist locally; the server orders, merges and replaces in one transaction. On success removes the returned `deleted_ids`, inserts the returned snippet, selects it, pushes one undo state. Returns `MergeResult` (never throws); sets `mergeError` on failure. See [merge_blocks.md](../features/merge_blocks.md) |
 | `clearMergeError()` | None | Resets `mergeError` |
 
@@ -132,6 +135,9 @@ expression).
 - `pushUndoState()`: Snapshots current snippets + groups Maps. Keeps last 50 states. Clears future.
 - `undo()`: Restores from past, pushes current to future
 - `redo()`: Restores from future, pushes current to past
+- Non-undoable cross-canvas operations (move, remove from this canvas, delete everywhere) drop every
+  snapshot holding an affected snippet; also-show and rename patch the snapshots instead. See
+  [web_snippet_placements.md](../features/web_snippet_placements.md).
 
 ### t-SNE Mode
 

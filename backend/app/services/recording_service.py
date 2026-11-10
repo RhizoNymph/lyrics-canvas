@@ -1,8 +1,9 @@
 """Persistence for voice takes and snippet recordings.
 
 Every write here is one transaction: the snippet change (new snippet, or appended lines) and the
-recording insert commit together or not at all. Ownership is always checked through
-``Canvas.owner_id``. Audio bytes are never logged and never loaded except by ``get_audio``.
+recording insert commit together or not at all. Canvas-scoped checks (a take on a canvas) go
+through the placement's ``Canvas.owner_id``; snippet and recording ownership through
+``Snippet.owner_id`` (docs/features/snippet_placements.md). Audio bytes are never logged and never loaded except by ``get_audio``.
 Transcript, checked-transcript and prompt text are never logged.
 
 Dataset columns (migration 007, docs/features/voice_dataset.md): a take stores its STT words,
@@ -21,13 +22,15 @@ from dataclasses import dataclass
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.models.canvas import Canvas
+from app.models.placement import SnippetPlacement
 from app.models.recording import LANGUAGE_MAX_LENGTH, SnippetRecording, SplitMode
 from app.models.snippet import GridMode, Snippet, SnippetType
 from app.models.word_bank import BankWord
 from app.schemas.phonetics import SnippetPhonetics
+from app.services.placements.queries import placed_by_placement_id, placed_snippet
+from app.services.placements.view import PlacedSnippet
 from app.services.snippet_content import content_for, derive_new_content
 from app.services.voice.append import append_lines
 from app.services.voice.dataset_export import ExportRecording
@@ -116,19 +119,12 @@ async def canvas_owned(db: AsyncSession, canvas_id: uuid.UUID, owner_id: uuid.UU
 
 
 async def snippet_in_canvas(db: AsyncSession, snippet_id: uuid.UUID, canvas_id: uuid.UUID, owner_id: uuid.UUID) -> bool:
+    """The snippet is placed on the caller's canvas."""
     result = await db.execute(
-        select(Snippet.id).join(Canvas)
-        .where(Snippet.id == snippet_id, Snippet.canvas_id == canvas_id, Canvas.owner_id == owner_id)
+        select(SnippetPlacement.id).join(Canvas, Canvas.id == SnippetPlacement.canvas_id)
+        .where(SnippetPlacement.snippet_id == snippet_id, SnippetPlacement.canvas_id == canvas_id, Canvas.owner_id == owner_id)
     )
     return result.scalar_one_or_none() is not None
-
-
-async def _snippet_with_tags(db: AsyncSession, snippet_id: uuid.UUID) -> Snippet:
-    result = await db.execute(
-        select(Snippet).options(selectinload(Snippet.tags)).where(Snippet.id == snippet_id)
-        .execution_options(populate_existing=True)
-    )
-    return result.scalar_one()
 
 
 async def _commit(
@@ -168,18 +164,25 @@ async def create_snippet_with_recording(
     position_y: float,
     lines: Sequence[str],
     recording: NewRecording,
-) -> tuple[Snippet, SnippetRecording]:
-    """A new freestyle snippet holding ``lines`` (same derivation as POST /snippets) plus the recording."""
+) -> tuple[PlacedSnippet, SnippetRecording]:
+    """A new freestyle snippet holding ``lines`` (same derivation as POST /snippets), placed on the
+    take's canvas, plus the recording."""
     if not await canvas_owned(db, canvas_id, owner_id):
         raise CanvasNotFoundError("canvas not found")
     content = derive_new_content("\n".join(lines))
     snippet = Snippet(
-        canvas_id=canvas_id,
+        id=uuid.uuid4(),
+        owner_id=owner_id,
         snippet_type=SnippetType.freestyle,
         grid_mode=GridMode.auto,
         raw_text=content.raw_text,
         grid_data=content.grid_data,
         phonetics=content.phonetics,
+    )
+    placement = SnippetPlacement(
+        id=uuid.uuid4(),
+        snippet_id=snippet.id,
+        canvas_id=canvas_id,
         position_x=position_x,
         position_y=position_y,
         width=content.width,
@@ -187,6 +190,7 @@ async def create_snippet_with_recording(
     )
     try:
         db.add(snippet)
+        db.add(placement)
         await db.flush()
         row = recording.row(snippet.id)
         db.add(row)
@@ -199,7 +203,7 @@ async def create_snippet_with_recording(
         "voice_take.created canvas_id=%s snippet_id=%s recording_id=%s lines=%d bytes=%d split_mode=%s",
         canvas_id, snippet.id, row.id, len(lines), row.byte_size, row.split_mode.value,
     )
-    return await _snippet_with_tags(db, snippet.id), row
+    return await placed_by_placement_id(db, placement.id), row
 
 
 async def append_with_recording(
@@ -210,28 +214,25 @@ async def append_with_recording(
     *,
     lines: Sequence[str],
     recording: NewRecording,
-) -> tuple[Snippet, SnippetRecording]:
+) -> tuple[PlacedSnippet, SnippetRecording]:
     """Append ``lines`` after the snippet's last line (existing grid verbatim) plus the recording.
 
-    The snippet row is locked (SELECT ... FOR UPDATE) so a concurrent edit cannot interleave.
+    The snippet must be placed on the take's canvas; that placement is resized to the new grid
+    (other canvases keep their size). The snippet row is locked (SELECT ... FOR UPDATE) so a
+    concurrent edit cannot interleave.
     """
-    result = await db.execute(
-        select(Snippet).join(Canvas)
-        .where(Snippet.id == snippet_id, Snippet.canvas_id == canvas_id, Canvas.owner_id == owner_id)
-        .with_for_update(of=Snippet)
-        .execution_options(populate_existing=True)
-    )
-    snippet = result.scalar_one_or_none()
-    if snippet is None:
+    placed = await placed_snippet(db, snippet_id, canvas_id, owner_id, lock=True)
+    if placed is None:
         raise SnippetNotFoundError("snippet not found")
+    snippet = placed.snippet
     appended = append_lines(snippet.raw_text or "", snippet.grid_data, lines)
     overrides = SnippetPhonetics.model_validate(snippet.phonetics).overrides if snippet.phonetics else None
     content = content_for(appended.raw_text, appended.grid_data, overrides)
     snippet.raw_text = content.raw_text
     snippet.grid_data = content.grid_data
     snippet.phonetics = content.phonetics
-    snippet.width = content.width
-    snippet.height = content.height
+    placed.placement.width = content.width
+    placed.placement.height = content.height
     # SQL now(): the transaction clock, equal to the updated_at written by the same UPDATE.
     snippet.content_updated_at = func.now()
     row = recording.row(snippet.id)
@@ -241,7 +242,7 @@ async def append_with_recording(
         "voice_take.appended canvas_id=%s snippet_id=%s recording_id=%s lines=%d bytes=%d split_mode=%s",
         canvas_id, snippet_id, row.id, len(lines), row.byte_size, row.split_mode.value,
     )
-    return await _snippet_with_tags(db, snippet.id), row
+    return await placed_by_placement_id(db, placed.placement_id), row
 
 
 # ---- recordings ----
@@ -250,7 +251,7 @@ async def append_with_recording(
 async def list_recordings(db: AsyncSession, snippet_id: uuid.UUID, owner_id: uuid.UUID) -> list[SnippetRecording]:
     """The snippet's recordings, newest first, audio not loaded."""
     owned = await db.execute(
-        select(Snippet.id).join(Canvas).where(Snippet.id == snippet_id, Canvas.owner_id == owner_id)
+        select(Snippet.id).where(Snippet.id == snippet_id, Snippet.owner_id == owner_id)
     )
     if owned.scalar_one_or_none() is None:
         raise SnippetNotFoundError("snippet not found")
@@ -263,7 +264,7 @@ async def list_recordings(db: AsyncSession, snippet_id: uuid.UUID, owner_id: uui
 
 
 def _owned_recording(recording_id: uuid.UUID, owner_id: uuid.UUID):
-    owned_snippets = select(Snippet.id).join(Canvas).where(Canvas.owner_id == owner_id)
+    owned_snippets = select(Snippet.id).where(Snippet.owner_id == owner_id)
     return (SnippetRecording.id == recording_id, SnippetRecording.snippet_id.in_(owned_snippets))
 
 
@@ -333,7 +334,7 @@ async def clear_verification(db: AsyncSession, recording_id: uuid.UUID, owner_id
 
 
 def _owned_by(owner_id: uuid.UUID):
-    return SnippetRecording.snippet_id.in_(select(Snippet.id).join(Canvas).where(Canvas.owner_id == owner_id))
+    return SnippetRecording.snippet_id.in_(select(Snippet.id).where(Snippet.owner_id == owner_id))
 
 
 async def recording_stats(db: AsyncSession, owner_id: uuid.UUID) -> RecordingStats:

@@ -20,9 +20,11 @@ def fake_tag(name: str, canvas_id: uuid.UUID, color: str = "#6366f1") -> SimpleN
 
 
 def fake_snippet(canvas_id: uuid.UUID, text: str, **overrides) -> SimpleNamespace:
+    """A snippet as placed on ``canvas_id`` (services.placements.PlacedSnippet's attributes)."""
     grid = overrides.pop("grid_data", syllabify_text(text))
     fields = dict(
         id=uuid.uuid4(),
+        placement_id=uuid.uuid4(),
         canvas_id=canvas_id,
         snippet_type=SnippetType.verse,
         grid_mode=GridMode.auto,
@@ -41,14 +43,17 @@ def fake_snippet(canvas_id: uuid.UUID, text: str, **overrides) -> SimpleNamespac
         created_at=CREATED,
         updated_at=UPDATED,
         content_updated_at=CONTENT_UPDATED,
+        canvases=(SimpleNamespace(id=canvas_id, title="Song"),),
     )
     fields.update(overrides)
     return SimpleNamespace(**fields)
 
 
 def fake_group(canvas_id: uuid.UUID, name: str, snippets: list) -> SimpleNamespace:
+    """Members are placements of the group's canvas (``Group.placements``)."""
+    placements = [SimpleNamespace(snippet_id=s.id, canvas_id=canvas_id) for s in snippets]
     return SimpleNamespace(
-        id=uuid.uuid4(), canvas_id=canvas_id, name=name, position_x=10.0, position_y=20.5, snippets=snippets, created_at=CREATED
+        id=uuid.uuid4(), canvas_id=canvas_id, name=name, position_x=10.0, position_y=20.5, placements=placements, created_at=CREATED
     )
 
 

@@ -33,6 +33,8 @@ import RecordingsSection from '@/components/voice/RecordingsSection';
 import EditorBankMenu from '@/components/wordBank/EditorBankMenu';
 import { isAddSelectionShortcut, selectedFieldText } from '@/lib/wordBank';
 import { useWordBankStore } from '@/stores/wordBankStore';
+import { useNavigate } from 'react-router-dom';
+import { alsoOnText, otherCanvases } from '@/lib/placements';
 
 const SYLLABIFY_DEBOUNCE_MS = 300;
 
@@ -65,7 +67,8 @@ function isTextTarget(target: EventTarget | null): boolean {
 }
 
 export default function InlineGridEditor({ snippetId, placement }: Props) {
-  const { snippets, updateSnippet, snippetScales } = useCanvasStore();
+  const { canvasId, snippets, updateSnippet, snippetScales } = useCanvasStore();
+  const navigate = useNavigate();
   const { closeEditor } = useUIStore();
   const snippet = snippets.get(snippetId);
   const snippetScale = snippetScales.get(snippetId) || 1;
@@ -456,6 +459,40 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
           }}
         />
       </div>
+
+      {/* Also on: the other canvases showing this same snippet (saving first, then opening one) */}
+      {canvasId !== null && otherCanvases(snippet, canvasId).length > 0 && (
+        <div
+          style={{
+            padding: `${2 * s}px ${PADDING * s}px`,
+            fontSize: 10 * s,
+            color: '#a0a0c0',
+            background: 'rgba(99, 102, 241, 0.08)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+          title="Edits to the text, type and grid show on every canvas; position and size are per canvas"
+          aria-label={alsoOnText(snippet, canvasId) ?? undefined}
+        >
+          Also on:{' '}
+          {otherCanvases(snippet, canvasId).map((c, i) => (
+            <span key={c.id}>
+              {i > 0 && ', '}
+              <button
+                type="button"
+                onClick={async () => {
+                  await save();
+                  navigate(`/canvas/${c.id}`);
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#c7d2fe', cursor: 'pointer', fontSize: 10 * s, textDecoration: 'underline' }}
+              >
+                {c.title}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Grid body (inline: wide enough for the longest row, scrolls sideways inside the row) */}
       <div style={{ padding: `${PADDING * s}px`, ...(placement.kind === 'inline' ? { minWidth: contentWidth, boxSizing: 'border-box' } : {}) }}>

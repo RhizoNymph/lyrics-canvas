@@ -20,9 +20,12 @@ from app.api.canvases import _snippet_response
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.main import app
+from app.models.placement import SnippetPlacement
 from app.models.snippet import GridMode, Snippet, SnippetType
 from app.services import canvas_service, snippet_service, tag_service
 from app.services.nlp.syllabifier import syllabify_text
+from app.services.placements.errors import PlacementNotFoundError
+from app.services.placements.view import CanvasRef, PlacedSnippet
 from app.services.snippet_service import CONTENT_FIELDS, content_edits_differ
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -33,26 +36,32 @@ GRID = {"lines": [{"cells": [{"syllable": "cat", "stress": 1, "word_index": 0}, 
 
 
 def stored_snippet(**overrides) -> Snippet:
+    """The snippet's content columns (its layout lives on a placement, see ``stored_placed``)."""
     fields = dict(
         id=uuid.uuid4(),
-        canvas_id=CANVAS,
+        owner_id=OWNER,
         snippet_type=SnippetType.verse,
         grid_mode=GridMode.auto,
         beats_per_line=None,
         grid_data=syllabify_text("cat"),
         raw_text="cat",
-        position_x=0.0,
-        position_y=0.0,
-        width=200.0,
-        height=80.0,
-        z_index=0,
-        group_id=None,
         created_at=EARLIER,
         updated_at=EARLIER,
         content_updated_at=EARLIER,
     )
     fields.update(overrides)
     return Snippet(**fields)
+
+
+def stored_placed(**overrides) -> PlacedSnippet:
+    """A stored snippet with its placement on CANVAS (docs/features/snippet_placements.md)."""
+    snippet = stored_snippet(**overrides)
+    snippet.tags = []
+    placement = SnippetPlacement(
+        id=uuid.uuid4(), snippet_id=snippet.id, canvas_id=CANVAS, position_x=0.0, position_y=0.0, width=200.0,
+        height=80.0, z_index=0, group_id=None,
+    )
+    return PlacedSnippet(snippet=snippet, placement=placement, canvases=(CanvasRef(CANVAS, "Song"),))
 
 
 def bumped(snippet: Snippet) -> bool:
@@ -143,35 +152,70 @@ class FakeSession:
         self.commits += 1
 
 
-async def update(snippet: Snippet, content_edits: dict, **changes) -> Snippet:
-    db = FakeSession(snippet)
-    result = await snippet_service.update_snippet(db, str(snippet.id), str(OWNER), content_edits=content_edits, **changes)
-    assert result is snippet
-    assert db.commits == 1
-    return result
+@pytest.fixture
+def stored(monkeypatch):
+    """``stored(placed)``: the placement loads in snippet_service return ``placed`` (or nothing)."""
+
+    def install(placed: PlacedSnippet | None) -> None:
+        async def fake_placed(db, snippet_id, canvas_id, owner_id, *, lock=False):
+            return placed if placed is not None and canvas_id == CANVAS else None
+
+        async def fake_placed_many(db, canvas_id, owner_id, snippet_ids, *, lock=False):
+            return [placed] if placed is not None and canvas_id == CANVAS and placed.id in snippet_ids else []
+
+        async def fake_reload(db, placement_id):
+            assert placed is not None and placement_id == placed.placement_id
+            return placed
+
+        async def group_ok(db, group_id, canvas_id):
+            return None
+
+        monkeypatch.setattr(snippet_service, "placed_snippet", fake_placed)
+        monkeypatch.setattr(snippet_service, "placed_snippets", fake_placed_many)
+        monkeypatch.setattr(snippet_service, "placed_by_placement_id", fake_reload)
+        monkeypatch.setattr(snippet_service, "ensure_group_on_canvas", group_ok)
+
+    return install
 
 
-async def test_text_edit_bumps():
-    s = await update(stored_snippet(), {"raw_text": "dog"}, raw_text="dog", grid_data=syllabify_text("dog"))
+@pytest.fixture
+def update(stored):
+    async def run(placed: PlacedSnippet, content_edits: dict, **changes) -> PlacedSnippet:
+        stored(placed)
+        db = FakeSession(placed.snippet)
+        result = await snippet_service.update_snippet(
+            db, str(placed.id), str(OWNER), canvas_id=CANVAS, content_edits=content_edits, **changes
+        )
+        assert result is placed
+        assert db.commits == 1
+        return result
+
+    return run
+
+
+async def test_text_edit_bumps(update):
+    s = await update(stored_placed(), {"raw_text": "dog"}, raw_text="dog", grid_data=syllabify_text("dog"))
     assert s.raw_text == "dog"
     assert bumped(s)
 
 
-async def test_type_edit_bumps():
-    s = await update(stored_snippet(), {"snippet_type": SnippetType.bridge}, snippet_type=SnippetType.bridge)
+async def test_type_edit_bumps(update):
+    s = await update(stored_placed(), {"snippet_type": SnippetType.bridge}, snippet_type=SnippetType.bridge)
     assert s.snippet_type == SnippetType.bridge
     assert bumped(s)
 
 
-async def test_grid_edit_bumps():
-    s = await update(stored_snippet(), {"grid_data": GRID}, grid_data=GRID, width=300.0, height=90.0)
+async def test_grid_edit_bumps(update):
+    s = await update(stored_placed(), {"grid_data": GRID}, grid_data=GRID, width=300.0, height=90.0)
     assert s.grid_data == GRID
+    # the derived size is this canvas's layout
+    assert (s.placement.width, s.placement.height) == (300.0, 90.0)
     assert bumped(s)
 
 
-async def test_grid_mode_and_beats_edit_bumps():
+async def test_grid_mode_and_beats_edit_bumps(update):
     s = await update(
-        stored_snippet(), {"grid_mode": GridMode.fixed, "beats_per_line": 4}, grid_mode=GridMode.fixed, beats_per_line=4
+        stored_placed(), {"grid_mode": GridMode.fixed, "beats_per_line": 4}, grid_mode=GridMode.fixed, beats_per_line=4
     )
     assert bumped(s)
 
@@ -185,29 +229,35 @@ async def test_grid_mode_and_beats_edit_bumps():
         {"group_id": uuid.uuid4()},
     ],
 )
-async def test_layout_changes_do_not_bump(changes):
-    s = await update(stored_snippet(), {}, **changes)
+async def test_layout_changes_do_not_bump(update, changes):
+    s = await update(stored_placed(), {}, **changes)
     for key, value in changes.items():
         assert getattr(s, key) == value
+        assert getattr(s.placement, key) == value  # layout lands on the placement
     assert s.content_updated_at == EARLIER
 
 
-async def test_identical_text_does_not_bump():
+async def test_identical_text_does_not_bump(update):
     # The route re-syllabifies and recomputes phonetics; the text itself did not change.
-    s = await update(stored_snippet(), {"raw_text": "cat"}, raw_text="cat", grid_data=syllabify_text("cat"), phonetics={"lines": []})
+    s = await update(stored_placed(), {"raw_text": "cat"}, raw_text="cat", grid_data=syllabify_text("cat"), phonetics={"lines": []})
     assert s.content_updated_at == EARLIER
 
 
-async def test_unknown_snippet_is_none():
+async def test_unknown_snippet_is_placement_not_found(stored):
+    stored(None)
     db = FakeSession(None)
-    assert await snippet_service.update_snippet(db, str(uuid.uuid4()), str(OWNER), content_edits={"raw_text": "x"}, raw_text="x") is None
+    with pytest.raises(PlacementNotFoundError):
+        await snippet_service.update_snippet(
+            db, str(uuid.uuid4()), str(OWNER), canvas_id=CANVAS, content_edits={"raw_text": "x"}, raw_text="x"
+        )
     assert db.commits == 0
 
 
-async def test_batch_position_does_not_bump():
-    s = stored_snippet()
-    db = FakeSession(s)
-    count = await snippet_service.batch_update_positions(db, [{"id": str(s.id), "position_x": 5.0, "position_y": 6.0}], str(OWNER))
+async def test_batch_position_does_not_bump(stored):
+    s = stored_placed()
+    stored(s)
+    db = FakeSession(s.snippet)
+    count = await snippet_service.batch_update_positions(db, CANVAS, [{"id": str(s.id), "position_x": 5.0, "position_y": 6.0}], str(OWNER))
     assert count == 1
     assert (s.position_x, s.position_y) == (5.0, 6.0)
     assert s.content_updated_at == EARLIER
@@ -246,11 +296,10 @@ def test_column_is_non_null_with_server_default_and_no_onupdate():
 
 
 def test_response_carries_content_updated_at_like_updated_at():
-    s = stored_snippet(
+    s = stored_placed(
         updated_at=datetime(2026, 9, 30, 12, 5, 0, tzinfo=timezone.utc),
         content_updated_at=datetime(2026, 9, 30, 12, 0, 0, 123456, tzinfo=timezone.utc),
     )
-    s.tags = []
     body = _snippet_response(s).model_dump(mode="json")
     assert body["content_updated_at"] == str(s.content_updated_at) == "2026-09-30 12:00:00.123456+00:00"
     assert body["updated_at"] == str(s.updated_at)
@@ -276,15 +325,13 @@ def client():
 def test_put_passes_only_client_sent_content_fields_as_edits(client, monkeypatch):
     seen: dict = {}
 
-    async def fake_update(db, snippet_id, owner_id, *, content_edits, **changes):
+    async def fake_update(db, snippet_id, owner_id, *, canvas_id, content_edits, **changes):
         seen["content_edits"] = dict(content_edits)
         seen["changes"] = changes
-        s = stored_snippet(raw_text=changes.get("raw_text", "cat"))
-        s.tags = []
-        return s
+        return stored_placed(raw_text=changes.get("raw_text", "cat"))
 
     monkeypatch.setattr(snippet_service, "update_snippet", fake_update)
-    res = client.put(f"/api/snippets/{uuid.uuid4()}", json={"raw_text": "dog", "position_x": 3.0})
+    res = client.put(f"/api/snippets/{uuid.uuid4()}", params={"canvas_id": str(CANVAS)}, json={"raw_text": "dog", "position_x": 3.0})
     assert res.status_code == 200, res.text
     # the re-syllabified grid and phonetics are derived, not client edits
     assert seen["content_edits"] == {"raw_text": "dog"}
@@ -295,14 +342,15 @@ def test_put_passes_only_client_sent_content_fields_as_edits(client, monkeypatch
 def test_put_position_only_has_no_content_edits(client, monkeypatch):
     seen: dict = {}
 
-    async def fake_update(db, snippet_id, owner_id, *, content_edits, **changes):
+    async def fake_update(db, snippet_id, owner_id, *, canvas_id, content_edits, **changes):
         seen["content_edits"] = dict(content_edits)
-        s = stored_snippet()
-        s.tags = []
-        return s
+        return stored_placed()
 
     monkeypatch.setattr(snippet_service, "update_snippet", fake_update)
-    res = client.put(f"/api/snippets/{uuid.uuid4()}", json={"position_x": 3.0, "position_y": 4.0, "width": 500, "height": 100})
+    res = client.put(
+        f"/api/snippets/{uuid.uuid4()}", params={"canvas_id": str(CANVAS)},
+        json={"position_x": 3.0, "position_y": 4.0, "width": 500, "height": 100},
+    )
     assert res.status_code == 200, res.text
     assert seen["content_edits"] == {}
 
@@ -310,10 +358,16 @@ def test_put_position_only_has_no_content_edits(client, monkeypatch):
 # --- fork keeps the content clock -------------------------------------------------------------
 
 
-async def test_fork_copies_content_updated_at():
-    original = stored_snippet()
-    source = SimpleNamespace(id=uuid.uuid4(), title="Song", is_public=True, viewport_state=None, snippets=[original])
+async def test_fork_copies_content_updated_at(monkeypatch):
+    original = stored_placed()
+    source = SimpleNamespace(id=uuid.uuid4(), title="Song", is_public=True, viewport_state=None)
     added: list = []
+
+    async def fake_placed_on(db, canvas_id):
+        assert canvas_id == source.id
+        return [original]
+
+    monkeypatch.setattr(canvas_service, "placed_on_canvas", fake_placed_on)
 
     class ForkSession:
         async def execute(self, stmt):
@@ -337,6 +391,7 @@ async def test_fork_copies_content_updated_at():
     copies = [o for o in added if isinstance(o, Snippet)]
     assert len(copies) == 1
     assert copies[0].content_updated_at == EARLIER
+    assert copies[0].id != original.id and copies[0].owner_id == OWNER
 
 
 # --- the migration ----------------------------------------------------------------------------
@@ -387,9 +442,17 @@ def test_migration_downgrade_drops_the_column():
 # --- merge: the merged snippet is new content, stamped by the server default --------------------
 
 
-async def test_merged_snippet_leaves_content_updated_at_to_the_server_default():
-    olds = [stored_snippet(raw_text="a"), stored_snippet(raw_text="b")]
+async def test_merged_snippet_leaves_content_updated_at_to_the_server_default(monkeypatch):
+    olds = [stored_placed(raw_text="a"), stored_placed(raw_text="b")]
     added: list = []
+
+    async def reload(db, placement_id):
+        (snippet,) = [o for o in added if isinstance(o, Snippet)]
+        (placement,) = [o for o in added if isinstance(o, SnippetPlacement)]
+        assert placement.id == placement_id
+        return PlacedSnippet(snippet=snippet, placement=placement, canvases=())
+
+    monkeypatch.setattr(snippet_service, "placed_by_placement_id", reload)
 
     class MergeSession:
         def add(self, obj):

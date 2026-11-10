@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { canvasApi } from '@/api/client';
+import { canvasApi, placementApi } from '@/api/client';
+import TitleEditor from '@/components/placements/TitleEditor';
+import { createCanvasFromInput, describePlacementError, renameCanvasIn, replaceCanvas } from '@/lib/placements';
 import VoiceDatasetDialog from '@/components/voice/dataset/VoiceDatasetDialog';
 import { useAuthStore } from '@/stores/authStore';
 import type { Canvas } from '@/types';
@@ -9,6 +11,8 @@ export default function CanvasListPage() {
   const [canvases, setCanvases] = useState<Canvas[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [datasetOpen, setDatasetOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -16,9 +20,9 @@ export default function CanvasListPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await canvasApi.list();
-      setCanvases(res.data);
-    } catch {
+      setCanvases(await placementApi.listCanvases());
+    } catch (err) {
+      console.warn('canvas list failed to load', { error: err });
       setCanvases([]);
     } finally {
       setLoading(false);
@@ -28,10 +32,20 @@ export default function CanvasListPage() {
   useEffect(() => { load(); }, []);
 
   const handleCreate = async () => {
-    const title = newTitle.trim() || 'Untitled Canvas';
-    const res = await canvasApi.create(title);
+    const result = await createCanvasFromInput(newTitle, placementApi.createCanvas);
+    if (!result.ok) {
+      setCreateError(describePlacementError(result.error));
+      return;
+    }
     setNewTitle('');
-    navigate(`/canvas/${res.data.id}`);
+    setCreateError(null);
+    navigate(`/canvas/${result.value.id}`);
+  };
+
+  const renameCanvas = async (id: string, title: string) => {
+    const result = await renameCanvasIn(id, title, placementApi.renameCanvas);
+    if (result.ok) setCanvases((prev) => replaceCanvas(prev, result.value));
+    return result;
   };
 
   const handleDelete = async (id: string) => {
@@ -74,7 +88,10 @@ export default function CanvasListPage() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
           <input
             value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
+            onChange={(e) => {
+              setNewTitle(e.target.value);
+              setCreateError(null);
+            }}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="New canvas title..."
             style={{
@@ -103,6 +120,11 @@ export default function CanvasListPage() {
             Create
           </button>
         </div>
+        {createError !== null && (
+          <div role="alert" style={{ color: '#fca5a5', fontSize: 12, marginTop: -24, marginBottom: 24 }}>
+            {createError}
+          </div>
+        )}
 
         {loading && <div style={{ color: '#888', textAlign: 'center', padding: 40 }}>Loading...</div>}
 
@@ -128,10 +150,37 @@ export default function CanvasListPage() {
                 border: '1px solid #2a2a4a',
                 cursor: 'pointer',
               }}
-              onClick={() => navigate(`/canvas/${canvas.id}`)}
+              onClick={() => {
+                if (renamingId !== canvas.id) navigate(`/canvas/${canvas.id}`);
+              }}
             >
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 'bold', marginBottom: 4 }}>{canvas.title}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 'bold', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {renamingId === canvas.id ? (
+                    <TitleEditor
+                      initial={canvas.title}
+                      save={(title) => renameCanvas(canvas.id, title)}
+                      onDone={() => setRenamingId(null)}
+                      onCancel={() => setRenamingId(null)}
+                    />
+                  ) : (
+                    <>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{canvas.title}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenamingId(canvas.id);
+                        }}
+                        title="Rename canvas"
+                        aria-label={`Rename ${canvas.title}`}
+                        style={{ background: 'none', border: 'none', color: '#777', cursor: 'pointer', fontSize: 13, padding: '0 4px' }}
+                      >
+                        ✎
+                      </button>
+                    </>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: '#888' }}>
                   Updated {new Date(canvas.updated_at).toLocaleDateString()}
                   {canvas.is_public && <span style={{ marginLeft: 8, color: '#6366f1' }}>Public</span>}

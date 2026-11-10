@@ -23,6 +23,8 @@ function snippet(id: string, raw_text: string, stress: string, x = 0, y = 0): Sn
   return {
     id,
     canvas_id: 'c1',
+    placement_id: `p-${id}`,
+    canvases: [{ id: 'c1', title: 'Canvas' }],
     snippet_type: 'verse',
     grid_mode: 'auto',
     beats_per_line: null,

@@ -83,13 +83,16 @@ Dashboard showing all of the user's canvases.
 | `loading` | boolean | Initial fetch state |
 | `newTitle` | string | New canvas title input |
 | `datasetOpen` | boolean | The Voice dataset dialog is open |
+| `createError` | string \| null | Inline create error (title over 255 characters, server failure) |
+| `renamingId` | string \| null | The card whose title is being edited |
 
 ### Interactions
 
 | Action | API Call |
 |--------|---------|
-| Page load | `GET /api/canvases` |
-| Create canvas | `POST /api/canvases` -> navigate to `/canvas/{id}` |
+| Page load | `GET /api/canvases` (`placementApi.listCanvases`) |
+| Create canvas | `POST /api/canvases` (`createCanvasFromInput`: blank -> "Untitled Canvas", 1..255) -> navigate to `/canvas/{id}` |
+| ✎ on a card | Inline `TitleEditor`: Enter -> `PUT /api/canvases/{id} {title}`, card updated in place; Esc cancels; errors inline |
 | Delete canvas | `DELETE /api/canvases/{id}` |
 | Sign out | `authStore.logout()` |
 | Voice dataset | Opens `VoiceDatasetDialog`: `GET /api/recordings/stats`, download `GET /api/recordings/export` |
@@ -129,7 +132,7 @@ Main editing view that orchestrates all canvas editing components.
 | Ctrl+Shift+Z / Cmd+Shift+Z | `canvasStore.redo()` |
 | Ctrl+F / Cmd+F | `uiStore.setSearchModalOpen(true)` |
 | Ctrl+Shift+L / Cmd+Shift+L | `uiStore.toggleViewMode()` (canvas / list; ignored while typing or editing) |
-| Delete / Backspace | Delete selected snippets (ignored when focus is in an input, textarea, select, or when a snippet is being edited) |
+| Delete / Backspace | `canvasStore.removeFromCanvas(selection)`: remove the selected snippets from this canvas (deleted for good when on no other canvas; ignored when focus is in an input, textarea, select, or when a snippet is being edited) |
 | Alt+Shift+R (Option+Shift+R) | `voiceStore.openRecorder()`: record by voice; works while typing in the editor (matched on `code === 'KeyR'`) |
 
 All page shortcuts are ignored while the voice recorder modal is open; the modal owns Space/Enter

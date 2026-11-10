@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.snippet import Snippet
 from app.models.canvas import Canvas
-from app.models.embedding import SnippetEmbedding
+from app.models.placement import SnippetPlacement
 from app.schemas.nlp import SyllabifyRequest, SyllabifyResponse, TSNERequest
 from app.schemas.rhyme import RhymeSuggestRequest, RhymeSuggestResponse
 from app.services.nlp.syllabifier import syllabify_text
@@ -18,11 +18,13 @@ from app.services.nlp.tsne_service import compute_tsne
 from app.services.nlp.rhyme_service import find_rhymes, find_rhymes_in_texts
 from app.services.nlp.search_service import search_snippets
 from app.services.nlp.embedding_service import compute_embedding
-from app.services import rhyme_suggest_service
+from app.services import recording_service, rhyme_suggest_service, snippet_service
+from app.services.placements.errors import PlacementNotFoundError
 from app.services.phonetics.errors import DialectRuleError, PronunciationError, RhymeQueryError
 from app.services.rhyme_suggest_service import CanvasNotFoundError, SnippetNotFoundError
 from app.services.tag_expr import TagExpressionError
-from app.api.tag_errors import expression_http_error
+from app.api.placement_errors import placement_errors, placement_http_error
+from app.api.tag_errors import expression_http_error, owner_id
 
 router = APIRouter(tags=["nlp"])
 
@@ -43,29 +45,33 @@ async def search(
     return results
 
 
-@router.get("/api/snippets/{snippet_id}/similar")
+@router.get("/api/snippets/{snippet_id}/similar", responses=placement_errors(404))
 async def find_similar(
-    snippet_id: str,
+    snippet_id: uuid.UUID,
     top_k: int = Query(10, ge=1, le=50),
+    canvas_id: uuid.UUID | None = Query(None, description="compare with the snippets placed on this canvas; default: every canvas holding the snippet"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Get the target snippet
-    result = await db.execute(
-        select(Snippet).join(Canvas)
-        .where(Snippet.id == uuid.UUID(snippet_id), Canvas.owner_id == user.id)
-    )
-    target = result.scalar_one_or_none()
+    target = await snippet_service.get_owned_snippet(db, str(snippet_id), str(user.id))
     if not target:
         raise HTTPException(status_code=404, detail="Snippet not found")
+    if canvas_id is None:
+        canvas_ids = select(SnippetPlacement.canvas_id).where(SnippetPlacement.snippet_id == target.id)
+    else:
+        if not await recording_service.snippet_in_canvas(db, target.id, canvas_id, owner_id(user)):
+            raise placement_http_error(PlacementNotFoundError(f"snippet {snippet_id} is not on canvas {canvas_id}"))
+        canvas_ids = select(SnippetPlacement.canvas_id).where(SnippetPlacement.canvas_id == canvas_id)
 
-    # Get all other snippets in the same canvas
+    # The other snippets placed on those canvases, each once
     result = await db.execute(
-        select(Snippet).where(
-            Snippet.canvas_id == target.canvas_id,
+        select(Snippet)
+        .where(
+            Snippet.id.in_(select(SnippetPlacement.snippet_id).where(SnippetPlacement.canvas_id.in_(canvas_ids))),
             Snippet.id != target.id,
             Snippet.raw_text != "",
         )
+        .order_by(Snippet.created_at, Snippet.id)
     )
     others = result.scalars().all()
     if not others:
@@ -89,10 +95,15 @@ async def tsne_layout(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Get all snippets with embeddings
+    """t-SNE positions for the snippets placed on the canvas. A preview: the clients show them
+    and restore the saved layout on exit, so nothing is written (layout saves go through PUT and
+    batch-position with this canvas_id)."""
     result = await db.execute(
-        select(Snippet).join(Canvas)
+        select(Snippet)
+        .join(SnippetPlacement, SnippetPlacement.snippet_id == Snippet.id)
+        .join(Canvas, Canvas.id == SnippetPlacement.canvas_id)
         .where(Canvas.id == uuid.UUID(canvas_id), Canvas.owner_id == user.id, Snippet.raw_text != "")
+        .order_by(SnippetPlacement.created_at, SnippetPlacement.id)
     )
     snippets = result.scalars().all()
     if not snippets:
@@ -124,9 +135,9 @@ async def get_rhymes(
     dict_rhymes = find_rhymes(word)
 
     # Search user's snippets for rhymes
+    # every snippet the user owns, once (not per placement)
     result = await db.execute(
-        select(Snippet).join(Canvas)
-        .where(Canvas.owner_id == user.id, Snippet.raw_text != "")
+        select(Snippet).where(Snippet.owner_id == user.id, Snippet.raw_text != "").order_by(Snippet.created_at, Snippet.id)
     )
     snippets = result.scalars().all()
     texts = {str(s.id): s.raw_text for s in snippets}
