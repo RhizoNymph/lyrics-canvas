@@ -51,9 +51,25 @@ export interface TagPreset {
   updated_at: string;
 }
 
+/** A canvas as embedded in a snippet response (`Snippet.canvases`). */
+export interface CanvasRef {
+  id: string;
+  title: string;
+}
+
+/**
+ * A snippet in the context of one canvas: content fields are shared by every canvas holding it; `canvas_id`,
+ * `placement_id` and the layout fields (position, size, `z_index`, `group_id`) come from its placement on
+ * `canvas_id`.
+ */
 export interface Snippet {
   id: string;
+  /** The canvas this response is in the context of (the open canvas). */
   canvas_id: string;
+  /** The placement on `canvas_id`. */
+  placement_id: string;
+  /** Every canvas holding this snippet, the current one included; sorted by lower(title), then id. */
+  canvases: CanvasRef[];
   snippet_type: SnippetType;
   grid_mode: GridMode;
   beats_per_line: number | null;
@@ -106,6 +122,39 @@ export interface MergeResponse {
   snippet: Snippet;
   /** The originals the server deleted, in merge order. */
   deleted_ids: string[];
+}
+
+// ---- Snippet placements (contract §2) ----
+export type TransferMode = 'move' | 'show';
+
+/** `POST /api/canvases/{cid}/snippets/transfer`; 1..500 ids, all placed on `cid`. */
+export interface TransferRequest {
+  snippet_ids: string[];
+  target_canvas_id: string;
+  mode: TransferMode;
+}
+
+export interface TransferResponse {
+  target_canvas_id: string;
+  /** Snippets that got a new placement on the target. */
+  placed: string[];
+  /** Snippets already on the target (their target placement is untouched). */
+  already_on_target: string[];
+  /** True in `move` mode: every requested snippet left the source canvas. */
+  removed_from_source: boolean;
+}
+
+/** `DELETE /api/canvases/{cid}/snippets/{sid}`. */
+export interface RemovePlacementResponse {
+  /** True when that was the snippet's last placement and the snippet itself is gone. */
+  snippet_deleted: boolean;
+}
+
+/** One entry of `PATCH /api/snippets/batch-position`. */
+export interface PositionUpdate {
+  id: string;
+  position_x: number;
+  position_y: number;
 }
 
 export interface User {

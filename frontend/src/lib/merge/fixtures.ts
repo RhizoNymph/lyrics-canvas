@@ -28,6 +28,8 @@ export function snippet(id: string, text: string, overrides: SnippetOverrides = 
   return {
     id,
     canvas_id: 'c1',
+    placement_id: `p-${id}`,
+    canvases: [{ id: 'c1', title: 'Canvas' }],
     snippet_type: 'verse',
     grid_mode: 'auto',
     beats_per_line: null,
