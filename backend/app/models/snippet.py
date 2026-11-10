@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Float, Integer, Enum, ForeignKey, DateTime, Text, func
+from sqlalchemy import Enum, ForeignKey, DateTime, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,18 +26,15 @@ class Snippet(Base):
     __tablename__ = "snippets"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
-    canvas_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("canvases.id"), nullable=False)
+    # Content only: the layout on each canvas lives on SnippetPlacement (docs/features/snippet_placements.md).
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     snippet_type: Mapped[SnippetType] = mapped_column(Enum(SnippetType), default=SnippetType.freestyle)
     grid_mode: Mapped[GridMode] = mapped_column(Enum(GridMode), default=GridMode.auto)
     beats_per_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
     grid_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=lambda: {"lines": []})
     raw_text: Mapped[str] = mapped_column(Text, default="")
-    position_x: Mapped[float] = mapped_column(Float, default=0.0)
-    position_y: Mapped[float] = mapped_column(Float, default=0.0)
-    width: Mapped[float] = mapped_column(Float, default=300.0)
-    height: Mapped[float] = mapped_column(Float, default=200.0)
-    z_index: Mapped[int] = mapped_column(Integer, default=0)
-    group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=True)
     phonetics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     derived_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -46,14 +43,16 @@ class Snippet(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    # Last content edit (text, type, grid). Unlike updated_at, moves, resizes and tags leave it alone;
+    # Last content edit (text, type, grid). Unlike updated_at, moves, resizes, placements and tags leave it alone;
     # snippet_service.update_snippet and the voice-take append (recording_service) bump it.
     # See docs/features/snippet_content_timestamp.md.
     content_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    canvas = relationship("Canvas", back_populates="snippets")
-    group = relationship("Group", back_populates="snippets")
+    # DB cascades remove placements with the snippet; the ORM never loads them implicitly.
+    placements = relationship(
+        "SnippetPlacement", back_populates="snippet", cascade="save-update, merge, delete", passive_deletes=True, lazy="raise"
+    )
     tags = relationship("Tag", secondary="snippet_tags", back_populates="snippets")
     embedding = relationship("SnippetEmbedding", back_populates="snippet", uselist=False, cascade="all, delete-orphan")

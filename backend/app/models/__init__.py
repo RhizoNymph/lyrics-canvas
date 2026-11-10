@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.canvas import Canvas
 from app.models.snippet import Snippet, SnippetType, GridMode
 from app.models.group import Group
+from app.models.placement import SnippetPlacement
 from app.models.tag import Tag, snippet_tags
 from app.models.tag_preset import TagPreset
 from app.models.word_bank import BankWord, bank_word_tags
@@ -17,6 +18,7 @@ __all__ = [
     "SnippetType",
     "GridMode",
     "Group",
+    "SnippetPlacement",
     "Tag",
     "snippet_tags",
     "TagPreset",
