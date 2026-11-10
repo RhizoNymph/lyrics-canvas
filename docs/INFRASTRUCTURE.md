@@ -36,8 +36,9 @@ Ensures pgvector extension is available for 384-dimensional embedding storage.
   - `CORS_ORIGINS`: `["http://localhost:5173"]`
   - Not set: `STT_URL` (voice takes stay disabled, 503 `stt_disabled`; Compose has no STT service).
     To try voice capture locally, run the STT service separately and set `STT_URL` (plus optionally
-    `STT_TIMEOUT_SECONDS`, `VOICE_MAX_UPLOAD_BYTES`) for the backend, e.g. in `backend/.env`. See
-    [voice_capture.md](./features/voice_capture.md).
+    `STT_TIMEOUT_SECONDS`, `VOICE_MAX_UPLOAD_BYTES`, `VOICE_VOCAB_HINTS`, `VOICE_VOCAB_HINT_MAX_CHARS`,
+    `VOICE_EXPORT_MAX_BYTES`) for the backend, e.g. in `backend/.env`. See
+    [voice_capture.md](./features/voice_capture.md) and [voice_dataset.md](./features/voice_dataset.md).
 - **Volumes**: `./backend:/app` (live code reload)
 - **Depends on**: postgres (healthy)
 
