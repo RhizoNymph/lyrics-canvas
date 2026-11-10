@@ -41,10 +41,8 @@ every status resolves.
 
 | Method | Path | Body/Params |
 |--------|------|-------------|
-| `list()` | GET `/api/canvases` | - |
-| `create(title)` | POST `/api/canvases` | `{ title }` |
-| `get(id)` | GET `/api/canvases/{id}` | - |
-| `update(id, data)` | PUT `/api/canvases/{id}` | JSON body |
+| `get(id)` | GET `/api/canvases/{id}` | - -> `CanvasDetail` (snippets in this canvas's context) |
+| `update(id, data)` | PUT `/api/canvases/{id}` | JSON body (e.g. `viewport_state`; renames use `placementApi.renameCanvas`) |
 | `delete(id)` | DELETE `/api/canvases/{id}` | - |
 | `share(id)` | POST `/api/canvases/{id}/share` | - |
 | `fork(id)` | POST `/api/canvases/{id}/fork` | - |
@@ -56,9 +54,24 @@ every status resolves.
 | Method | Path | Body/Params |
 |--------|------|-------------|
 | `create(canvasId, data: SnippetCreateBody)` | POST `/api/canvases/{canvasId}/snippets` | `{ position_x, position_y, snippet_type?, raw_text?, derived_from? }`; typed `AxiosResponse<Snippet>` |
-| `update(id, data)` | PUT `/api/snippets/{id}` | JSON body |
-| `delete(id)` | DELETE `/api/snippets/{id}` | - |
-| `batchPosition(updates)` | PATCH `/api/snippets/batch-position` | `[{id, position_x, position_y}]` |
+
+Updates, positions and deletes are in `placementApi` (they need the open canvas's id).
+
+#### placementApi (`api/placements.ts`, rejects with `PlacementError` only)
+
+Built by `createPlacementApi(http)` over the app instance, like `voiceApi`. See
+[web_snippet_placements.md](../features/web_snippet_placements.md).
+
+| Method | Path | Body/Params |
+|--------|------|-------------|
+| `listCanvases()` | GET `/api/canvases` | -> `Canvas[]` |
+| `createCanvas(title)` | POST `/api/canvases` | `{ title }` -> `Canvas` |
+| `renameCanvas(id, title)` | PUT `/api/canvases/{id}` | `{ title }` -> `Canvas`; 422 `invalid_canvas_title` |
+| `updateSnippet(id, canvasId, data)` | PUT `/api/snippets/{id}?canvas_id={canvasId}` | `SnippetUpdateBody` -> `Snippet`; 404 `placement_not_found` |
+| `batchPosition(canvasId, updates)` | PATCH `/api/snippets/batch-position` | `{ canvas_id, updates: [{id, position_x, position_y}] }` |
+| `removeFromCanvas(canvasId, snippetId)` | DELETE `/api/canvases/{cid}/snippets/{sid}` | -> `{ snippet_deleted }`; 404 `placement_not_found` |
+| `deleteEverywhere(snippetId)` | DELETE `/api/snippets/{id}` | 204 |
+| `transfer(canvasId, request)` | POST `/api/canvases/{cid}/snippets/transfer` | `{ snippet_ids, target_canvas_id, mode }` -> `TransferResponse`; 404 `placement_not_found` / `canvas_not_found`, 422 `same_canvas` |
 
 #### groupApi
 

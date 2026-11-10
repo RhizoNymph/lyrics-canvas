@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering.
+A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering. On web, a canvas is renamed from the pencil on its list card or by clicking the header title, and the right-click menu moves snippets to another canvas or also shows them there (canvas picker with "New canvas…", result toast with Open), removes them from this canvas or deletes them everywhere (confirmed); a "⧉ N" badge on cards and list rows lists the other canvases holding a snippet (see [web_snippet_placements.md](./features/web_snippet_placements.md)).
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)).
@@ -126,6 +126,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Voice Dataset](./features/voice_dataset.md) | Word-bank vocabulary hints (Whisper `initial_prompt`), stored STT words / line spans (migration 007), transcript verification, recording stats and the zip dataset export format, fine-tuning outline |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
+| [Web Snippet Placements](./features/web_snippet_placements.md) | Web canvas rename (list card pencil, header title) and snippet placements: typed placement API with `canvas_id` on every layout save, Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and canvases popover, editor "Also on", undo/redo rule for non-undoable cross-canvas operations |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
@@ -591,4 +592,18 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppNavHost.kt (WordBankDestination)
     depends_on: [word_bank, android_tag_expressions, android_app, rhyme_view]
     doc: docs/features/android_word_bank.md
+  web_snippet_placements:
+    description: Web client of canvas rename and snippet placements (one snippet on several canvases, layout per canvas). Snippet gains placement_id and canvases; typed placementApi (createPlacementApi over the app axios instance, PlacementError only) for list / create / rename canvases, PUT /api/snippets/{id}?canvas_id=, batch-position with canvas_id, DELETE /api/canvases/{cid}/snippets/{sid}, DELETE /api/snippets/{id} and POST /api/canvases/{cid}/snippets/transfer; typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas. Rename inline on the canvas list (pencil) and in the header (click-to-edit), local trim + 1..255 code point check, server error inline. Context menu (multi-selection aware) Move to canvas… / Also show on canvas… with a searchable picker (newest updated first, New canvas… creates then acts) and a result toast with Open; plain delete removes from this canvas (labelled Remove from this canvas when shared), Delete everywhere confirms naming the other canvases. "⧉ N" badge on Pixi cards and list rows opening a popover of canvases that navigate; editor "Also on" links. Undo/redo - move, remove and delete everywhere drop every snapshot holding an affected snippet; also-show and rename patch the snapshots.
+    entry_points:
+      - frontend/src/api/placements.ts
+      - frontend/src/lib/placements/
+      - frontend/src/stores/canvasStore.ts (removeFromCanvas, deleteEverywhere, transferSnippets, renameCanvas, updateSnippet, commitPositions)
+      - frontend/src/stores/placementNoticeStore.ts
+      - frontend/src/stores/uiStore.ts (canvasesPopover, leaveCanvas)
+      - frontend/src/components/placements/ (TitleEditor, CanvasPicker, PlacementToast, CanvasesPopover, CanvasBadge)
+      - frontend/src/components/canvas/SnippetContextMenu.tsx
+      - frontend/src/components/toolbar/CanvasTitle.tsx
+      - frontend/src/components/pages/CanvasListPage.tsx
+    depends_on: [snippet_placements, web_tag_expressions, list_mode, merge_blocks, typed_api]
+    doc: docs/features/web_snippet_placements.md
 ```

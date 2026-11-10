@@ -103,6 +103,10 @@ logic.
 
 Pixi Graphics component rendering a single snippet with colored header, beat grid cells, stress indicators, rests, resize handle, and selection border.
 
+A snippet on more than one canvas shows a "⧉ N" badge after the type label; its `pointerdown` stops
+propagation (no drag or selection) and opens `CanvasesPopover` via `uiStore.setCanvasesPopover` (see
+[web_snippet_placements.md](../features/web_snippet_placements.md)).
+
 ### Props
 
 ```typescript
@@ -269,14 +273,20 @@ Fixed-position HTML overlay (z-index 2000) rendered by CanvasViewport when `uiSt
   Delete (confirmed) removes the tag everywhere. Errors (e.g. `tag_name_taken`) show inline. See
   [web_tag_expressions.md](../features/web_tag_expressions.md).
 - **Merge**: When 2+ snippets are selected and the right-clicked snippet is one of them, "Merge vertically" and "Merge horizontally" items appear above the delete option; each closes the menu and calls `canvasStore.mergeSelected(mode)` (see [merge_blocks.md](../features/merge_blocks.md)).
-- **Delete snippet**: Red "Delete snippet" option at the bottom.
+- **Move to canvas… / Also show on canvas…**: open `CanvasPicker` in the menu (search, newest updated
+  first, "New canvas…" creates then acts) and call `canvasStore.transferSnippets`; the result toast has an
+  Open action. See [web_snippet_placements.md](../features/web_snippet_placements.md).
+- **Delete**: "Delete snippet" (or "Remove from this canvas" when any target is on another canvas) calls
+  `removeFromCanvas`; "Delete everywhere" (only for shared targets) asks for confirmation naming the other
+  canvases. Every action applies to the multi-selection when the menu was opened on one of its members.
 - **Click-outside / Esc**: Closes the menu. Nothing is pending on close: tag edits save on Save/Enter only.
 
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `snippets`, `selectedSnippetIds`, `deleteSnippet`, `mergeSelected` (picker: `updateEmbeddedTags` via tagStore) |
+| canvasStore | `canvasId`, `snippets`, `selectedSnippetIds`, `removeFromCanvas`, `deleteEverywhere`, `transferSnippets`, `mergeSelected` (picker: `updateEmbeddedTags` via tagStore) |
+| placementNoticeStore | `show` (result toast) |
 | tagStore | `tags`, `loadState`, `load`, `applyToggle`, `createTag`, `updateTag`, `deleteTag` (picker) |
 | uiStore | `contextMenu`, `closeContextMenu` |
 
