@@ -14,7 +14,8 @@ touch. Lives in `android/` of this repo.
 - An app-wide status banner for backend outages and cluster alerts:
   [android_health_banner.md](./android_health_banner.md).
 - Voice capture: record a take from the canvas or editor, transcribed by the server into a new snippet
-  or appended lines, with the recordings listed in the editor: [android_voice_capture.md](./android_voice_capture.md).
+  or appended lines, with the recordings listed, played and checked (Check transcript) in the editor, and the
+  voice dataset stats in the canvas list overflow: [android_voice_capture.md](./android_voice_capture.md).
 
 ## Non-scope
 
@@ -48,7 +49,7 @@ server merge endpoint.
 | Merge | `POST /api/canvases/{id}/merge` (new, see Backend) |
 | NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest` |
 | Status | `GET /api/health`, `GET /_status/alerts` (frontend nginx origin; see [android_health_banner.md](./android_health_banner.md)) |
-| Voice | `POST /api/canvases/{id}/voice-takes` (multipart), `GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}` (see [android_voice_capture.md](./android_voice_capture.md)) |
+| Voice | `POST /api/canvases/{id}/voice-takes` (multipart), `GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}`, `PUT` / `DELETE /api/recordings/{id}/verification`, `GET /api/recordings/stats` (see [android_voice_capture.md](./android_voice_capture.md)) |
 
 `docs/api/openapi.json` is the committed snapshot; `:core:model` has a test that every DTO field the app
 reads exists in that snapshot with a compatible type.

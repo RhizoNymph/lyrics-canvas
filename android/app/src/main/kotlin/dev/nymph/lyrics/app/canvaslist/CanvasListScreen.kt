@@ -10,10 +10,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -43,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.ui.theme.Palette
+import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetDialog
+import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetViewModel
 import dev.nymph.lyrics.model.CanvasId
 import kotlinx.coroutines.launch
 
@@ -54,6 +59,9 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var creating by rememberSaveable { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val dataset: VoiceDatasetViewModel = viewModel { VoiceDatasetViewModel(container.voice) }
+    val datasetState by dataset.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(vm) {
         vm.events.collect { event ->
@@ -72,6 +80,18 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
                 actions = {
                     IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
                     TextButton(onClick = onSignOut) { Text("Sign out") }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Voice dataset") },
+                                onClick = {
+                                    menuOpen = false
+                                    dataset.open()
+                                },
+                            )
+                        }
+                    }
                 },
             )
         },
@@ -113,6 +133,8 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
             }
         }
     }
+
+    VoiceDatasetDialog(datasetState, onRetry = dataset::open, onDismiss = dataset::close)
 
     if (creating) {
         var title by rememberSaveable { mutableStateOf("") }

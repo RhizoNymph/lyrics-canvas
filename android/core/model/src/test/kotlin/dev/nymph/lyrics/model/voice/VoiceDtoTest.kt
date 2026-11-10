@@ -15,7 +15,7 @@ class VoiceDtoTest {
     fun `meta for a new snippet encodes the contract shape`() {
         val meta = VoiceTakeMeta.of(listOf(1_200, 400), 5_000, VoiceTakeTarget.New(12.5, -3.0))
         assertEquals(
-            json("""{"breaks_ms":[400,1200],"duration_ms":5000,"target":{"kind":"new","position_x":12.5,"position_y":-3.0}}"""),
+            json("""{"breaks_ms":[400,1200],"duration_ms":5000,"target":{"kind":"new","position_x":12.5,"position_y":-3.0},"vocabulary_hints":true}"""),
             json(LyricsJson.encodeToString(VoiceTakeMeta.serializer(), meta)),
         )
     }
@@ -24,7 +24,7 @@ class VoiceDtoTest {
     fun `meta for an append encodes the snippet id`() {
         val meta = VoiceTakeMeta.of(emptyList(), 800, VoiceTakeTarget.Append(SnippetId("s1")))
         assertEquals(
-            json("""{"breaks_ms":[],"duration_ms":800,"target":{"kind":"append","snippet_id":"s1"}}"""),
+            json("""{"breaks_ms":[],"duration_ms":800,"target":{"kind":"append","snippet_id":"s1"},"vocabulary_hints":true}"""),
             json(LyricsJson.encodeToString(VoiceTakeMeta.serializer(), meta)),
         )
     }

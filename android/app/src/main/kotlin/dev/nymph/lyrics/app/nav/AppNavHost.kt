@@ -38,9 +38,11 @@ import dev.nymph.lyrics.app.session.SessionViewModel
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.SnippetId
+import dev.nymph.lyrics.model.voice.RecordingId
+import dev.nymph.lyrics.app.voice.check.CheckTranscriptScreen
 
 /**
- * Login / register -> canvas list -> canvas -> editor / word bank. The session (token store) decides the
+ * Login / register -> canvas list -> canvas -> editor (-> check transcript) / word bank. The session (token store) decides the
  * start destination and sends the user back to login whenever the token goes away (sign out or
  * a 401 anywhere).
  */
@@ -85,6 +87,15 @@ fun AppNavHost(container: AppContainer) {
         }
         composable<EditorRoute> { entry -> EditorDestination(container, nav, entry) }
         composable<WordBankRoute> { entry -> WordBankDestination(container, nav, entry) }
+        composable<CheckTranscriptRoute> { entry ->
+            val route = entry.toRoute<CheckTranscriptRoute>()
+            CheckTranscriptScreen(
+                container = container,
+                snippetId = SnippetId(route.snippetId),
+                recordingId = RecordingId(route.recordingId),
+                onClose = { if (nav.currentBackStackEntry?.id == entry.id) nav.popBackStack() },
+            )
+        }
     }
 }
 
@@ -134,6 +145,7 @@ private fun EditorDestination(container: AppContainer, nav: NavHostController, e
         onClose = { close() },
         onSnippetChanged = canvas::replaceSnippet,
         extraTopBarActions = { TextButton(onClick = { tags.openPicker(setOf(snippet.id)) }) { Text("Tags") } },
+        onCheckTranscript = { id -> nav.navigate(CheckTranscriptRoute(snippet.id.value, id.value)) },
     )
     TagPickerSheet(tagsState, tags)
 }

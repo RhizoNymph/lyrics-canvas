@@ -68,7 +68,8 @@ sealed interface VoiceTakeTarget {
 
 /**
  * The `meta` form field of `POST /api/canvases/{id}/voice-takes`. Built only through [of], which
- * keeps `breaks_ms` ascending, distinct and within `[0, duration_ms]`.
+ * keeps `breaks_ms` ascending, distinct and within `[0, duration_ms]`. [vocabularyHints] asks the
+ * server to prompt the transcriber with the user's word bank (always sent).
  */
 @Serializable
 @ConsistentCopyVisibility
@@ -76,18 +77,29 @@ data class VoiceTakeMeta private constructor(
     @SerialName("breaks_ms") val breaksMs: List<Long>,
     @SerialName("duration_ms") val durationMs: Long,
     val target: VoiceTakeTarget,
+    @SerialName("vocabulary_hints") val vocabularyHints: Boolean = true,
 ) {
     companion object {
         /** Breaks outside the take are dropped, the rest sorted and de-duplicated; a negative duration is 0. */
-        fun of(breaksMs: Collection<Long>, durationMs: Long, target: VoiceTakeTarget): VoiceTakeMeta {
+        fun of(
+            breaksMs: Collection<Long>,
+            durationMs: Long,
+            target: VoiceTakeTarget,
+            vocabularyHints: Boolean = true,
+        ): VoiceTakeMeta {
             val duration = durationMs.coerceAtLeast(0)
             val breaks = breaksMs.filter { it in 0..duration }.distinct().sorted()
-            return VoiceTakeMeta(breaks, duration, target)
+            return VoiceTakeMeta(breaks, duration, target, vocabularyHints)
         }
     }
 }
 
-/** A recording attached to a snippet (no audio bytes; those come from the audio route). */
+/**
+ * A recording attached to a snippet (no audio bytes; those come from the audio route). The fields
+ * after [createdAt] came with the voice dataset (migration 007); old rows and old servers leave
+ * them out, so each has an empty default. Read the verification through [verification], which is
+ * set only when both wire fields are.
+ */
 @Serializable
 data class Recording(
     val id: RecordingId,
@@ -98,7 +110,29 @@ data class Recording(
     val transcript: String,
     @SerialName("split_mode") val splitMode: SplitMode,
     @SerialName("created_at") val createdAt: String,
-)
+    /** `transcript.split("\n")` as the server sent it; empty from an old server (see [referenceLines]). */
+    val lines: List<String> = emptyList(),
+    /** True when [words] and [lineSpans] are stored for this take. */
+    @SerialName("has_timings") val hasTimings: Boolean = false,
+    /** The STT words of the take, in service order. */
+    val words: List<TimedWord>? = null,
+    /** Per assembled line, the `[start, end)` indices into [words]. */
+    @SerialName("line_spans") val lineSpans: List<List<Int>>? = null,
+    val language: String? = null,
+    /** The exact prompt sent to the transcriber, or null when none was sent. */
+    @SerialName("initial_prompt") val initialPrompt: String? = null,
+    @SerialName("verified_text") val verifiedText: String? = null,
+    @SerialName("verified_at") val verifiedAt: String? = null,
+) {
+    /** The user's checked transcript, or null when the take is not checked. */
+    val verification: Verification?
+        get() = if (verifiedText != null && verifiedAt != null) Verification(verifiedText, verifiedAt) else null
+
+    val isChecked: Boolean get() = verification != null
+
+    /** The Whisper lines: [lines], or the transcript split at newlines when the server sent none. */
+    val referenceLines: List<String> get() = lines.ifEmpty { transcript.split("\n") }
+}
 
 /** 201 response of the voice-takes route. */
 @Serializable

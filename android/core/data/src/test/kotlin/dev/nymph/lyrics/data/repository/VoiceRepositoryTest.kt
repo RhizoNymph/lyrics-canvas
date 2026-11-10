@@ -70,7 +70,7 @@ class VoiceRepositoryTest : MockServerTest() {
         assertTrue(body.contains("Content-Type: audio/ogg"), body)
         assertTrue(body.contains("""Content-Disposition: form-data; name="meta""""), body)
         assertTrue(
-            body.contains("""{"breaks_ms":[500],"duration_ms":2000,"target":{"kind":"new","position_x":1.0,"position_y":2.0}}"""),
+            body.contains("""{"breaks_ms":[500],"duration_ms":2000,"target":{"kind":"new","position_x":1.0,"position_y":2.0},"vocabulary_hints":true}"""),
             body,
         )
     }

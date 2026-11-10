@@ -60,6 +60,7 @@ data class VoiceCaptureActions(
     val onRetry: () -> Unit,
     val onDiscard: () -> Unit,
     val onSilence: (SilenceTimeout) -> Unit,
+    val onVocabularyHints: (Boolean) -> Unit,
     val onAskAgain: () -> Unit,
     val onOpenSettings: () -> Unit,
 )
@@ -77,7 +78,7 @@ private fun VoiceTakeTarget.label(): String = when (this) {
  * where only Stop / Cancel end the take (a stray back gesture must not lose it).
  */
 @Composable
-fun VoiceCaptureDialog(state: RecorderState.Active, silence: SilenceTimeout, actions: VoiceCaptureActions) {
+fun VoiceCaptureDialog(state: RecorderState.Active, silence: SilenceTimeout, vocabularyHints: Boolean, actions: VoiceCaptureActions) {
     val recording = state is RecorderState.Recording
     Dialog(
         onDismissRequest = { if (!recording) actions.onCancel() },
@@ -89,7 +90,7 @@ fun VoiceCaptureDialog(state: RecorderState.Active, silence: SilenceTimeout, act
                 when (state) {
                     is RecorderState.Permission -> PermissionPane(state, actions)
                     is RecorderState.Starting -> Busy("Starting the microphone…", actions.onCancel)
-                    is RecorderState.Recording -> RecordingPane(state, actions)
+                    is RecorderState.Recording -> RecordingPane(state, vocabularyHints, actions)
                     is RecorderState.Finishing -> Busy("Finishing the recording…", actions.onCancel)
                     is RecorderState.Uploading -> Busy("Transcribing…", actions.onCancel)
                     is RecorderState.Done -> Busy("Saved", null)
@@ -105,17 +106,19 @@ fun VoiceCaptureDialog(state: RecorderState.Active, silence: SilenceTimeout, act
                     )
                 }
                 if (state !is RecorderState.Recording) {
-                    SilenceChips(
-                        silence,
-                        actions.onSilence,
-                        Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                    RecorderOptions(
+                        silence = silence,
+                        onSilence = actions.onSilence,
+                        vocabularyHints = vocabularyHints,
+                        onVocabularyHints = actions.onVocabularyHints,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
                     )
                 }
                 Text(
                     state.target.label(),
                     style = MaterialTheme.typography.labelMedium,
                     color = Palette.FallbackText,
-                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp).padding(top = 48.dp),
+                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp).padding(top = 96.dp),
                 )
             }
         }
@@ -123,7 +126,7 @@ fun VoiceCaptureDialog(state: RecorderState.Active, silence: SilenceTimeout, act
 }
 
 @Composable
-private fun RecordingPane(state: RecorderState.Recording, actions: VoiceCaptureActions) {
+private fun RecordingPane(state: RecorderState.Recording, vocabularyHints: Boolean, actions: VoiceCaptureActions) {
     val haptics = LocalHapticFeedback.current
     val onTap by rememberUpdatedState(actions.onTap)
     Box(Modifier.fillMaxSize()) {
@@ -146,7 +149,13 @@ private fun RecordingPane(state: RecorderState.Recording, actions: VoiceCaptureA
                     }
                 },
         )
-        SilenceChips(state.silence, actions.onSilence, Modifier.align(Alignment.TopCenter).padding(top = 16.dp))
+        RecorderOptions(
+            silence = state.silence,
+            onSilence = actions.onSilence,
+            vocabularyHints = vocabularyHints,
+            onVocabularyHints = actions.onVocabularyHints,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+        )
         Column(
             Modifier.align(Alignment.Center).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -176,6 +185,21 @@ private fun RecordingPane(state: RecorderState.Recording, actions: VoiceCaptureA
             OutlinedButton(onClick = actions.onCancel) { Text("Cancel") }
             Button(onClick = actions.onStop) { Text("Stop") }
         }
+    }
+}
+
+/** The auto-stop chips and, below them, the "Use word bank as hints" switch. */
+@Composable
+private fun RecorderOptions(
+    silence: SilenceTimeout,
+    onSilence: (SilenceTimeout) -> Unit,
+    vocabularyHints: Boolean,
+    onVocabularyHints: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        SilenceChips(silence, onSilence)
+        VocabularyHintsSwitch(vocabularyHints, onVocabularyHints)
     }
 }
 

@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.voice.recordings
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -35,14 +37,20 @@ import dev.nymph.lyrics.model.voice.Recording
 import java.time.ZoneId
 
 /** Rows visible before the section scrolls inside itself. */
-private val SECTION_MAX_HEIGHT = 240.dp
+private val SECTION_MAX_HEIGHT = 300.dp
 
 /**
  * The editor's collapsible "Recordings" section: one row per take (date, duration, transcript
- * preview), Play / Pause, and Delete behind a confirmation dialog.
+ * preview, Checked / Not checked badge), Play / Pause, Check transcript, and Delete behind a
+ * confirmation dialog.
  */
 @Composable
-fun RecordingsSection(state: RecordingsUiState, vm: RecordingsViewModel, modifier: Modifier = Modifier) {
+fun RecordingsSection(
+    state: RecordingsUiState,
+    vm: RecordingsViewModel,
+    onCheckTranscript: (Recording) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val list = state.list
     val count = (list as? RecordingsList.Loaded)?.items?.size
@@ -87,6 +95,7 @@ fun RecordingsSection(state: RecordingsUiState, vm: RecordingsViewModel, modifie
                                 deleting = recording.id in state.deleting,
                                 onPlay = { vm.togglePlay(recording.id) },
                                 onDelete = { vm.requestDelete(recording.id) },
+                                onCheck = { onCheckTranscript(recording) },
                             )
                         }
                     }
@@ -113,6 +122,7 @@ private fun RecordingRow(
     deleting: Boolean,
     onPlay: () -> Unit,
     onDelete: () -> Unit,
+    onCheck: () -> Unit,
 ) {
     val mine = playback.activeId == recording.id
     Row(
@@ -132,6 +142,10 @@ private fun RecordingRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                CheckedBadge(recording.isChecked)
+                TextButton(onClick = onCheck, enabled = !deleting) { Text("Check transcript") }
+            }
         }
         when {
             mine && playback is Playback.Loading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -141,4 +155,18 @@ private fun RecordingRow(
         }
         IconButton(onClick = onDelete, enabled = !deleting) { Icon(Icons.Default.Delete, contentDescription = "Delete recording") }
     }
+}
+
+/** "Checked" when the take has a checked transcript, "Not checked" otherwise. */
+@Composable
+private fun CheckedBadge(checked: Boolean) {
+    val color = if (checked) Palette.Fits else Palette.Muted
+    Text(
+        if (checked) "Checked" else "Not checked",
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = Modifier
+            .border(1.dp, color, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
 }

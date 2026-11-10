@@ -89,7 +89,10 @@ and export the checked recordings as a zip dataset (original audio + JSONL) for 
 has a "Use word bank as hints" switch (per viewer, default on, sent as `meta.vocabulary_hints`); each
 editor recording can be opened in a Check transcript modal (player, tappable Whisper words, correction
 saved as the recording's `verified_text`), and the canvas list page's "Voice dataset" dialog shows the
-stats and downloads the dataset zip ([web_voice_capture.md](./features/web_voice_capture.md)). See
+stats and downloads the dataset zip ([web_voice_capture.md](./features/web_voice_capture.md)). On Android the
+recorder has a "Use word bank as hints" switch (sent as `meta.vocabulary_hints`), each editor recording
+opens a full-screen Check transcript screen (player, tappable timed Whisper words, a correction saved on
+the recording only), and the canvas list overflow shows the voice dataset stats (export stays on web). See
 [voice_capture.md](./features/voice_capture.md) and [voice_dataset.md](./features/voice_dataset.md).
 
 ### Health Banner
@@ -108,7 +111,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [BACKEND.md](./BACKEND.md) | Backend index with links to granular module docs |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Docker Compose, PostgreSQL/pgvector setup, networking, dev workflow |
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
-| [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop), transcribed by the server into a new snippet or appended lines; recordings played back and deleted in the editor |
+| [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop, word-bank hints switch), transcribed by the server into a new snippet or appended lines; recordings played back, deleted and checked (Check transcript screen) in the editor; dataset stats in the canvas list |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
@@ -477,7 +480,7 @@ Features Index:
     depends_on: [helm_deployment, homelab_deploy]
     doc: docs/features/stt_service.md
   android_voice_capture:
-    description: Android voice capture - top-bar Record on the canvas screen (canvas + list) and the editor opens a full-screen modal (elapsed, level meter, Line N, Stop, Cancel; tap = next line, double-tap within 300 ms = stop; silence auto-stop off/2/3/5/8/10 s per device in DataStore with an adaptive-noise-floor energy VAD). RECORD_AUDIO runtime permission with rationale and app-settings path; MediaRecorder OGG/Opus on API 29+ else AAC/MPEG-4 into the cache. Multipart POST /api/canvases/{id}/voice-takes with breaks_ms since recorder start; new snippet at the viewport centre (selected) or, from the editor, edits saved first then appended and the rows reloaded. Typed errors from the server codes, Retry keeps the file. Editor Recordings section lists, plays (audio fetched with the bearer token into the cache) and deletes takes. Pure state machine, gesture reducer and VAD in :core:logic.
+    description: Android voice capture - top-bar Record on the canvas screen (canvas + list) and the editor opens a full-screen modal (elapsed, level meter, Line N, Stop, Cancel; tap = next line, double-tap within 300 ms = stop; silence auto-stop off/2/3/5/8/10 s per device in DataStore with an adaptive-noise-floor energy VAD). RECORD_AUDIO runtime permission with rationale and app-settings path; MediaRecorder OGG/Opus on API 29+ else AAC/MPEG-4 into the cache. Multipart POST /api/canvases/{id}/voice-takes with breaks_ms since recorder start; new snippet at the viewport centre (selected) or, from the editor, edits saved first then appended and the rows reloaded. Typed errors from the server codes, Retry keeps the file. Editor Recordings section lists, plays (audio fetched with the bearer token into the cache) and deletes takes, with a Checked / Not checked badge. "Use word bank as hints" switch (DataStore voice_vocab_hints, default on) sent as meta.vocabulary_hints. Check transcript screen (CheckTranscriptRoute) - player with scrubber, read-only Whisper reference with tappable words that seek and a highlighted current word when has_timings (pure wordIndexAt / transcriptReference), correction prefilled with verified_text or the lines; Save as checked PUT /api/recordings/{id}/verification, Mark unchecked DELETE, Cancel with dirty confirm, typed inline errors (invalid_verification, recording_not_found); changes reach the editor list through RecordingUpdates. Canvas list overflow "Voice dataset" dialog shows GET /api/recordings/stats; no export on Android. Pure state machine, gesture reducer, VAD, transcript reference and verification text rules in :core:logic.
     entry_points:
       - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/voice/
       - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/voice/
@@ -485,7 +488,9 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/voice/
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (voiceTarget, onVoiceTakeSaved)
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/GridEditorRoute.kt
-    depends_on: [android_app, voice_capture]
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/voice/check/CheckTranscriptScreen.kt (CheckTranscriptRoute)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvaslist/CanvasListScreen.kt (Voice dataset overflow item)
+    depends_on: [android_app, voice_capture, voice_dataset]
     doc: docs/features/android_voice_capture.md
   android_health_banner:
     description: App-wide status banner in the Android client while it is in the foreground - polls GET /api/health (15 s, quick 3 s confirm, 5-60 s backoff while down) and counts 502/503/504 and IO errors of every regular ApiClient call through an observer; a pure debounced state machine (2 failures with one from a probe, offline at once, brief back online) shared in behaviour with the web client; polls GET /_status/alerts (frontend nginx origin, configured by -PstatusAlertsUrl when the API base is the backend directly) and shows firing alerts critical first; per-incident dismiss, expandable descriptions, live-region announcements.
