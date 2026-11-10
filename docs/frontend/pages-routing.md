@@ -82,6 +82,7 @@ Dashboard showing all of the user's canvases.
 | `canvases` | Canvas[] | User's canvases |
 | `loading` | boolean | Initial fetch state |
 | `newTitle` | string | New canvas title input |
+| `datasetOpen` | boolean | The Voice dataset dialog is open |
 
 ### Interactions
 
@@ -91,11 +92,12 @@ Dashboard showing all of the user's canvases.
 | Create canvas | `POST /api/canvases` -> navigate to `/canvas/{id}` |
 | Delete canvas | `DELETE /api/canvases/{id}` |
 | Sign out | `authStore.logout()` |
+| Voice dataset | Opens `VoiceDatasetDialog`: `GET /api/recordings/stats`, download `GET /api/recordings/export` |
 | Enter in title input | Create canvas |
 
 ### Layout
 
-- Header with app title, user display name, Sign Out button
+- Header with app title, user display name, Voice dataset button, Sign Out button
 - New canvas title input with create button
 - Grid of canvas cards (title, updated date, "Public" badge, delete button)
 - Empty state when no canvases

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { formatDuration, formatRecordedAt, transcriptPreview } from '@/lib/voice/format';
 import type { PlaybackState } from '@/lib/voice/playback';
+import { verificationOf } from '@/lib/voice/recordingView';
 import type { RecordingResponse } from '@/lib/voice/types';
 
 export interface RecordingsListViewProps {
@@ -19,12 +20,15 @@ export interface RecordingsListViewProps {
   onAskDelete: (id: string) => void;
   onConfirmDelete: (id: string) => void;
   onCancelDelete: () => void;
+  /** Open the check transcript view for a recording; omitted hides the action. */
+  onCheck?: (id: string) => void;
   locale?: string;
 }
 
 /**
  * The editor's compact recordings section: a one-line toggle "Recordings (n)", and when expanded one
- * row per take (date, duration, transcript preview, play/pause, delete with inline confirm).
+ * row per take (date, duration, transcript preview, Checked / Not checked badge, Check transcript,
+ * play/pause, delete with inline confirm).
  * Renders nothing when the snippet has no recordings, so the editor's layout is unchanged.
  */
 export default function RecordingsListView(props: RecordingsListViewProps) {
@@ -63,6 +67,7 @@ export default function RecordingsListView(props: RecordingsListViewProps) {
             const loading = active?.kind === 'loading';
             const confirming = confirmingId === r.id;
             const deleting = deletingId === r.id;
+            const checked = verificationOf(r).kind === 'checked';
             return (
               <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 * s, minWidth: 0 }}>
                 <button
@@ -82,6 +87,32 @@ export default function RecordingsListView(props: RecordingsListViewProps) {
                 >
                   {active?.kind === 'error' ? <span style={{ color: '#f87171' }}>{active.message}</span> : transcriptPreview(r.transcript)}
                 </span>
+                <span
+                  data-check-badge={checked ? 'checked' : 'unchecked'}
+                  title={checked ? 'The transcript of this take was checked' : 'The transcript of this take was not checked yet'}
+                  style={{
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                    borderRadius: 3,
+                    padding: `0 ${4 * s}px`,
+                    fontSize: 9 * s,
+                    color: checked ? '#86efac' : '#7a7a9a',
+                    border: `1px solid ${checked ? '#166534' : '#3a3a5a'}`,
+                  }}
+                >
+                  {checked ? 'Checked' : 'Not checked'}
+                </span>
+                {props.onCheck && (
+                  <button
+                    type="button"
+                    onClick={() => props.onCheck?.(r.id)}
+                    aria-label="Check transcript"
+                    title="Check transcript: listen and correct what Whisper heard"
+                    style={small}
+                  >
+                    Check
+                  </button>
+                )}
                 {confirming ? (
                   <span role="group" aria-label="Confirm delete" style={{ display: 'flex', gap: 4 * s, alignItems: 'center', flexShrink: 0 }}>
                     <span style={{ color: '#fca5a5' }}>Delete?</span>

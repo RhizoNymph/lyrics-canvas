@@ -256,11 +256,13 @@ Started by `useStatusMonitoring()` in `App`. Full description in [health_banner.
 |----------------|-------|
 | `request` | `{ canvasId, target: CaptureTarget } \| null`: the open recorder modal; target fixed at open |
 | `silenceSeconds` | `SilenceSeconds` (0/2/3/5/8/10), loaded from `localStorage` (guarded), default 0 |
+| `vocabHints` | boolean, "Use word bank as hints"; loaded from `localStorage` `lyrics-canvas.voice.vocabHints` (guarded), default true; read at upload time |
 | `recordingsRevision` | Bumped on every stored take; the editor's recordings list refetches |
 | `revealSnippetId` | New snippet the list view should scroll to; cleared by `clearReveal(id)` |
 | `openRecorder(env?)` | Typed `OpenRecorderResult`; refuses `insecure_context`, `unsupported`, `no_canvas`, `already_open` |
 | `closeRecorder()` | Closes the modal (the dialog's session releases the mic on unmount) |
 | `setSilenceSeconds(s)` | Persists (failures logged) and applies in memory |
+| `setVocabHints(enabled)` | Persists (failures logged) and applies in memory |
 | `completeTake(result)` | `canvasStore.applySnippet`; new -> select (+ reveal in list view); append -> `editorBridge(id).reload(snippet)` |
 
 Full description in [web_voice_capture.md](../features/web_voice_capture.md).

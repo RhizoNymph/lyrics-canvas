@@ -20,6 +20,8 @@ export interface VoiceCaptureViewProps {
   onDiscard: () => void;
   onSaveAudio: () => void;
   onSilenceChange: (seconds: SilenceSeconds) => void;
+  /** The "Use word bank as hints" switch; omitted hides it. */
+  vocabHints?: { enabled: boolean; onChange: (enabled: boolean) => void };
   /** Tab handling for the focus trap. */
   onTrapKeyDown?: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
 }
@@ -75,6 +77,58 @@ function LevelMeter({ level }: { level: number }) {
     >
       <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? '#f59e0b' : '#22c55e', transition: 'width 80ms linear' }} />
     </div>
+  );
+}
+
+/** A switch button (not a checkbox, so Space on it never reaches the tap surface as a tap). */
+function VocabHintsSwitch({ enabled, onChange }: { enabled: boolean; onChange: (enabled: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onPointerDown={notATap}
+      onClick={() => onChange(!enabled)}
+      title="Transcribe with the words in your word bank as hints, so rare words and names come out right"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'none',
+        border: 'none',
+        color: '#a0a0c0',
+        fontSize: 12,
+        cursor: 'pointer',
+        padding: 2,
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 28,
+          height: 16,
+          borderRadius: 8,
+          background: enabled ? '#6366f1' : '#3a3a5a',
+          position: 'relative',
+          transition: 'background 120ms',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 2,
+            left: enabled ? 14 : 2,
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            background: '#fff',
+            transition: 'left 120ms',
+          }}
+        />
+      </span>
+      Use word bank as hints
+    </button>
   );
 }
 
@@ -265,6 +319,9 @@ export default function VoiceCaptureView(props: VoiceCaptureViewProps) {
               ))}
             </select>
           </label>
+          {props.vocabHints && (
+            <VocabHintsSwitch enabled={props.vocabHints.enabled} onChange={props.vocabHints.onChange} />
+          )}
         </div>
       )}
     </div>

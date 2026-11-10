@@ -33,6 +33,8 @@ function VoiceCaptureDialog({ request }: { request: RecorderRequest }) {
   const closeRecorder = useVoiceStore((s) => s.closeRecorder);
   const silenceSeconds = useVoiceStore((s) => s.silenceSeconds);
   const setSilenceSeconds = useVoiceStore((s) => s.setSilenceSeconds);
+  const vocabHints = useVoiceStore((s) => s.vocabHints);
+  const setVocabHints = useVoiceStore((s) => s.setVocabHints);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const onTrapKeyDown = useFocusTrap(surfaceRef);
   const [session, setSession] = useState<VoiceSession | null>(null);
@@ -47,7 +49,11 @@ function VoiceCaptureDialog({ request }: { request: RecorderRequest }) {
         // Save the editor's pending edits first so the server appends after them.
         await editorBridge(request.target.snippetId)?.flush();
       },
-      upload: (take, signal) => voiceApi.createTake(request.canvasId, take, toWireTarget(request.target), signal),
+      // The hints switch is read at upload time, so flipping it during the take (or before Retry) applies.
+      upload: (take, signal) =>
+        voiceApi.createTake(request.canvasId, take, toWireTarget(request.target), signal, {
+          vocabularyHints: useVoiceStore.getState().vocabHints,
+        }),
       onDone: (result) => useVoiceStore.getState().completeTake(result),
       now: () => performance.now(),
       silenceSeconds: () => useVoiceStore.getState().silenceSeconds,
@@ -92,6 +98,7 @@ function VoiceCaptureDialog({ request }: { request: RecorderRequest }) {
       onDiscard={discard}
       onSaveAudio={saveAudio}
       onSilenceChange={setSilenceSeconds}
+      vocabHints={{ enabled: vocabHints, onChange: setVocabHints }}
       onTrapKeyDown={onTrapKeyDown}
     />
   );

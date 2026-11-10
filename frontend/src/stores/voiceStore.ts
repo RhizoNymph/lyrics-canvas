@@ -9,6 +9,7 @@ import { browserRecordingEnvironment, recordingSupport } from '@/lib/voice/suppo
 import type { RecordingEnvironment } from '@/lib/voice/support';
 import { loadSilenceSeconds, saveSilenceSeconds } from '@/lib/voice/silenceSetting';
 import type { SilenceSeconds } from '@/lib/voice/silenceSetting';
+import { loadVocabHints, saveVocabHints } from '@/lib/voice/vocabHintsSetting';
 import { resolveCaptureTarget } from '@/lib/voice/target';
 import type { CaptureTarget } from '@/lib/voice/target';
 import type { VoiceTakeResponse } from '@/lib/voice/types';
@@ -29,6 +30,8 @@ interface VoiceState {
   /** The open recorder modal, or null. The target is fixed when it opens. */
   request: RecorderRequest | null;
   silenceSeconds: SilenceSeconds;
+  /** "Use word bank as hints": sent as `meta.vocabulary_hints` with every take. Per viewer, default on. */
+  vocabHints: boolean;
   /** Bumped whenever a take is stored, so an open recordings list refetches. */
   recordingsRevision: number;
   /** A snippet the list view should scroll to (set after a take creates one); cleared by the list. */
@@ -38,6 +41,7 @@ interface VoiceState {
   openRecorder: (env?: RecordingEnvironment) => OpenRecorderResult;
   closeRecorder: () => void;
   setSilenceSeconds: (seconds: SilenceSeconds) => void;
+  setVocabHints: (enabled: boolean) => void;
   /** Apply a stored take: update the canvas, refresh the editor (append) or select + reveal (new). */
   completeTake: (result: VoiceTakeResponse) => void;
   clearReveal: (snippetId: string) => void;
@@ -46,6 +50,7 @@ interface VoiceState {
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   request: null,
   silenceSeconds: loadSilenceSeconds(browserStorage()),
+  vocabHints: loadVocabHints(browserStorage()),
   recordingsRevision: 0,
   revealSnippetId: null,
 
@@ -68,6 +73,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // A failed write is logged; the in-memory value still applies for this session.
     saveSilenceSeconds(browserStorage(), seconds);
     set({ silenceSeconds: seconds });
+  },
+
+  setVocabHints: (enabled) => {
+    // A failed write is logged; the in-memory value still applies for this session.
+    saveVocabHints(browserStorage(), enabled);
+    set({ vocabHints: enabled });
   },
 
   completeTake: (result) => {
