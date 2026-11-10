@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering.
+A **canvas** is a user's workspace. Each canvas contains **snippets** — rectangular cards holding lyrics text. Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves and resizes do not count), for "last edited" ordering. On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)).
@@ -114,6 +114,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop, word-bank hints switch), transcribed by the server into a new snippet or appended lines; recordings played back, deleted and checked (Check transcript screen) in the editor; dataset stats in the canvas list |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
+| [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
@@ -592,3 +593,15 @@ Features Index:
     depends_on: [word_bank, android_tag_expressions, android_app, rhyme_view]
     doc: docs/features/android_word_bank.md
 ```
+  android_snippet_placements:
+    description: Android client of snippet placements and canvas rename. Snippet DTO gains placement_id and canvases; typed TransferRequest (1..500 distinct ids) / TransferResponse / RemovePlacementResponse and PlacementErrorCode (invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas). PUT /api/snippets/{id}?canvas_id= and batch-position with canvas_id from the open canvas; removeFromCanvas, deleteEverywhere, transfer, rename. Rename dialog from canvas list rows (long-press / ⋮) and the canvas title (trim, 1-255 code points, server error inline; list, header and badges update without reload via CanvasUpdates). Selection bar ⋮ - Move to canvas… / Also show on canvas… (bottom-sheet picker, search, newest updated first, New canvas… creating then acting; snackbar with Open navigating to the target), Remove from this canvas (placement delete, confirm only for last copies) vs Delete everywhere (confirm naming the other canvases), On other canvases… (the badge's list). "⧉ N" badge on cards and list rows; editor "Also on" with buttons. No undo on Android, so no history to clear.
+    entry_points:
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/Placements.kt
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/SnippetRepository.kt
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/placements/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/placements/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/rename/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvaslist/CanvasListViewModel.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (PlacementCanvasPort)
+    depends_on: [snippet_placements, android_app, list_mode, merge_blocks]
+    doc: docs/features/android_snippet_placements.md

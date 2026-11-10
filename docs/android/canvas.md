@@ -8,8 +8,11 @@ its own milestone.
 ## Scope
 
 - Navigation: login / register -> canvas list -> canvas -> editor; sign-out on any 401.
-- Canvas list: list, create (title dialog), open, refresh, sign out; overflow (⋮) -> "Voice dataset" stats
-  dialog (see [android_voice_capture.md](../features/android_voice_capture.md)).
+- Canvas list: list, create (title dialog), open, rename (row long-press or row ⋮ -> Rename), refresh,
+  sign out; overflow (⋮) -> "Voice dataset" stats dialog (see [android_voice_capture.md](../features/android_voice_capture.md)).
+- Placements: title tap renames the canvas; the selection bar's ⋮ menu moves or also shows snippets on
+  another canvas, removes them from this canvas or deletes them everywhere, and lists a badged
+  snippet's other canvases (see [android_snippet_placements.md](../features/android_snippet_placements.md)).
 - Canvas screen: web-identical card drawing in a Compose `Canvas`, culling, pan / pinch zoom, tap to
   edit, long-press selection mode, long-press-drag move, contextual bar (Merge ⇣ / ⇢, Delete, Rhymes, ✕),
   FAB new snippet, viewport persistence.
@@ -33,7 +36,7 @@ its own milestone.
 |---|---|---|---|
 | (session) | `nav/AppNavHost` | `SessionViewModel` | Start destination from the token store; `SignedOut` at any time pops everything and shows login |
 | Login / register | `auth/AuthScreen` | `AuthViewModel` | Mode toggle; display name only when registering |
-| Canvas list | `canvaslist/CanvasListScreen` | `CanvasListViewModel` | FAB "New canvas" opens a title dialog; the created canvas opens at once |
+| Canvas list | `canvaslist/CanvasListScreen` | `CanvasListViewModel` | FAB "New canvas" opens a title dialog; the created canvas opens at once. Row long-press / ⋮ -> Rename dialog; renames and creations elsewhere arrive on `CanvasUpdates` |
 | Canvas | `canvas/CanvasScreen` | `CanvasViewModel`, `RhymeViewModel` | Both ViewModels live in the canvas back-stack entry |
 | Editor | `editor/GridEditorRoute` (B2) | (B2) | Reached via `EditorRoute(canvasId, snippetId)`; reads the snippet from, and writes the saved one back to, the canvas entry's `CanvasViewModel` |
 
@@ -78,10 +81,13 @@ kind is saved in the `SavedStateHandle` under `CANVAS_MODE_KEY`. All screen coor
 | `onLongPress(id)` | Adds the card to the selection (entering selection mode) and records its position as a move origin |
 | `onListLongPress(id)` | List row long-press: adds the row to the selection; records no move origin |
 | `moveCardBy(id, delta)` | Only after `onLongPress(id)`: moves the card by `delta / zoom` world units, locally |
-| `endMove(id)` | If the card moved: one `PATCH /api/snippets/batch-position` with that card; on failure the card returns to its origin and a snackbar shows the error |
+| `endMove(id)` | If the card moved: one `PATCH /api/snippets/batch-position` with `canvas_id` (this canvas) and that card; on failure the card returns to its origin and a snackbar shows the error |
 | `exitSelection()` | Back to `Idle` (also clears `mergeError`); the system back gesture does the same |
-| `merge(mode)` | `MergeRequest.of(selected, mode)`; null (fewer than two) => `MergeError.TooFewSnippets`, no request. Success: drop `deleted_ids`, append the merged snippet, select only it. Failure: nothing changes, `mergeError = toMergeError(e)` and a snackbar |
-| `deleteSelected()` | `DELETE` each selected snippet in parallel; removes the ones the server deleted; the rest stay selected; first error to the snackbar (after a confirm dialog in the UI) |
+| `merge(mode)` | `MergeRequest.of(selected, mode)`; null (fewer than two) => `MergeError.TooFewSnippets`, no request. Success: drop `deleted_ids` and every requested original from this canvas, append the merged snippet, select only it. Failure: nothing changes, `mergeError = toMergeError(e)` and a snackbar |
+| `deleteSelected()` | Plain Delete / "Remove from this canvas": `DELETE /api/canvases/{cid}/snippets/{sid}` for each selected snippet in parallel; removes the ones the server removed; the rest stay selected; first error (typed `PlacementError` message) to the snackbar. The UI confirms only when `Ready.removalPlan.needsConfirm` (a snippet on no other canvas) |
+| `deleteEverywhereSelected()` | `DELETE /api/snippets/{id}` for each selected snippet, same bookkeeping; the UI always confirms, naming `Ready.deleteEverywherePlan.otherCanvases` |
+| `startRename()` / `submitRename(text)` / `dismissRename()`, `rename` | The title's rename dialog (`CanvasRenamer`): local check, `PUT /api/canvases/{id}` `{title}`, inline error; success sets `Ready.title`, renames this canvas in the snippets' `canvases` and publishes on `CanvasUpdates` |
+| `onTransferred(response, target)` (`PlacementCanvasPort`) | A confirmed transfer from `TransferViewModel`: `applyTransfer` (move drops the snippets, show adds the target to their `canvases`); selection pruned |
 | `createSnippetAtCenter()` | `POST` a freestyle snippet at `viewportCenter(viewport, viewSize)`, insert it, then `OpenEditor` |
 | `replaceSnippet(s)` | The editor's `onSaved` (and `onSnippetChanged` after a voice append): replace in place; in list mode, capture a new list order |
 | `voiceTarget()` | `VoiceTakeTarget.New(viewportCenter(viewport, viewSize))`; in list mode the viewport is the last canvas one and the size is the list body's; null before load |
@@ -143,20 +149,25 @@ cancelled mid-gesture, `Cancel` is fed so a card move still ends.
    (the web's 6-unit character estimate), grid stripes and lines (clamped to the inner right edge),
    header label, tag labels, cell text (stressed bold white, normal `#d0d0e8`, rests "·" `#555577`),
    per-line syllable counts, or the raw-text fallback (200 characters, wrapped) when there is no grid.
+   A snippet on several canvases gets the "⧉ N" pill after the header label (`CardLayout.linkBadge`).
 
 Text is measured with `rememberTextMeasurer(cacheSize = 512)` at fixed card-unit sizes
 (`CardTextStyles`), so zooming does not miss the measurement cache; below a 4 dp cell font
 (`textVisible`, zoom < ~0.31) only shapes are drawn. Card layouts are cached per snippet id and reused
-while the grid instance, size, type, tags and text are unchanged (a moved card keeps its grid instance).
+while the grid instance, size, type, tags, text and canvas count are unchanged (a moved card keeps its grid instance).
 Strokes are expressed in dp (`1 / zoom` card units).
 
 ## Canvas screen layout
 
 `CanvasScreen` = `BoxWithConstraints` around a `Scaffold`:
 
-- Top bar: title, back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Words" (once loaded; opens
+- Top bar: title (tap: rename dialog), back, "List" / "Canvas" mode toggle (once loaded), "Record" (once loaded), "Words" (once loaded; opens
   the Word bank screen, `WordBankRoute`), "Rhymes" toggle; while selecting, `SelectionTopBar` (count, Merge ⇣, Merge ⇢
-  (enabled with ≥ 2 selected and nothing in flight), Tags (tag picker), Delete (confirm dialog), Rhymes, ✕).
+  (enabled with ≥ 2 selected and nothing in flight), Tags (tag picker), Delete (labelled "Remove from this canvas"
+  when a selected snippet is on other canvases; confirm dialog only for snippets on no other canvas), Rhymes,
+  ⋮ (Move to canvas…, Also show on canvas…, On other canvases…, the delete label, Delete everywhere…), ✕).
+- Transfer picker (`CanvasPickerSheet`) while `TransferUiState.Picking`; `TransferEvent.Done` shows a
+  snackbar with "Open" (`onOpenCanvas`).
 - Filter bar (`tags/ui/FilterBar`, once loaded) above the body in both modes; the tag picker sheet
   (`TagPickerSheet`) while `TagsUiState.picker` is set; `TagsViewModel.messages` go to the snackbar.
 - FAB "New snippet" while not selecting.
@@ -244,17 +255,19 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 | `di/ProcessScope.kt` | `ProcessScope.scope`: process-lifetime scope for saves that must outlive a screen |
 | `session/SessionViewModel.kt` | `SessionState` (`Unknown`, `SignedOut`, `SignedIn`), `SessionViewModel` (`state`, `signOut`) |
 | `auth/AuthViewModel.kt`, `auth/AuthScreen.kt` | `AuthMode`, `AuthFieldError`, `AuthUiState`, `AuthViewModel` (`setMode`, `setEmail`, `setPassword`, `setDisplayName`, `submit`); the form |
-| `canvaslist/CanvasListViewModel.kt`, `canvaslist/CanvasListScreen.kt` | `CanvasListUiState`, `CanvasListEvent` (`Open`, `Message`), `CanvasListViewModel` (`refresh`, `create`); the list |
+| `canvaslist/CanvasListViewModel.kt`, `canvaslist/CanvasListScreen.kt` | `CanvasListUiState`, `CanvasListEvent` (`Open`, `Message`), `CanvasListViewModel` (`refresh`, `create`, `startRename`, `submitRename`, `dismissRename`, `rename`); the list |
+| `canvaslist/CanvasUpdates.kt` | `CanvasUpdates` (process-wide broadcast of renamed / created canvases) |
+| `canvas/rename/`, `canvas/placements/` | Rename dialog and flow; transfer picker, placement messages and dialogs (see [android_snippet_placements.md](../features/android_snippet_placements.md)) |
 | `canvas/CanvasUiState.kt` | `Selection` (`Idle`, `Selecting`, `of`), `Selection.ids`, `CanvasModeKind`, `CanvasMode` (`Canvas`, `SnippetList`), `CanvasUiState` (`Loading`, `Failed`, `Ready` with `listRows`), `CanvasEvent` (`OpenEditor`, `Message`, `RevealSnippet`) |
 | `canvas/CanvasViewModel.kt` | `CanvasViewModel`, `VIEWPORT_SAVE_DELAY_MS`, `CANVAS_MODE_KEY` |
 | `canvas/CanvasScreen.kt` | `CanvasScreen`, `canvasViewModel(container, canvasId, owner)` |
-| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`, `onWordBank`), `SelectionTopBar` (optional `onTags`) |
+| `canvas/CanvasTopBars.kt` | `CanvasTopBar` (optional `onRecord`, `onWordBank`, `onRename`), `SelectionTopBar` (optional `onTags`, `placements: SelectionPlacementActions`) |
 | `tags/` | `TagControlsViewModel` / `TagsViewModel`, filter bar, picker, presets (see [android_tag_expressions.md](../features/android_tag_expressions.md)) |
 | `wordbank/` | Word bank screen, `WordBankViewModel`, quick add for "+ bank" (see [android_word_bank.md](../features/android_word_bank.md)) |
 | `canvas/SnippetCanvas.kt` | `SnippetCanvas` (draw loop, layout cache, size reporting, gestures) |
 | `canvas/list/ListCardSize.kt` | `ListCardMetrics`, `ListCardWidth`, `listCardNeededWidth`, `listCardWidth`, `listCardHeight`, `listCard` (pure) |
 | `canvas/list/SnippetList.kt` | `SnippetList` (list mode `LazyColumn`, optional hoisted `listState`; rows drawn with `cardLayout` + `drawCard`) |
-| `canvas/render/CardLayout.kt` | `CardMetrics`, `CellTextKind`, `CellText`, `CountText`, `TagPill`, `GridFrame`, `CardLayout`, `placeCellText`, `cardLayout`, `textVisible` (pure) |
+| `canvas/render/CardLayout.kt` | `CardMetrics`, `CellTextKind`, `CellText`, `CountText`, `LinkBadge`, `TagPill`, `GridFrame`, `CardLayout`, `placeCellText`, `cardLayout`, `textVisible` (pure) |
 | `canvas/render/Culling.kt` | `intersects`, `visibleCards`, `BackgroundGrid`, `backgroundGridLines` (pure) |
 | `canvas/render/CardRenderer.kt` | `CardTextStyles`, `DrawScope.drawCard` |
 | `canvas/gesture/GestureReducer.kt` | `GestureState`, `GestureInput`, `CanvasGestureAction`, `GestureStep`, `reduceGesture` (pure) |
@@ -274,13 +287,15 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/`.
 
 Tests (`android/app/src/test/...`, JUnit 5 + kotlinx-coroutines-test + Turbine, fake repositories in
 `fakes/`): `CanvasViewModelTest`, `CanvasViewModelListModeTest`, `ListCardSizeTest`, `RhymeViewModelTest`, `SessionViewModelTest`, `AuthViewModelTest`,
-`CanvasListViewModelTest`, `CanvasViewModelVoiceTest`, `CanvasViewModelTagsTest`, `CanvasViewModelWordBankTest`, `RhymeViewModelTagFilterTest`, `TagsViewModelTest`, `TagMessagesTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
+`CanvasListViewModelTest`, `CanvasListRenameTest`, `CanvasViewModelPlacementsTest`, `TransferViewModelTest`, `PlacementMessagesTest`, `CardLayoutBadgeTest`, `CanvasViewModelVoiceTest`, `CanvasViewModelTagsTest`, `CanvasViewModelWordBankTest`, `RhymeViewModelTagFilterTest`, `TagsViewModelTest`, `TagMessagesTest`, `GestureReducerTest`, `CardLayoutTest`, `CullingTest`, `UserMessagesTest`.
 `MainDispatcherExtension` installs a `StandardTestDispatcher` as `Dispatchers.Main`.
 
 ## Invariants
 
 - Nothing from the rhyme sheet is drawn until the server confirms the materialized snippet.
-- A card move sends at most one batch-position request, on release, and only if the card moved.
+- A card move sends at most one batch-position request, on release, and only if the card moved; it
+  names this canvas (`canvas_id`).
+- Plain Delete never deletes a snippet that is on another canvas; only "Delete everywhere" does.
 - `Selection.Selecting` is never empty; selection-mode UI shows exactly while it is `Selecting`.
 - List mode and the canvas share one `Selection`; list rows only reorder when a new `ListOrder` is
   captured (list shown, reload, editor save).

@@ -24,6 +24,9 @@ Backspace line split and join).
   "Add to word bank" (`GridEditorRoute(onAddToWordBank)`, provided to the field through
   `LocalAddToWordBank`); the host trims, splits on commas / newlines, posts and toasts the result. See
   [android_word_bank.md](../features/android_word_bank.md).
+- Placements: a snippet on other canvases shows "Also on:" with a button per canvas above the rows
+  (`AlsoOnLine` in the `GridEditorScreen(header)` slot; `GridEditorRoute(onOpenCanvas)` navigates). See
+  [android_snippet_placements.md](../features/android_snippet_placements.md).
 
 ## Non-scope
 
@@ -87,7 +90,7 @@ insertRestBeforeSelection insertRestInRow(row, start); selection shifts right by
 removeSelectedRests       only when every selected cell is a rest: removeCellsInRow; selection cleared
 reorderRow(from, to)      reorderRows (text, grid line, arranged, active row move together);
 moveRow(row, ±1)          selection row via indexAfterReorder
-save      SnippetUpdateRequest(snippet_type, grid_data, raw_text = rawTextForSave) -> PUT
+save      SnippetUpdateRequest(snippet_type, grid_data, raw_text = rawTextForSave) -> PUT ?canvas_id=snippet.canvasId
             Saving -> Saved(updated snippet) | Failed(ApiError); ignored while Saving / after Saved
 ```
 
@@ -161,7 +164,7 @@ Paths under `android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/`.
 
 | File | Role / key exports |
 |---|---|
-| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier, onSnippetChanged, extraTopBarActions, onAddToWordBank, onCheckTranscript)`: ViewModels per visit (editor, voice capture, recordings fed by `container.recordingUpdates`), `onSaved` on `Saved`, Record button, recordings section (Check transcript stops playback, then `onCheckTranscript(recordingId)`), `LocalAddToWordBank` |
+| `GridEditorRoute.kt` | `GridEditorRoute(container, snippet, onSaved, onClose, modifier, onSnippetChanged, extraTopBarActions, onAddToWordBank, onCheckTranscript, onOpenCanvas)`: ViewModels per visit (editor, voice capture, recordings fed by `container.recordingUpdates`), `onSaved` on `Saved`, Record button, recordings section (Check transcript stops playback, then `onCheckTranscript(recordingId)`), `LocalAddToWordBank` |
 | `GridEditorViewModel.kt` | `GridEditorViewModel` (+ `flushPendingEdits`, `reloadFrom`), `SYLLABIFY_DEBOUNCE_MS`, `saveRequest(state)`, `selectionIsAllRests(state)` |
 | `GridEditorActions.kt` | `GridEditorActions`: every user intent the screen can send |
 | `EditorUiState.kt` | `EditorUiState` (`rows`, `selection`, `extendMode`, `snippetType`, `save`, `syllabifyError`, derived `rowLines`), sealed `SaveStatus` (`Idle`, `Saving`, `Saved(snippet)`, `Failed(error)`) |
