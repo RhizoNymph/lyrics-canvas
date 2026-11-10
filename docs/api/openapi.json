@@ -1148,9 +1148,66 @@
             "title": "Duration Ms",
             "type": "integer"
           },
+          "has_timings": {
+            "title": "Has Timings",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "initial_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Prompt"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "line_spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Spans"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
           },
           "mime_type": {
             "title": "Mime Type",
@@ -1166,6 +1223,43 @@
           "transcript": {
             "title": "Transcript",
             "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verified_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Text"
+          },
+          "words": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TimedWordResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Words"
           }
         },
         "required": [
@@ -1176,9 +1270,51 @@
           "byte_size",
           "transcript",
           "split_mode",
-          "created_at"
+          "created_at",
+          "lines",
+          "has_timings",
+          "words",
+          "line_spans",
+          "language",
+          "initial_prompt",
+          "verified_text",
+          "verified_at"
         ],
         "title": "RecordingResponse",
+        "type": "object"
+      },
+      "RecordingStatsResponse": {
+        "description": "The current user's recordings across all canvases.",
+        "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_duration_ms": {
+            "title": "Total Duration Ms",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "integer"
+          },
+          "verified_duration_ms": {
+            "title": "Verified Duration Ms",
+            "type": "integer"
+          },
+          "with_timings": {
+            "title": "With Timings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "verified",
+          "total_duration_ms",
+          "verified_duration_ms",
+          "with_timings"
+        ],
+        "title": "RecordingStatsResponse",
         "type": "object"
       },
       "RegisterRequest": {
@@ -2723,6 +2859,42 @@
         "title": "TextAnchor",
         "type": "object"
       },
+      "TimedWordResponse": {
+        "description": "One STT word of a take; times in ms since the recording started.",
+        "properties": {
+          "end_ms": {
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability"
+          },
+          "start_ms": {
+            "title": "Start Ms",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "start_ms",
+          "end_ms",
+          "probability"
+        ],
+        "title": "TimedWordResponse",
+        "type": "object"
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -2820,6 +2992,20 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerificationRequest": {
+        "description": "The checked transcript; normalized server-side (docs/features/voice_dataset.md).",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "VerificationRequest",
         "type": "object"
       },
       "VoiceErrorBody": {
@@ -4181,6 +4367,100 @@
         ]
       }
     },
+    "/api/recordings/export": {
+      "get": {
+        "description": "The user's recordings as a zip: original audio, metadata.jsonl and dataset.json.",
+        "operationId": "export_recordings_api_recordings_export_get",
+        "parameters": [
+          {
+            "description": "also export recordings without a checked transcript",
+            "in": "query",
+            "name": "include_unverified",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "also export recordings without a checked transcript",
+              "title": "Include Unverified",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "The dataset zip (docs/features/voice_dataset.md)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Recordings",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/recordings/stats": {
+      "get": {
+        "description": "Counts and durations of the current user's recordings across all canvases.",
+        "operationId": "get_recording_stats_api_recordings_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Recording Stats",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
     "/api/recordings/{recording_id}": {
       "delete": {
         "operationId": "delete_recording_api_recordings__recording_id__delete",
@@ -4291,6 +4571,152 @@
           }
         ],
         "summary": "Get Recording Audio",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/recordings/{recording_id}/verification": {
+      "delete": {
+        "description": "Mark the recording unchecked (clears verified_text and verified_at); idempotent.",
+        "operationId": "delete_recording_verification_api_recordings__recording_id__verification_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Recording Verification",
+        "tags": [
+          "voice"
+        ]
+      },
+      "put": {
+        "description": "Save the user's checked transcript (normalized) and mark the recording checked.",
+        "operationId": "put_recording_verification_api_recordings__recording_id__verification_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recording_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Recording Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Recording Verification",
         "tags": [
           "voice"
         ]

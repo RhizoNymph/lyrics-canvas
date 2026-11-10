@@ -3,6 +3,12 @@
 Every write here is one transaction: the snippet change (new snippet, or appended lines) and the
 recording insert commit together or not at all. Ownership is always checked through
 ``Canvas.owner_id``. Audio bytes are never logged and never loaded except by ``get_audio``.
+Transcript, checked-transcript and prompt text are never logged.
+
+Dataset columns (migration 007, docs/features/voice_dataset.md): a take stores its STT words,
+line spans, language and prompt; ``set_verification`` / ``clear_verification`` keep
+``verified_text`` and ``verified_at`` both set or both null; ``recording_stats`` and
+``export_recordings`` cover all of the user's canvases.
 """
 
 from __future__ import annotations
@@ -12,23 +18,29 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.canvas import Canvas
-from app.models.recording import SnippetRecording, SplitMode
+from app.models.recording import LANGUAGE_MAX_LENGTH, SnippetRecording, SplitMode
 from app.models.snippet import GridMode, Snippet, SnippetType
+from app.models.word_bank import BankWord
 from app.schemas.phonetics import SnippetPhonetics
 from app.services.snippet_content import content_for, derive_new_content
 from app.services.voice.append import append_lines
+from app.services.voice.dataset_export import ExportRecording
 from app.services.voice.errors import (
     CanvasNotFoundError,
+    ExportTooLargeError,
     RecordingNotFoundError,
     SnippetNotFoundError,
     VoicePersistError,
 )
+from app.services.voice.hints import HintWord
+from app.services.voice.timings import Timings, TimingsError, spans_json, stored_timings, words_json
+from app.services.voice.verification import VerifiedText
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +52,9 @@ class NewRecording:
     audio: bytes
     transcript: str
     split_mode: SplitMode
+    timings: Timings | None = None  # the take's STT words and the spans behind ``transcript``'s lines
+    language: str | None = None
+    initial_prompt: str | None = None  # exactly what was sent to STT
 
     def row(self, snippet_id: uuid.UUID) -> SnippetRecording:
         return SnippetRecording(
@@ -50,7 +65,40 @@ class NewRecording:
             audio=self.audio,
             transcript=self.transcript,
             split_mode=self.split_mode,
+            words=None if self.timings is None else words_json(self.timings.words),
+            line_spans=None if self.timings is None else spans_json(self.timings.spans),
+            language=stored_language(self.language),
+            initial_prompt=self.initial_prompt,
         )
+
+
+def stored_language(language: str | None) -> str | None:
+    """The language as stored; a code longer than the column is not a language code, so None."""
+    if language is None or not language.strip():
+        return None
+    code = language.strip()
+    if len(code) > LANGUAGE_MAX_LENGTH:
+        logger.warning("recording.language_dropped length=%d", len(code))
+        return None
+    return code
+
+
+def timings_of(row: SnippetRecording) -> Timings | None:
+    """The row's stored timings; malformed data (never written by this code) reads as none."""
+    try:
+        return stored_timings(row.words, row.line_spans)
+    except TimingsError as exc:
+        logger.warning("recording.timings_unreadable recording_id=%s error=%s", row.id, exc)
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class RecordingStats:
+    total: int
+    verified: int
+    total_duration_ms: int
+    verified_duration_ms: int
+    with_timings: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,13 +131,29 @@ async def _snippet_with_tags(db: AsyncSession, snippet_id: uuid.UUID) -> Snippet
     return result.scalar_one()
 
 
-async def _commit(db: AsyncSession, event: str, **context: object) -> None:
+async def _commit(
+    db: AsyncSession, event: str, message: str = "could not store the voice take; nothing changed", **context: object
+) -> None:
     try:
         await db.commit()
     except SQLAlchemyError as exc:
         await db.rollback()
         logger.error("%s.failed %s error=%s", event, " ".join(f"{k}={v}" for k, v in context.items()), type(exc).__name__)
-        raise VoicePersistError("could not store the voice take; nothing changed") from exc
+        raise VoicePersistError(message) from exc
+
+
+# ---- vocabulary hints ----
+
+
+async def bank_hint_words(db: AsyncSession, owner_id: uuid.UUID) -> list[HintWord]:
+    """The user's bank words for the STT prompt. A failed read degrades to no hints (logged)."""
+    try:
+        result = await db.execute(select(BankWord.text, BankWord.created_at).where(BankWord.user_id == owner_id))
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.warning("voice.take.prompt_words_failed error=%s", type(exc).__name__)
+        return []
+    return [HintWord(text=row.text, created_at=row.created_at) for row in result.all()]
 
 
 # ---- voice takes ----
@@ -227,6 +291,103 @@ async def delete_recording(db: AsyncSession, recording_id: uuid.UUID, owner_id: 
         raise RecordingNotFoundError("recording not found")
     await _commit(db, "recording.delete", recording_id=recording_id)
     logger.info("recording.deleted recording_id=%s", recording_id)
+
+
+async def _owned_row(db: AsyncSession, recording_id: uuid.UUID, owner_id: uuid.UUID, *, lock: bool = False) -> SnippetRecording:
+    query = select(SnippetRecording).where(*_owned_recording(recording_id, owner_id))
+    if lock:
+        query = query.with_for_update()
+    result = await db.execute(query.execution_options(populate_existing=True))
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise RecordingNotFoundError("recording not found")
+    return row
+
+
+async def get_recording(db: AsyncSession, recording_id: uuid.UUID, owner_id: uuid.UUID) -> SnippetRecording:
+    """One recording without its audio."""
+    return await _owned_row(db, recording_id, owner_id)
+
+
+async def set_verification(
+    db: AsyncSession, recording_id: uuid.UUID, owner_id: uuid.UUID, text: VerifiedText
+) -> SnippetRecording:
+    """Store the checked transcript with ``verified_at = now()`` (the transaction clock)."""
+    row = await _owned_row(db, recording_id, owner_id, lock=True)
+    row.verified_text = text
+    row.verified_at = func.now()
+    await _commit(db, "recording.verify", "could not save the checked transcript", recording_id=recording_id)
+    await db.refresh(row, ["verified_text", "verified_at"])
+    logger.info("recording.verified recording_id=%s chars=%d", recording_id, len(text))
+    return row
+
+
+async def clear_verification(db: AsyncSession, recording_id: uuid.UUID, owner_id: uuid.UUID) -> SnippetRecording:
+    """Clear both verification fields; idempotent."""
+    row = await _owned_row(db, recording_id, owner_id, lock=True)
+    row.verified_text = None
+    row.verified_at = None
+    await _commit(db, "recording.unverify", "could not clear the checked transcript", recording_id=recording_id)
+    logger.info("recording.unverified recording_id=%s", recording_id)
+    return row
+
+
+def _owned_by(owner_id: uuid.UUID):
+    return SnippetRecording.snippet_id.in_(select(Snippet.id).join(Canvas).where(Canvas.owner_id == owner_id))
+
+
+async def recording_stats(db: AsyncSession, owner_id: uuid.UUID) -> RecordingStats:
+    verified = SnippetRecording.verified_text.is_not(None)
+    timed = and_(SnippetRecording.words.is_not(None), SnippetRecording.line_spans.is_not(None))
+    result = await db.execute(
+        select(
+            func.count(),
+            func.count().filter(verified),
+            func.coalesce(func.sum(SnippetRecording.duration_ms), 0),
+            func.coalesce(func.sum(SnippetRecording.duration_ms).filter(verified), 0),
+            func.count().filter(timed),
+        ).where(_owned_by(owner_id))
+    )
+    total, verified_count, total_ms, verified_ms, with_timings = result.one()
+    return RecordingStats(
+        total=int(total), verified=int(verified_count), total_duration_ms=int(total_ms),
+        verified_duration_ms=int(verified_ms), with_timings=int(with_timings),
+    )
+
+
+def _export_recording(row: SnippetRecording) -> ExportRecording:
+    return ExportRecording(
+        id=row.id,
+        mime_type=row.mime_type,
+        duration_ms=row.duration_ms,
+        byte_size=row.byte_size,
+        language=row.language,
+        split_mode=row.split_mode,
+        created_at=row.created_at,
+        verified_at=row.verified_at,
+        verified_text=row.verified_text,
+        transcript=row.transcript,
+        initial_prompt=row.initial_prompt,
+        timings=timings_of(row),
+    )
+
+
+async def export_recordings(
+    db: AsyncSession, owner_id: uuid.UUID, *, include_unverified: bool, max_audio_bytes: int
+) -> list[ExportRecording]:
+    """The recordings to export (no audio), oldest first; ``ExportTooLargeError`` over the limit."""
+    query = select(SnippetRecording).where(_owned_by(owner_id))
+    if not include_unverified:
+        query = query.where(SnippetRecording.verified_text.is_not(None))
+    result = await db.execute(query.order_by(SnippetRecording.created_at, SnippetRecording.id))
+    records = [_export_recording(row) for row in result.scalars().all()]
+    audio_bytes = sum(r.byte_size for r in records)
+    if audio_bytes > max_audio_bytes:
+        logger.info("voice.export.too_large recordings=%d bytes=%d limit=%d", len(records), audio_bytes, max_audio_bytes)
+        raise ExportTooLargeError(
+            f"the export would hold {audio_bytes} bytes of audio; the limit is {max_audio_bytes}"
+        )
+    return records
 
 
 async def reassign_recordings(db: AsyncSession, to_snippet_id: uuid.UUID, from_snippet_ids: Sequence[uuid.UUID]) -> None:

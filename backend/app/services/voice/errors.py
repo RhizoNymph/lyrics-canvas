@@ -19,6 +19,8 @@ class VoiceErrorCode(StrEnum):
     stt_unavailable = "stt_unavailable"
     stt_failed = "stt_failed"
     persist_failed = "persist_failed"
+    invalid_verification = "invalid_verification"
+    export_too_large = "export_too_large"
 
 
 class VoiceTakeError(Exception):
@@ -89,3 +91,17 @@ class VoicePersistError(VoiceTakeError):
 
     code = VoiceErrorCode.persist_failed
     status = 500
+
+
+class InvalidVerificationError(VoiceTakeError):
+    """The checked transcript is empty or too long after normalizing."""
+
+    code = VoiceErrorCode.invalid_verification
+    status = 422
+
+
+class ExportTooLargeError(VoiceTakeError):
+    """The dataset export would hold more audio than VOICE_EXPORT_MAX_BYTES."""
+
+    code = VoiceErrorCode.export_too_large
+    status = 413

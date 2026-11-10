@@ -111,6 +111,8 @@ Always pass the values file; never use `--reuse-values`.
 | `backend.migrations.enabled` | `true` | Init container runs Alembic before each backend pod starts, retrying until the database is reachable. |
 | `backend.modelCache.persistence.enabled` | `false` | PVC for the sentence-transformers model download (`HF_HOME`). Needs `ReadWriteMany` for more than one replica across nodes. |
 | `backend.relatedWords.warmup` | `true` | `RELATED_WORDS_WARMUP`: build the word bank related-word index (vocabulary embeddings) at startup; until it is ready `GET /api/word-bank/related` answers 503 `related_words_warming`. `cacheDir` (`RELATED_WORDS_CACHE_DIR`, default `$HF_HOME/lyrics-canvas`) holds the cached matrix, so with `modelCache.persistence.enabled` it survives pod restarts. See `docs/features/word_bank.md`. |
+| `backend.voice.vocabHints` | `true` | `VOICE_VOCAB_HINTS`: transcribe voice takes with the user's word bank as Whisper's `initial_prompt` (a take can opt out with `meta.vocabulary_hints=false`). `vocabHintMaxChars` (`VOICE_VOCAB_HINT_MAX_CHARS`, default `600`) caps the prompt length. See `docs/features/voice_dataset.md`. |
+| `backend.voice.exportMaxBytes` | `1073741824` | `VOICE_EXPORT_MAX_BYTES`: the most audio `GET /api/recordings/export` packs into one zip; larger exports answer 413 `export_too_large`. The zip is built before the response starts, so a large export needs an ingress read timeout to match. |
 | `backend.resources` | 1Gi/3Gi memory | torch + the embedding model need the headroom. |
 | `postgres.enabled` | `true` | Bundled single-replica pgvector StatefulSet with an 8Gi PVC. |
 | `postgres.auth.password` | generated | Kept across upgrades like the signing key. Or `postgres.auth.existingSecret`. |

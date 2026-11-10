@@ -1864,5 +1864,31 @@ class HomelabSttTest(unittest.TestCase):
         self.assertEqual(backend_env(self.docs)["STT_URL"]["value"], "http://lc-lyrics-canvas-stt:8000")
 
 
+
+class VoiceDatasetValuesTest(unittest.TestCase):
+    """backend.voice.* -> VOICE_VOCAB_HINTS / VOICE_VOCAB_HINT_MAX_CHARS / VOICE_EXPORT_MAX_BYTES."""
+
+    def test_defaults(self) -> None:
+        env = backend_env(render())
+        self.assertEqual(env["VOICE_VOCAB_HINTS"]["value"], "true")
+        self.assertEqual(env["VOICE_VOCAB_HINT_MAX_CHARS"]["value"], "600")
+        self.assertEqual(env["VOICE_EXPORT_MAX_BYTES"]["value"], "1073741824")
+
+    def test_overrides(self) -> None:
+        env = backend_env(render(
+            backend__voice__vocabHints="false",
+            backend__voice__vocabHintMaxChars="240",
+            backend__voice__exportMaxBytes="5368709120",
+        ))
+        self.assertEqual(env["VOICE_VOCAB_HINTS"]["value"], "false")
+        self.assertEqual(env["VOICE_VOCAB_HINT_MAX_CHARS"]["value"], "240")
+        self.assertEqual(env["VOICE_EXPORT_MAX_BYTES"]["value"], "5368709120")
+
+    def test_schema_rejects_bad_types(self) -> None:
+        SchemaTest.assert_rejected(self, "backend.voice.vocabHints=sometimes")
+        SchemaTest.assert_rejected(self, "backend.voice.vocabHintMaxChars=-1")
+        SchemaTest.assert_rejected(self, "backend.voice.exportMaxBytes=big")
+        SchemaTest.assert_rejected(self, "backend.voice.unknown=1")
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
