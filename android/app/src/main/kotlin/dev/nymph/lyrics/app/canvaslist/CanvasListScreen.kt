@@ -1,6 +1,7 @@
 package dev.nymph.lyrics.app.canvaslist
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.nymph.lyrics.app.canvas.rename.RenameCanvasDialog
 import dev.nymph.lyrics.app.di.AppContainer
+import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetDialog
 import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetViewModel
@@ -54,8 +57,9 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSignOut: () -> Unit) {
-    val vm: CanvasListViewModel = viewModel { CanvasListViewModel(container.canvases) }
+    val vm: CanvasListViewModel = viewModel { CanvasListViewModel(container.canvases, container.canvasUpdates) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val rename by vm.rename.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -120,12 +124,7 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
                 } else {
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(s.canvases, key = { it.id.value }) { canvas ->
-                            ListItem(
-                                headlineContent = { Text(canvas.title) },
-                                supportingContent = { Text("Updated ${canvas.updatedAt.take(10)}", color = Palette.Muted) },
-                                colors = ListItemDefaults.colors(containerColor = Palette.CanvasBackground),
-                                modifier = Modifier.clickable { onOpen(canvas.id) },
-                            )
+                            CanvasRow(canvas, onOpen = { onOpen(canvas.id) }, onRename = { vm.startRename(canvas) })
                             HorizontalDivider(color = Palette.Border)
                         }
                     }
@@ -135,6 +134,7 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
     }
 
     VoiceDatasetDialog(datasetState, onRetry = dataset::open, onDismiss = dataset::close)
+    RenameCanvasDialog(rename, onSubmit = vm::submitRename, onDismiss = vm::dismissRename)
 
     if (creating) {
         var title by rememberSaveable { mutableStateOf("") }
@@ -151,4 +151,31 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
             dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** One canvas: tap opens it; long-press or ⋮ → Rename. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    ListItem(
+        headlineContent = { Text(canvas.title) },
+        supportingContent = { Text("Updated ${canvas.updatedAt.take(10)}", color = Palette.Muted) },
+        trailingContent = {
+            Box {
+                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Canvas actions") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            menuOpen = false
+                            onRename()
+                        },
+                    )
+                }
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Palette.CanvasBackground),
+        modifier = Modifier.combinedClickable(onClick = onOpen, onLongClick = onRename, onLongClickLabel = "Rename"),
+    )
 }

@@ -1,6 +1,8 @@
 package dev.nymph.lyrics.app.canvas.render
 
 import dev.nymph.lyrics.logic.canvas.Rect
+import dev.nymph.lyrics.logic.placements.linkBadgeCount
+import dev.nymph.lyrics.logic.placements.linkBadgeLabel
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.Snippet
 
@@ -23,6 +25,10 @@ object CardMetrics {
     const val TAG_PILL_PAD_X: Double = 6.0
     /** Approximate glyph width of a 9-unit tag label (the web uses the same estimate). */
     const val TAG_CHAR_WIDTH: Double = 6.0
+    /** Approximate glyph width of the 11-unit bold header label (for placing the link badge after it). */
+    const val HEADER_CHAR_WIDTH: Double = 7.5
+    /** Space between the header label and the link badge. */
+    const val BADGE_GAP: Double = 6.0
 
     const val CELL_FONT: Double = 13.0
     const val HEADER_FONT: Double = 11.0
@@ -40,6 +46,9 @@ enum class CellTextKind { REST, STRESSED, NORMAL }
 data class CellText(val text: String, val x: Double, val y: Double, val kind: CellTextKind)
 
 data class CountText(val text: String, val x: Double, val y: Double)
+
+/** The "⧉ N" badge of a snippet on several canvases, in the header after the type label. */
+data class LinkBadge(val bounds: Rect, val label: String, val labelX: Double, val labelY: Double)
 
 data class TagPill(val bounds: Rect, val label: String, val color: String, val labelX: Double, val labelY: Double)
 
@@ -63,6 +72,8 @@ data class CardLayout(
     val headerLabelX: Double,
     val headerLabelY: Double,
     val tags: List<TagPill>,
+    /** Null for a snippet on this canvas only. */
+    val linkBadge: LinkBadge?,
     val grid: GridFrame?,
     val cells: List<CellText>,
     val counts: List<CountText>,
@@ -127,14 +138,27 @@ fun cardLayout(snippet: Snippet): CardLayout {
         CountText(line.syllableCount.toString(), w - m.PADDING - 14.0, gridTop + row * m.CELL_HEIGHT + 5.0)
     }
     val fallback = if (lines.isEmpty() && snippet.rawText.isNotEmpty()) snippet.rawText.take(m.FALLBACK_MAX_CHARS) else null
+    val headerLabel = snippet.snippetType.name
+    val badge = linkBadgeCount(snippet)?.let { count ->
+        val label = linkBadgeLabel(count)
+        val left = m.PADDING + headerLabel.length * m.HEADER_CHAR_WIDTH + m.BADGE_GAP
+        val badgeW = m.TAG_PILL_PAD_X * 2 + label.length * m.TAG_CHAR_WIDTH
+        LinkBadge(
+            bounds = Rect(left, pillTop, badgeW, m.TAG_PILL_HEIGHT),
+            label = label,
+            labelX = left + m.TAG_PILL_PAD_X,
+            labelY = pillTop + (m.TAG_PILL_HEIGHT - m.TAG_FONT) / 2,
+        )
+    }
 
     return CardLayout(
         width = w,
         height = snippet.height,
-        headerLabel = snippet.snippetType.name,
+        headerLabel = headerLabel,
         headerLabelX = m.PADDING,
         headerLabelY = 7.0,
         tags = pills.filterNotNull(),
+        linkBadge = badge,
         grid = grid,
         cells = cells,
         counts = counts,

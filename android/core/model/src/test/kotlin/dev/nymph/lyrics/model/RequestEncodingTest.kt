@@ -95,8 +95,11 @@ class RequestEncodingTest {
 
     @Test
     fun `batch position`() {
-        val req = BatchPositionRequest(listOf(PositionUpdate(SnippetId("a"), 1.5, -2.0)))
-        assertEquals(json("""{"updates":[{"id":"a","position_x":1.5,"position_y":-2.0}]}"""), encode(BatchPositionRequest.serializer(), req))
+        val req = BatchPositionRequest(CanvasId("c1"), listOf(PositionUpdate(SnippetId("a"), 1.5, -2.0)))
+        assertEquals(
+            json("""{"canvas_id":"c1","updates":[{"id":"a","position_x":1.5,"position_y":-2.0}]}"""),
+            encode(BatchPositionRequest.serializer(), req),
+        )
         assertRoundTrip(BatchPositionRequest.serializer(), req)
     }
 

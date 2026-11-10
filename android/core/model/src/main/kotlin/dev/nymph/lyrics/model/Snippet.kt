@@ -40,11 +40,17 @@ data class DerivedFrom(
     @SerialName("anchor_text") val anchorText: String,
 )
 
-/** A snippet as returned by every snippet route and inside [CanvasDetail]. */
+/**
+ * A snippet as returned by every snippet route and inside [CanvasDetail], in the context of one
+ * canvas: [canvasId], the position, size, [zIndex] and [groupId] come from the snippet's placement
+ * on that canvas ([placementId]); text, type, grid, tags and phonetics are shared by every canvas
+ * holding it ([canvases], which includes [canvasId]).
+ */
 @Serializable
 data class Snippet(
     val id: SnippetId,
     @SerialName("canvas_id") val canvasId: CanvasId,
+    @SerialName("placement_id") val placementId: PlacementId,
     @SerialName("snippet_type") val snippetType: SnippetType,
     @SerialName("grid_mode") val gridMode: GridMode,
     @SerialName("beats_per_line") val beatsPerLine: Int? = null,
@@ -64,6 +70,8 @@ data class Snippet(
     @SerialName("updated_at") val updatedAt: String,
     /** Last content edit (text, type or grid); unlike [updatedAt], moves and resizes leave it alone. */
     @SerialName("content_updated_at") val contentUpdatedAt: String,
+    /** Every canvas holding this snippet, the current one included; sorted by lowercase title, then id. */
+    val canvases: List<CanvasRef>,
 )
 
 /**
@@ -85,8 +93,9 @@ data class SnippetCreateRequest(
 )
 
 /**
- * Body of `PUT /api/snippets/{id}`. Null fields are omitted and left unchanged (the server
- * drops nulls). `raw_text` without `grid_data` makes the server re-syllabify.
+ * Body of `PUT /api/snippets/{id}?canvas_id={cid}`. Null fields are omitted and left unchanged (the
+ * server drops nulls). `raw_text` without `grid_data` makes the server re-syllabify. Content fields
+ * change the shared snippet; layout fields (position, size, z, group) change its placement on `cid`.
  */
 @Serializable
 data class SnippetUpdateRequest(
@@ -111,9 +120,10 @@ data class PositionUpdate(
     @SerialName("position_y") val positionY: Double,
 )
 
-/** Body of `PATCH /api/snippets/batch-position`. */
+/** Body of `PATCH /api/snippets/batch-position`: [canvasId] names the placements every update moves. */
 @Serializable
 data class BatchPositionRequest(
+    @SerialName("canvas_id") val canvasId: CanvasId,
     val updates: List<PositionUpdate>,
 )
 

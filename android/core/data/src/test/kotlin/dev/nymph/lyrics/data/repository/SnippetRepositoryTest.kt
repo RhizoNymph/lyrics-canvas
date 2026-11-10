@@ -51,38 +51,38 @@ class SnippetRepositoryTest : MockServerTest() {
     }
 
     @Test
-    fun `update puts raw_text and grid_data`() = runTest {
+    fun `update puts raw_text and grid_data for the canvas's placement`() = runTest {
         enqueue(200, Bodies.SNIPPET)
         val grid = GridData(listOf(GridLine(listOf(GridCell("tin", 1, 0, word = "tin"), GridCell.REST), 1, "tin")))
-        repo.update(SnippetId("s1"), SnippetUpdateRequest(rawText = "tin", gridData = grid))
+        repo.update(CanvasId("c1"), SnippetId("s1"), SnippetUpdateRequest(rawText = "tin", gridData = grid))
         assertRequest(
             take(),
             "PUT",
-            "/api/snippets/s1",
+            "/api/snippets/s1?canvas_id=c1",
             """{"grid_data":{"lines":[{"cells":[{"syllable":"tin","stress":1,"word_index":0,"word":"tin"},{"rest":true}],
                "syllable_count":1,"raw_text":"tin"}]},"raw_text":"tin"}""",
         )
     }
 
     @Test
-    fun `delete succeeds on 204 and maps 404`() = runTest {
+    fun `deleteEverywhere succeeds on 204 and maps 404`() = runTest {
         server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(204))
-        assertEquals(ApiResult.Success(Unit), repo.delete(SnippetId("s1")))
+        assertEquals(ApiResult.Success(Unit), repo.deleteEverywhere(SnippetId("s1")))
         assertRequest(take(), "DELETE", "/api/snippets/s1")
         enqueue(404, """{"detail":"Snippet not found"}""")
-        assertEquals(ApiResult.Failure(ApiError.NotFound("Snippet not found")), repo.delete(SnippetId("s9")))
+        assertEquals(ApiResult.Failure(ApiError.NotFound("Snippet not found")), repo.deleteEverywhere(SnippetId("s9")))
     }
 
     @Test
-    fun `batchPosition patches every update`() = runTest {
+    fun `batchPosition patches every update on the canvas`() = runTest {
         enqueue(200, """{"updated":2}""")
-        val result = repo.batchPosition(listOf(PositionUpdate(SnippetId("a"), 1.0, 2.0), PositionUpdate(SnippetId("b"), -3.5, 4.0)))
+        val result = repo.batchPosition(CanvasId("c1"), listOf(PositionUpdate(SnippetId("a"), 1.0, 2.0), PositionUpdate(SnippetId("b"), -3.5, 4.0)))
         assertEquals(ApiResult.Success(BatchPositionResponse(2)), result)
         assertRequest(
             take(),
             "PATCH",
             "/api/snippets/batch-position",
-            """{"updates":[{"id":"a","position_x":1.0,"position_y":2.0},{"id":"b","position_x":-3.5,"position_y":4.0}]}""",
+            """{"canvas_id":"c1","updates":[{"id":"a","position_x":1.0,"position_y":2.0},{"id":"b","position_x":-3.5,"position_y":4.0}]}""",
         )
     }
 

@@ -4,13 +4,16 @@ import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.model.BatchPositionResponse
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
 import dev.nymph.lyrics.model.GridMode
+import dev.nymph.lyrics.model.PlacementId
 import dev.nymph.lyrics.model.MergeRequest
 import dev.nymph.lyrics.model.MergeResponse
 import dev.nymph.lyrics.model.PositionUpdate
+import dev.nymph.lyrics.model.RemovePlacementResponse
 import dev.nymph.lyrics.model.RhymeSuggestRequest
 import dev.nymph.lyrics.model.RhymeSuggestResponse
 import dev.nymph.lyrics.model.Snippet
@@ -18,6 +21,8 @@ import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
 import dev.nymph.lyrics.model.SnippetUpdateRequest
+import dev.nymph.lyrics.model.TransferRequest
+import dev.nymph.lyrics.model.TransferResponse
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
 import kotlinx.coroutines.CancellationException
@@ -26,6 +31,7 @@ import kotlinx.coroutines.delay
 fun snippet(rawText: String, grid: GridData? = null, type: SnippetType = SnippetType.VERSE): Snippet = Snippet(
     id = SnippetId("s1"),
     canvasId = CanvasId("c1"),
+    placementId = PlacementId("p1"),
     snippetType = type,
     gridMode = GridMode.AUTO,
     gridData = grid,
@@ -38,6 +44,7 @@ fun snippet(rawText: String, grid: GridData? = null, type: SnippetType = Snippet
     createdAt = "2026-10-01T00:00:00Z",
     updatedAt = "2026-10-01T00:00:00Z",
     contentUpdatedAt = "2026-10-01T00:00:00Z",
+    canvases = listOf(CanvasRef(CanvasId("c1"), "Song")),
 )
 
 /** A "server" syllabification: one stressed cell per word, so it is distinguishable from the local estimate. */
@@ -74,6 +81,8 @@ class FakeNlpRepository : NlpRepository {
 
 class FakeSnippetRepository : SnippetRepository {
     val updates = mutableListOf<Pair<SnippetId, SnippetUpdateRequest>>()
+    /** The `canvas_id` each update named, in order. */
+    val updateCanvases = mutableListOf<CanvasId>()
     var latencyMs: Long = 0
     var respond: (SnippetId, SnippetUpdateRequest) -> ApiResult<Snippet> = { _, body ->
         ApiResult.Success(
@@ -82,8 +91,9 @@ class FakeSnippetRepository : SnippetRepository {
         )
     }
 
-    override suspend fun update(id: SnippetId, body: SnippetUpdateRequest): ApiResult<Snippet> {
+    override suspend fun update(canvasId: CanvasId, id: SnippetId, body: SnippetUpdateRequest): ApiResult<Snippet> {
         updates += id to body
+        updateCanvases += canvasId
         if (latencyMs > 0) delay(latencyMs)
         return respond(id, body)
     }
@@ -92,9 +102,13 @@ class FakeSnippetRepository : SnippetRepository {
 
     override suspend fun create(canvasId: CanvasId, body: SnippetCreateRequest): ApiResult<Snippet> = unused()
 
-    override suspend fun delete(id: SnippetId): ApiResult<Unit> = unused()
+    override suspend fun removeFromCanvas(canvasId: CanvasId, id: SnippetId): ApiResult<RemovePlacementResponse> = unused()
 
-    override suspend fun batchPosition(updates: List<PositionUpdate>): ApiResult<BatchPositionResponse> = unused()
+    override suspend fun deleteEverywhere(id: SnippetId): ApiResult<Unit> = unused()
+
+    override suspend fun batchPosition(canvasId: CanvasId, updates: List<PositionUpdate>): ApiResult<BatchPositionResponse> = unused()
 
     override suspend fun merge(canvasId: CanvasId, request: MergeRequest): ApiResult<MergeResponse> = unused()
+
+    override suspend fun transfer(sourceCanvasId: CanvasId, request: TransferRequest): ApiResult<TransferResponse> = unused()
 }

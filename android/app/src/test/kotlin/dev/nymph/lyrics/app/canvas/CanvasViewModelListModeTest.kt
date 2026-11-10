@@ -215,7 +215,7 @@ class CanvasViewModelListModeTest {
         vm.onTap(c.id)
         vm.deleteSelected()
         runCurrent()
-        assertEquals(setOf(a.id, c.id), snippets.deleted.toSet())
+        assertEquals(setOf(a.id, c.id), snippets.removed.toSet())
         assertEquals(listOf("b"), vm.rows())
         assertEquals(Selection.Idle, vm.ready().selection)
     }

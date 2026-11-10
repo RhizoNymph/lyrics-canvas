@@ -24,6 +24,13 @@ value class CanvasId(val value: String) {
     override fun toString(): String = value
 }
 
+/** Server-assigned id of a snippet's placement on one canvas (its layout there). */
+@JvmInline
+@Serializable
+value class PlacementId(val value: String) {
+    override fun toString(): String = value
+}
+
 /** Server-assigned tag id. */
 @JvmInline
 @Serializable

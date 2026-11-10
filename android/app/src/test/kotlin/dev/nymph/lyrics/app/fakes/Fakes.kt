@@ -14,12 +14,15 @@ import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.MergeRequest
 import dev.nymph.lyrics.model.MergeResponse
 import dev.nymph.lyrics.model.PositionUpdate
+import dev.nymph.lyrics.model.RemovePlacementResponse
 import dev.nymph.lyrics.model.RhymeSuggestRequest
 import dev.nymph.lyrics.model.RhymeSuggestResponse
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetUpdateRequest
+import dev.nymph.lyrics.model.TransferRequest
+import dev.nymph.lyrics.model.TransferResponse
 import dev.nymph.lyrics.model.User
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
@@ -43,7 +46,9 @@ class FakeCanvasRepository(
 ) : CanvasRepository {
     var listResult: ApiResult<List<Canvas>> = ApiResult.Success(emptyList())
     var createResult: (String) -> ApiResult<Canvas> = { ApiResult.Success(canvas("new", it)) }
+    val created = mutableListOf<String>()
     val updates = mutableListOf<Pair<CanvasId, CanvasUpdateRequest>>()
+    var updateResult: (CanvasId, CanvasUpdateRequest) -> ApiResult<Canvas> = { id, update -> ApiResult.Success(canvas(id.value, update.title ?: "Song")) }
     var listCalls = 0
 
     override suspend fun list(): ApiResult<List<Canvas>> {
@@ -51,50 +56,74 @@ class FakeCanvasRepository(
         return tokenStore.answer(listResult)
     }
 
-    override suspend fun create(title: String): ApiResult<Canvas> = tokenStore.answer(createResult(title))
+    override suspend fun create(title: String): ApiResult<Canvas> {
+        created += title
+        return tokenStore.answer(createResult(title))
+    }
 
     override suspend fun get(id: CanvasId): ApiResult<CanvasDetail> = tokenStore.answer(detail)
 
     override suspend fun update(id: CanvasId, update: CanvasUpdateRequest): ApiResult<Canvas> {
         updates += id to update
-        return ApiResult.Success(canvas(id.value, "Song"))
+        return tokenStore.answer(updateResult(id, update))
     }
 }
 
 class FakeSnippetRepository(private val tokenStore: TokenStore? = null) : SnippetRepository {
     val created = mutableListOf<SnippetCreateRequest>()
-    val deleted = mutableListOf<SnippetId>()
+    /** Placement deletes (plain Delete / Remove from this canvas). */
+    val removed = mutableListOf<SnippetId>()
+    val removedFrom = mutableListOf<CanvasId>()
+    val deletedEverywhere = mutableListOf<SnippetId>()
     val batches = mutableListOf<List<PositionUpdate>>()
+    val batchCanvases = mutableListOf<CanvasId>()
     val merges = mutableListOf<MergeRequest>()
+    val transfers = mutableListOf<Pair<CanvasId, TransferRequest>>()
 
     var createResult: (SnippetCreateRequest) -> ApiResult<Snippet> = { body ->
         ApiResult.Success(snippet("new${created.size}", rawText = body.rawText ?: "", x = body.positionX, y = body.positionY))
     }
-    var deleteResult: (SnippetId) -> ApiResult<Unit> = { ApiResult.Success(Unit) }
+    var removeResult: (SnippetId) -> ApiResult<RemovePlacementResponse> = { ApiResult.Success(RemovePlacementResponse(snippetDeleted = true)) }
+    var deleteEverywhereResult: (SnippetId) -> ApiResult<Unit> = { ApiResult.Success(Unit) }
     var batchResult: ApiResult<BatchPositionResponse> = ApiResult.Success(BatchPositionResponse(1))
     var mergeResult: (MergeRequest) -> ApiResult<MergeResponse> = { ApiResult.Failure(ApiError.Server(500, "no merge")) }
+    var transferResult: (TransferRequest) -> ApiResult<TransferResponse> = { request ->
+        ApiResult.Success(TransferResponse(request.targetCanvasId, request.snippetIds, emptyList(), removedFromSource = request.mode == dev.nymph.lyrics.model.TransferMode.MOVE))
+    }
 
     override suspend fun create(canvasId: CanvasId, body: SnippetCreateRequest): ApiResult<Snippet> {
         created += body
         return tokenStore.answer(createResult(body))
     }
 
-    override suspend fun update(id: SnippetId, body: SnippetUpdateRequest): ApiResult<Snippet> =
+    override suspend fun update(canvasId: CanvasId, id: SnippetId, body: SnippetUpdateRequest): ApiResult<Snippet> =
         ApiResult.Failure(ApiError.Server(500, "not used"))
 
-    override suspend fun delete(id: SnippetId): ApiResult<Unit> {
-        deleted += id
-        return tokenStore.answer(deleteResult(id))
+    override suspend fun removeFromCanvas(canvasId: CanvasId, id: SnippetId): ApiResult<RemovePlacementResponse> {
+        removed += id
+        removedFrom += canvasId
+        return tokenStore.answer(removeResult(id))
     }
 
-    override suspend fun batchPosition(updates: List<PositionUpdate>): ApiResult<BatchPositionResponse> {
+    override suspend fun deleteEverywhere(id: SnippetId): ApiResult<Unit> {
+        deletedEverywhere += id
+        return tokenStore.answer(deleteEverywhereResult(id))
+    }
+
+    override suspend fun batchPosition(canvasId: CanvasId, updates: List<PositionUpdate>): ApiResult<BatchPositionResponse> {
         batches += updates
+        batchCanvases += canvasId
         return tokenStore.answer(batchResult)
     }
 
     override suspend fun merge(canvasId: CanvasId, request: MergeRequest): ApiResult<MergeResponse> {
         merges += request
         return tokenStore.answer(mergeResult(request))
+    }
+
+    override suspend fun transfer(sourceCanvasId: CanvasId, request: TransferRequest): ApiResult<TransferResponse> {
+        transfers += sourceCanvasId to request
+        return tokenStore.answer(transferResult(request))
     }
 }
 

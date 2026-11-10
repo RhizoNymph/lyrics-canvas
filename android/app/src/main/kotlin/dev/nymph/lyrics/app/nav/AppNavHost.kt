@@ -83,6 +83,7 @@ fun AppNavHost(container: AppContainer) {
                 onBack = { nav.popBackStack() },
                 onOpenEditor = { id -> nav.navigate(EditorRoute(route.canvasId, id.value)) },
                 onOpenWordBank = { nav.navigate(WordBankRoute(route.canvasId)) },
+                onOpenCanvas = { id -> if (id.value != route.canvasId) nav.navigate(CanvasRoute(id.value)) },
             )
         }
         composable<EditorRoute> { entry -> EditorDestination(container, nav, entry) }
@@ -146,6 +147,7 @@ private fun EditorDestination(container: AppContainer, nav: NavHostController, e
         onSnippetChanged = canvas::replaceSnippet,
         extraTopBarActions = { TextButton(onClick = { tags.openPicker(setOf(snippet.id)) }) { Text("Tags") } },
         onCheckTranscript = { id -> nav.navigate(CheckTranscriptRoute(snippet.id.value, id.value)) },
+        onOpenCanvas = { id -> if (nav.currentBackStackEntry?.id == entry.id) nav.navigate(CanvasRoute(id.value)) },
     )
     TagPickerSheet(tagsState, tags)
 }

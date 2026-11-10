@@ -53,13 +53,15 @@ class ApiClient(
     suspend fun <T> get(path: List<String>, response: DeserializationStrategy<T>): ApiResult<T> =
         call(HttpMethod.GET, path, null) { readJson(it) { text -> json.decodeFromString(response, text) } }
 
+    /** A JSON-body call; [query] parameters (e.g. `PUT /api/snippets/{id}?canvas_id=`) go on the URL. */
     suspend fun <B, T> send(
         method: HttpMethod,
         path: List<String>,
         body: B,
         bodySerializer: SerializationStrategy<B>,
         response: DeserializationStrategy<T>,
-    ): ApiResult<T> = call(method, path, json.encodeToString(bodySerializer, body).toRequestBody(JSON_MEDIA_TYPE)) {
+        query: List<Pair<String, String>> = emptyList(),
+    ): ApiResult<T> = call(method, path, json.encodeToString(bodySerializer, body).toRequestBody(JSON_MEDIA_TYPE), query = query) {
         readJson(it) { text -> json.decodeFromString(response, text) }
     }
 

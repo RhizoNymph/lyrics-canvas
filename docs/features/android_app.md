@@ -16,6 +16,9 @@ touch. Lives in `android/` of this repo.
 - Voice capture: record a take from the canvas or editor, transcribed by the server into a new snippet
   or appended lines, with the recordings listed, played and checked (Check transcript) in the editor, and the
   voice dataset stats in the canvas list overflow: [android_voice_capture.md](./android_voice_capture.md).
+- Canvas rename and snippet placements: rename from the list or the canvas title, move / also show
+  snippets on another canvas, remove from this canvas vs delete everywhere, the "⧉ N" badge and the
+  editor's "Also on": [android_snippet_placements.md](./android_snippet_placements.md).
 
 ## Non-scope
 

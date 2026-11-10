@@ -59,6 +59,8 @@ internal fun GridEditorScreen(
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     topBarActions: @Composable RowScope.() -> Unit = {},
+    /** Above the rows (the host's "Also on: …" line). */
+    header: @Composable () -> Unit = {},
     bottomPanel: @Composable () -> Unit = {},
 ) {
     val save = state.save
@@ -96,6 +98,7 @@ internal fun GridEditorScreen(
                 .consumeWindowInsets(padding)
                 .imePadding(),
         ) {
+            header()
             EditorRows(state, actions, Modifier.weight(1f))
             bottomPanel()
             HintBar(state)

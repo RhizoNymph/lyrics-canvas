@@ -12,6 +12,7 @@ import dev.nymph.lyrics.data.repository.HttpAuthRepository
 import dev.nymph.lyrics.data.repository.HttpCanvasRepository
 import dev.nymph.lyrics.data.repository.HttpNlpRepository
 import dev.nymph.lyrics.data.repository.HttpSnippetRepository
+import dev.nymph.lyrics.app.canvaslist.CanvasUpdates
 import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
@@ -79,6 +80,9 @@ class AppContainer(
 
     val auth: AuthRepository = HttpAuthRepository(api, tokenStore)
     val canvases: CanvasRepository = HttpCanvasRepository(api)
+
+    /** Canvases renamed or created away from the canvas list, for the list on the back stack. */
+    val canvasUpdates: CanvasUpdates = CanvasUpdates()
     val snippets: SnippetRepository = HttpSnippetRepository(api)
     val nlp: NlpRepository = HttpNlpRepository(api)
     val tags: TagRepository = HttpTagRepository(api)

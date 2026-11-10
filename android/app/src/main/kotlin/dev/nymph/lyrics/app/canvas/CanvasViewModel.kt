@@ -3,6 +3,11 @@ package dev.nymph.lyrics.app.canvas
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.nymph.lyrics.app.canvas.placements.PlacementCanvasPort
+import dev.nymph.lyrics.app.canvas.placements.userMessage
+import dev.nymph.lyrics.app.canvas.rename.CanvasRenamer
+import dev.nymph.lyrics.app.canvas.rename.RenameDialog
+import dev.nymph.lyrics.app.canvaslist.CanvasUpdates
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasPort
 import dev.nymph.lyrics.app.rhyme.RhymeCanvasView
 import dev.nymph.lyrics.app.tags.TagCanvasPort
@@ -19,12 +24,17 @@ import dev.nymph.lyrics.logic.canvas.hitTestScreen
 import dev.nymph.lyrics.logic.canvas.toMergeError
 import dev.nymph.lyrics.logic.canvas.viewportCenter
 import dev.nymph.lyrics.logic.list.ListOrder
+import dev.nymph.lyrics.logic.placements.RemovalPlan
+import dev.nymph.lyrics.logic.placements.applyTransfer
+import dev.nymph.lyrics.logic.placements.toPlacementError
+import dev.nymph.lyrics.logic.placements.withCanvasRenamed
 import dev.nymph.lyrics.logic.tags.TagFilter
 import dev.nymph.lyrics.logic.tags.withTagDeleted
 import dev.nymph.lyrics.logic.tags.withTagEdited
 import dev.nymph.lyrics.logic.tags.withTagLinked
 import dev.nymph.lyrics.logic.tags.withTagUnlinked
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.MergeMode
 import dev.nymph.lyrics.model.MergeRequest
 import dev.nymph.lyrics.model.PositionUpdate
@@ -34,6 +44,7 @@ import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
 import dev.nymph.lyrics.model.Tag
 import dev.nymph.lyrics.model.TagId
+import dev.nymph.lyrics.model.TransferResponse
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.VoiceTakeResponse
@@ -73,8 +84,14 @@ const val CANVAS_MODE_KEY: String = "canvas_mode"
  * ([CanvasUiState.Ready.visibleSnippets]) and deselects them; picker links, renames and deletes
  * update the snippets' embedded tags.
  *
+ * Placements: every layout save names this canvas; plain Delete removes the selection from this
+ * canvas only ([deleteSelected], deleted for good where it was the last canvas), [deleteEverywhereSelected]
+ * deletes it from every canvas; [PlacementCanvasPort] applies transfers from the picker; the title is
+ * renamed through [rename]. There is no undo on Android, so nothing needs clearing after these.
+ *
  * @param persistScope outlives this ViewModel, so a viewport save started on leave completes
  * @param savedState keeps the canvas / list mode across configuration changes and process death
+ * @param canvasUpdates tells the canvas list about a rename
  */
 class CanvasViewModel(
     private val canvasId: CanvasId,
@@ -83,7 +100,8 @@ class CanvasViewModel(
     private val persistScope: CoroutineScope,
     private val viewportSaveDelayMs: Long = VIEWPORT_SAVE_DELAY_MS,
     private val savedState: SavedStateHandle = SavedStateHandle(),
-) : ViewModel(), RhymeCanvasPort, TagCanvasPort, WordBankCanvasPort {
+    canvasUpdates: CanvasUpdates = CanvasUpdates(),
+) : ViewModel(), RhymeCanvasPort, TagCanvasPort, WordBankCanvasPort, PlacementCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
 
@@ -98,6 +116,13 @@ class CanvasViewModel(
     /** The filter in force, also before the canvas loads (the saved filter may arrive first). */
     private var tagFilter: TagFilter = TagFilter.Everything
     private var viewportSaveJob: Job? = null
+
+    private val renamer = CanvasRenamer(canvases, viewModelScope, canvasUpdates) { canvas ->
+        updateReady { it.copy(title = canvas.title, snippets = withCanvasRenamed(it.snippets, canvas.id, canvas.title)) }
+    }
+
+    /** The title's rename dialog. */
+    val rename: StateFlow<RenameDialog> = renamer.state
 
     init {
         reload()
@@ -255,7 +280,7 @@ class CanvasViewModel(
         val moved = snippet(id) ?: return
         if (moved.positionX == origin.x && moved.positionY == origin.y) return
         viewModelScope.launch {
-            val result = snippets.batchPosition(listOf(PositionUpdate(id, moved.positionX, moved.positionY)))
+            val result = snippets.batchPosition(canvasId, listOf(PositionUpdate(id, moved.positionX, moved.positionY)))
             if (result is ApiResult.Failure) {
                 updateReady { ready ->
                     ready.copy(snippets = ready.snippets.map { if (it.id == id) it.copy(positionX = origin.x, positionY = origin.y) else it })
@@ -284,7 +309,9 @@ class CanvasViewModel(
             when (val result = snippets.merge(ready.canvasId, request)) {
                 is ApiResult.Success -> {
                     val merged = result.value
-                    val deleted = merged.deletedIds.toSet()
+                    // The merged snippet replaces every original on this canvas; one also placed
+                    // elsewhere keeps those placements (it may be missing from deleted_ids).
+                    val deleted = merged.deletedIds.toSet() + request.snippetIds
                     updateReady { current ->
                         current.copy(
                             snippets = current.snippets.filter { it.id !in deleted && it.id != merged.snippet.id } + merged.snippet,
@@ -304,24 +331,55 @@ class CanvasViewModel(
         }
     }
 
-    fun deleteSelected() {
+    /**
+     * Plain Delete: remove each selected snippet from this canvas
+     * (`DELETE /api/canvases/{cid}/snippets/{sid}`, in parallel). One on other canvases stays there;
+     * one only here is deleted for good. Removed ones leave the view, the rest stay selected; the
+     * first error goes to the snackbar. The UI confirms first when [RemovalPlan.needsConfirm].
+     */
+    fun deleteSelected() = removeSelectedWith { id -> snippets.removeFromCanvas(canvasId, id).errorOrNull() }
+
+    /** Delete everywhere (`DELETE /api/snippets/{id}`): every placement and recording goes. The UI always confirms. */
+    fun deleteEverywhereSelected() = removeSelectedWith { id -> snippets.deleteEverywhere(id).errorOrNull() }
+
+    private fun removeSelectedWith(call: suspend (SnippetId) -> ApiError?) {
         val ready = ready() ?: return
         if (ready.busy) return
         val ids = ready.selection.ids.filter { it in ready.byId }
         if (ids.isEmpty()) return
         updateReady { it.copy(busy = true) }
         viewModelScope.launch {
-            val results = ids.map { id -> async { id to snippets.delete(id) } }.awaitAll()
-            val deleted = results.filter { it.second is ApiResult.Success }.map { it.first }.toSet()
+            val results = ids.map { id -> async { id to call(id) } }.awaitAll()
+            val removed = results.filter { it.second == null }.map { it.first }.toSet()
             updateReady { current ->
                 current.copy(
-                    snippets = current.snippets.filter { it.id !in deleted },
-                    selection = Selection.of(current.selection.ids - deleted),
+                    snippets = current.snippets.filter { it.id !in removed },
+                    selection = Selection.of(current.selection.ids - removed),
                     busy = false,
                 )
             }
-            results.firstNotNullOfOrNull { it.second.errorOrNull() }?.let { message(it.userMessage()) }
+            results.firstNotNullOfOrNull { it.second }?.let { message(toPlacementError(it).userMessage()) }
         }
+    }
+
+    // ---- Rename ----
+
+    /** Tap on the title: open the rename dialog with the current title. */
+    fun startRename() {
+        val ready = ready() ?: return
+        renamer.open(ready.canvasId, ready.title)
+    }
+
+    fun submitRename(text: String) = renamer.submit(text)
+
+    fun dismissRename() = renamer.dismiss()
+
+    // ---- PlacementCanvasPort ----
+
+    override fun onTransferred(response: TransferResponse, target: CanvasRef) = updateReady { ready ->
+        val next = applyTransfer(ready.snippets, response, target)
+        val left = next.mapTo(HashSet()) { it.id }
+        ready.copy(snippets = next, selection = Selection.of(ready.selection.ids.filterTo(LinkedHashSet()) { it in left }))
     }
 
     // ---- Creating and replacing snippets ----

@@ -20,6 +20,9 @@ object Samples {
         "stress":"01","syllable_count":2,"rhyme_key":["OW"],"rhyme_keys":{"1":["OW"]}}],"overrides":{}}"""
 
     const val SNIPPET = """{"id":"5a1e0000-0000-4000-8000-000000000001","canvas_id":"c0ffee00-0000-4000-8000-000000000001",
+        "placement_id":"91ace000-0000-4000-8000-000000000001",
+        "canvases":[{"id":"c0ffee00-0000-4000-8000-000000000002","title":"Chorus ideas"},
+          {"id":"c0ffee00-0000-4000-8000-000000000001","title":"Night drive"}],
         "snippet_type":"verse","grid_mode":"fixed","beats_per_line":8,
         "grid_data":{"lines":[{"cells":[{"syllable":"hel","stress":0,"word_index":0,"word":"hello"},
           {"syllable":"lo","stress":1,"word_index":0,"word":"hello"},{"rest":true},
@@ -36,6 +39,8 @@ object Samples {
 
     /** A freshly created, empty snippet: no grid lines, no phonetics, no tags or group. */
     const val SNIPPET_BARE = """{"id":"5a1e0000-0000-4000-8000-000000000002","canvas_id":"c0ffee00-0000-4000-8000-000000000001",
+        "placement_id":"91ace000-0000-4000-8000-000000000002",
+        "canvases":[{"id":"c0ffee00-0000-4000-8000-000000000001","title":"Night drive"}],
         "snippet_type":"freestyle","grid_mode":"auto","beats_per_line":null,"grid_data":{"lines":[]},"raw_text":"",
         "position_x":0,"position_y":0,"width":200,"height":80,"z_index":0,"group_id":null,"tags":[],
         "phonetics":null,"derived_from":null,"created_at":"2026-09-01","updated_at":"2026-09-01","content_updated_at":"2026-09-01"}"""
@@ -67,6 +72,12 @@ object Samples {
                        {"cand_index":0,"anchor_index":null,"nucleus":0.0,"coda":0.0,"onset":0.0,"total":0.0}],
           "source":"dictionary"}],
         "total":41,"elapsed_ms":12.5}"""
+
+    const val TRANSFER = """{"target_canvas_id":"c0ffee00-0000-4000-8000-000000000002",
+        "placed":["5a1e0000-0000-4000-8000-000000000001"],"already_on_target":["5a1e0000-0000-4000-8000-000000000002"],
+        "removed_from_source":true}"""
+
+    const val REMOVE_PLACEMENT = """{"snippet_deleted":false}"""
 
     const val MERGE = """{"snippet":$SNIPPET,"deleted_ids":["5a1e0000-0000-4000-8000-000000000003","5a1e0000-0000-4000-8000-000000000004"]}"""
 }
