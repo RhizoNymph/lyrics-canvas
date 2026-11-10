@@ -35,6 +35,7 @@ def captured(monkeypatch) -> dict:
         seen.update(kwargs)
         return SimpleNamespace(
             id=uuid.uuid4(),
+            placement_id=uuid.uuid4(),
             canvas_id=uuid.UUID(canvas_id),
             snippet_type=kwargs["snippet_type"],
             grid_mode=kwargs["grid_mode"],
@@ -53,6 +54,7 @@ def captured(monkeypatch) -> dict:
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)

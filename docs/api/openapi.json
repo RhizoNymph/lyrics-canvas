@@ -380,6 +380,42 @@
         "title": "BankWordsResponse",
         "type": "object"
       },
+      "BatchPositionItem": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "BatchPositionItem",
+        "type": "object"
+      },
       "BatchPositionResult": {
         "properties": {
           "updated": {
@@ -394,17 +430,23 @@
         "type": "object"
       },
       "BatchPositionUpdate": {
+        "description": "Positions of placements on ``canvas_id`` (required; applies to every update).",
         "properties": {
+          "canvas_id": {
+            "format": "uuid",
+            "title": "Canvas Id",
+            "type": "string"
+          },
           "updates": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/BatchPositionItem"
             },
             "title": "Updates",
             "type": "array"
           }
         },
         "required": [
+          "canvas_id",
           "updates"
         ],
         "title": "BatchPositionUpdate",
@@ -1117,6 +1159,36 @@
         "title": "MergeResponse",
         "type": "object"
       },
+      "PlacementErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "PlacementErrorBody",
+        "type": "object"
+      },
+      "PlacementErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/PlacementErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "PlacementErrorResponse",
+        "type": "object"
+      },
       "PronunciationOverride": {
         "properties": {
           "syllables": {
@@ -1389,6 +1461,19 @@
           "results"
         ],
         "title": "RelatedWordsResponse",
+        "type": "object"
+      },
+      "RemovePlacementResponse": {
+        "properties": {
+          "snippet_deleted": {
+            "title": "Snippet Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "snippet_deleted"
+        ],
+        "title": "RemovePlacementResponse",
         "type": "object"
       },
       "RhymeCandidateModel": {
@@ -2073,6 +2158,24 @@
         "title": "SnippetAnchor",
         "type": "object"
       },
+      "SnippetCanvasRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SnippetCanvasRef",
+        "type": "object"
+      },
       "SnippetCreate": {
         "properties": {
           "beats_per_line": {
@@ -2182,6 +2285,7 @@
         "type": "object"
       },
       "SnippetResponse": {
+        "description": "A snippet in the context of one canvas: content is shared by every canvas holding it;\n``canvas_id, position_x, position_y, width, height, z_index, group_id`` and ``placement_id``\nare that canvas's placement. ``canvases`` lists every canvas holding the snippet (including\nthis one), sorted by lower-cased title, then id.",
         "properties": {
           "beats_per_line": {
             "anyOf": [
@@ -2197,6 +2301,14 @@
           "canvas_id": {
             "title": "Canvas Id",
             "type": "string"
+          },
+          "canvases": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SnippetCanvasRef"
+            },
+            "title": "Canvases",
+            "type": "array"
           },
           "content_updated_at": {
             "title": "Content Updated At",
@@ -2258,6 +2370,10 @@
               }
             ]
           },
+          "placement_id": {
+            "title": "Placement Id",
+            "type": "string"
+          },
           "position_x": {
             "title": "Position X",
             "type": "number"
@@ -2296,6 +2412,7 @@
         },
         "required": [
           "id",
+          "placement_id",
           "canvas_id",
           "snippet_type",
           "grid_mode",
@@ -2313,7 +2430,8 @@
           "derived_from",
           "created_at",
           "updated_at",
-          "content_updated_at"
+          "content_updated_at",
+          "canvases"
         ],
         "title": "SnippetResponse",
         "type": "object"
@@ -2914,6 +3032,77 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "TransferMode": {
+        "enum": [
+          "move",
+          "show"
+        ],
+        "title": "TransferMode",
+        "type": "string"
+      },
+      "TransferRequest": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/TransferMode"
+          },
+          "snippet_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Snippet Ids",
+            "type": "array"
+          },
+          "target_canvas_id": {
+            "format": "uuid",
+            "title": "Target Canvas Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snippet_ids",
+          "target_canvas_id",
+          "mode"
+        ],
+        "title": "TransferRequest",
+        "type": "object"
+      },
+      "TransferResponse": {
+        "properties": {
+          "already_on_target": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Already On Target",
+            "type": "array"
+          },
+          "placed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placed",
+            "type": "array"
+          },
+          "removed_from_source": {
+            "title": "Removed From Source",
+            "type": "boolean"
+          },
+          "target_canvas_id": {
+            "title": "Target Canvas Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_canvas_id",
+          "placed",
+          "already_on_target",
+          "removed_from_source"
+        ],
+        "title": "TransferResponse",
+        "type": "object"
+      },
       "UserResponse": {
         "properties": {
           "created_at": {
@@ -3372,11 +3561,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -3554,11 +3743,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -3733,7 +3922,7 @@
     },
     "/api/canvases/{canvas_id}/merge": {
       "post": {
-        "description": "Replace two or more snippets with one merged snippet (see docs/features/merge_blocks.md).",
+        "description": "Replace two or more snippets on this canvas with one merged snippet (see\ndocs/features/merge_blocks.md). ``deleted_ids`` are the originals taken off this canvas; one\nalso placed on other canvases stays there unchanged with its recordings.",
         "operationId": "merge_snippets_api_canvases__canvas_id__merge_post",
         "parameters": [
           {
@@ -3927,6 +4116,16 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3949,8 +4148,147 @@
         ]
       }
     },
+    "/api/canvases/{canvas_id}/snippets/transfer": {
+      "post": {
+        "description": "Place snippets of this canvas on ``target_canvas_id`` (same position and size, stacked on\ntop, ungrouped); ``move`` also removes them from this canvas. All or nothing.",
+        "operationId": "transfer_snippets_api_canvases__canvas_id__snippets_transfer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Transfer Snippets",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
+    "/api/canvases/{canvas_id}/snippets/{snippet_id}": {
+      "delete": {
+        "description": "Take the snippet off this canvas; when that was its last canvas it is deleted for good.",
+        "operationId": "remove_snippet_from_canvas_api_canvases__canvas_id__snippets__snippet_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Canvas Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovePlacementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Snippet From Canvas",
+        "tags": [
+          "snippets"
+        ]
+      }
+    },
     "/api/canvases/{canvas_id}/tsne": {
       "post": {
+        "description": "t-SNE positions for the snippets placed on the canvas. A preview: the clients show them\nand restore the saved layout on exit, so nothing is written (layout saves go through PUT and\nbatch-position with this canvas_id).",
         "operationId": "tsne_layout_api_canvases__canvas_id__tsne_post",
         "parameters": [
           {
@@ -4770,6 +5108,7 @@
     },
     "/api/snippets/{snippet_id}": {
       "delete": {
+        "description": "Delete everywhere: the snippet, all its placements and its recordings.",
         "operationId": "delete_snippet_api_snippets__snippet_id__delete",
         "parameters": [
           {
@@ -4777,6 +5116,7 @@
             "name": "snippet_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Snippet Id",
               "type": "string"
             }
@@ -4808,6 +5148,7 @@
         ]
       },
       "put": {
+        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id) update the placement on ``canvas_id``.",
         "operationId": "update_snippet_api_snippets__snippet_id__put",
         "parameters": [
           {
@@ -4816,6 +5157,18 @@
             "required": true,
             "schema": {
               "title": "Snippet Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "the canvas whose placement takes the layout fields; the response is in its context",
+            "in": "query",
+            "name": "canvas_id",
+            "required": true,
+            "schema": {
+              "description": "the canvas whose placement takes the layout fields; the response is in its context",
+              "format": "uuid",
+              "title": "Canvas Id",
               "type": "string"
             }
           }
@@ -4840,6 +5193,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -4935,6 +5298,7 @@
             "name": "snippet_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Snippet Id",
               "type": "string"
             }
@@ -4950,6 +5314,25 @@
               "title": "Top K",
               "type": "integer"
             }
+          },
+          {
+            "description": "compare with the snippets placed on this canvas; default: every canvas holding the snippet",
+            "in": "query",
+            "name": "canvas_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "compare with the snippets placed on this canvas; default: every canvas holding the snippet",
+              "title": "Canvas Id"
+            }
           }
         ],
         "responses": {
@@ -4960,6 +5343,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {

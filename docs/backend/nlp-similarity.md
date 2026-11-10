@@ -47,13 +47,15 @@ def compute_tfidf_similarity(
 ### Route
 
 ```
-GET /api/snippets/{snippet_id}/similar?top_k=10  (requires auth)
-Validation: top_k in [1, 50]
+GET /api/snippets/{snippet_id}/similar?top_k=10[&canvas_id=<uuid>]  (requires auth)
+Validation: top_k in [1, 50]; snippet_id and canvas_id are UUIDs
 ```
 
 Flow:
-1. Fetch target snippet (verify ownership via Canvas.owner_id)
-2. Fetch all other non-empty snippets in the same canvas
+1. Fetch target snippet (verify ownership via `Snippet.owner_id`; 404 `Snippet not found`)
+2. Fetch all other non-empty snippets placed on `canvas_id` (the target must be placed there, else 404
+   `placement_not_found`), or, without `canvas_id`, on any canvas holding the target, each once
+   ([snippet_placements.md](../features/snippet_placements.md#canvas-scoped-readers))
 3. Compute TF-IDF similarity
 4. Enrich results with snippet_type
 

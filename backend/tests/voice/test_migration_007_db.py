@@ -111,6 +111,6 @@ def test_downgrade_drops_all_six_columns_and_upgrade_restores_them():
     alembic("downgrade", "006")
     assert not (NEW_COLUMNS & set(columns()))
     assert one("SELECT count(*) FROM snippet_recordings WHERE id = :id", id=OLD)[0][0] == 1
-    alembic("upgrade", "head")
+    alembic("upgrade", "007")
     assert NEW_COLUMNS <= set(columns())
     assert one("SELECT version_num FROM alembic_version")[0][0] == "007"

@@ -11,6 +11,7 @@ from app.models import Base
 from app.api.auth import router as auth_router
 from app.api.canvases import router as canvases_router
 from app.api.snippets import router as snippets_router
+from app.api.placements import router as placements_router
 from app.api.merge import router as merge_router
 from app.api.groups import router as groups_router
 from app.api.tags import router as tags_router
@@ -57,6 +58,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(canvases_router)
 app.include_router(snippets_router)
+app.include_router(placements_router)
 app.include_router(merge_router)
 app.include_router(groups_router)
 app.include_router(tags_router)

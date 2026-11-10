@@ -62,8 +62,10 @@ class SnippetNotFoundError(RhymeSuggestError):
 
 @dataclass(frozen=True, slots=True)
 class SnippetRecord:
+    """One snippet the user owns: content only (a snippet can be on several canvases)."""
+
     id: str
-    canvas_id: str
+    owner_id: str
     raw_text: str
     grid_data: dict | None
     phonetics: dict | None
@@ -90,7 +92,7 @@ def _as_uuid(value: str) -> uuid.UUID | None:
 def _record(snippet: Snippet) -> SnippetRecord:
     return SnippetRecord(
         id=str(snippet.id),
-        canvas_id=str(snippet.canvas_id),
+        owner_id=str(snippet.owner_id),
         raw_text=snippet.raw_text or "",
         grid_data=snippet.grid_data,
         phonetics=snippet.phonetics,
@@ -116,7 +118,7 @@ class DbSnippetRepository:
         if sid is None or uid is None:
             return None
         result = await self._db.execute(
-            select(Snippet).join(Canvas).options(selectinload(Snippet.tags)).where(Snippet.id == sid, Canvas.owner_id == uid)
+            select(Snippet).options(selectinload(Snippet.tags)).where(Snippet.id == sid, Snippet.owner_id == uid)
         )
         snippet = result.scalar_one_or_none()
         return _record(snippet) if snippet is not None else None
@@ -126,8 +128,11 @@ class DbSnippetRepository:
         if uid is None:
             return []
         result = await self._db.execute(
-            select(Snippet).join(Canvas).options(selectinload(Snippet.tags)).where(Canvas.owner_id == uid, Snippet.raw_text != "")
+            select(Snippet).options(selectinload(Snippet.tags))
+            .where(Snippet.owner_id == uid, Snippet.raw_text != "")
+            .order_by(Snippet.created_at, Snippet.id)
         )
+        # one row per snippet (owner_id, not placements), so a snippet on several canvases counts once
         return [_record(s) for s in result.scalars().all()]
 
 
