@@ -33,6 +33,8 @@ object Palette {
     val Shadow = Color.Black.copy(alpha = 0.25f)
     val SelectionBorder = Color.White.copy(alpha = 0.9f)
     val Strip = Color(0xFF242448)
+    /** The "⧉ N" badge of a snippet on several canvases. */
+    val LinkBadge = Color.Black.copy(alpha = 0.35f)
 
     /** SNIPPET_TYPE_COLORS in frontend/src/types/index.ts. */
     fun snippetType(type: SnippetType): Color = when (type) {

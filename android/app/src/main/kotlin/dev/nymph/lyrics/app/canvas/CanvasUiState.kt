@@ -4,9 +4,14 @@ import dev.nymph.lyrics.logic.canvas.MergeError
 import dev.nymph.lyrics.logic.canvas.ViewSize
 import dev.nymph.lyrics.logic.canvas.Viewport
 import dev.nymph.lyrics.logic.list.ListOrder
+import dev.nymph.lyrics.logic.placements.DeleteEverywherePlan
+import dev.nymph.lyrics.logic.placements.RemovalPlan
+import dev.nymph.lyrics.logic.placements.otherCanvases
+import dev.nymph.lyrics.logic.placements.sortCanvasRefs
 import dev.nymph.lyrics.logic.tags.TagFilter
 import dev.nymph.lyrics.logic.tags.matches
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetId
 
@@ -83,6 +88,22 @@ sealed interface CanvasUiState {
         /** The snippets [filter] matches, in [snippets] order: what the canvas draws and hit-tests. */
         val visibleSnippets: List<Snippet> by lazy {
             if (filter == TagFilter.Everything) snippets else snippets.filter { filter.matches(it) }
+        }
+
+        /** The selected snippets that are loaded, in [snippets] order. */
+        val selectedSnippets: List<Snippet> by lazy {
+            val ids = selection.ids
+            if (ids.isEmpty()) emptyList() else snippets.filter { it.id in ids }
+        }
+
+        /** Plain Delete on the selection (its label and confirm), or null with nothing selected. */
+        val removalPlan: RemovalPlan? by lazy { RemovalPlan.of(selectedSnippets) }
+
+        val deleteEverywherePlan: DeleteEverywherePlan? by lazy { DeleteEverywherePlan.of(selectedSnippets) }
+
+        /** Every other canvas holding a selected snippet (the badge's list), in the server's order. */
+        val selectionOtherCanvases: List<CanvasRef> by lazy {
+            sortCanvasRefs(selectedSnippets.flatMap(::otherCanvases).distinctBy { it.id })
         }
 
         /** List-mode rows ([ListOrder.arrange] of [visibleSnippets]); empty on the canvas. Computed on first read. */

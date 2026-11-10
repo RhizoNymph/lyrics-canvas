@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 /** Delay between the last text change and the API syllabify call (as the web editor). */
 const val SYLLABIFY_DEBOUNCE_MS: Long = 300
 
-/** The `PUT /api/snippets/{id}` body for the current editor state. */
+/** The `PUT /api/snippets/{id}?canvas_id=` body for the current editor state (content fields only). */
 fun saveRequest(state: EditorUiState): SnippetUpdateRequest = SnippetUpdateRequest(
     snippetType = state.snippetType,
     gridData = state.rows.gridData,
@@ -211,7 +211,7 @@ class GridEditorViewModel(
         _state.update { it.copy(save = SaveStatus.Saving) }
         val body = saveRequest(current)
         viewModelScope.launch {
-            val status = when (val result = snippets.update(snippet.id, body)) {
+            val status = when (val result = snippets.update(snippet.canvasId, snippet.id, body)) {
                 is ApiResult.Success -> SaveStatus.Saved(result.value)
                 is ApiResult.Failure -> SaveStatus.Failed(result.error)
             }
@@ -237,7 +237,7 @@ class GridEditorViewModel(
         if (current.isSaving) return ApiResult.Success(baseline)
         val body = saveRequest(current)
         if (body == saveRequest(EditorUiState.initial(baseline))) return ApiResult.Success(baseline)
-        val result = snippets.update(snippet.id, body)
+        val result = snippets.update(snippet.canvasId, snippet.id, body)
         if (result is ApiResult.Success) baseline = result.value
         return result
     }

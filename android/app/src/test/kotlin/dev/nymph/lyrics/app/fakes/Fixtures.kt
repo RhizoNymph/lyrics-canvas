@@ -3,10 +3,12 @@ package dev.nymph.lyrics.app.fakes
 import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.model.CanvasDetail
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
 import dev.nymph.lyrics.model.GridMode
+import dev.nymph.lyrics.model.PlacementId
 import dev.nymph.lyrics.model.Provenance
 import dev.nymph.lyrics.model.RhymeCandidate
 import dev.nymph.lyrics.model.RhymeSuggestResponse
@@ -51,9 +53,11 @@ fun snippet(
     tags: List<Tag> = emptyList(),
     createdAt: String = "",
     contentUpdatedAt: String = "",
+    canvases: List<CanvasRef> = listOf(CanvasRef(CANVAS_ID, "Song")),
 ): Snippet = Snippet(
     id = SnippetId(id),
     canvasId = CANVAS_ID,
+    placementId = PlacementId("p-$id"),
     snippetType = type,
     gridMode = GridMode.AUTO,
     gridData = lines?.let { GridData(it) },
@@ -67,6 +71,7 @@ fun snippet(
     createdAt = createdAt,
     updatedAt = "",
     contentUpdatedAt = contentUpdatedAt,
+    canvases = canvases,
 )
 
 fun tag(name: String, color: String = "#ff0000"): Tag = Tag(TagId("t-$name"), name, color)

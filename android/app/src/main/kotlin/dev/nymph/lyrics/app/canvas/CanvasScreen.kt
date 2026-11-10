@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,7 +22,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -48,6 +46,17 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.canvas.gesture.CanvasGestureAction
 import dev.nymph.lyrics.app.canvas.list.SnippetList
+import dev.nymph.lyrics.app.canvas.placements.TransferEvent
+import dev.nymph.lyrics.app.canvas.placements.TransferViewModel
+import dev.nymph.lyrics.app.canvas.placements.actionLabel
+import dev.nymph.lyrics.app.canvas.placements.ui.CanvasPickerSheet
+import dev.nymph.lyrics.app.canvas.placements.ui.DeleteEverywhereDialog
+import dev.nymph.lyrics.app.canvas.placements.ui.OtherCanvasesDialog
+import dev.nymph.lyrics.app.canvas.placements.ui.RemovalConfirmDialog
+import dev.nymph.lyrics.app.canvas.rename.RenameCanvasDialog
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import dev.nymph.lyrics.model.TransferMode
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.di.ProcessScope
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
@@ -83,7 +92,14 @@ fun canvasViewModel(
     canvasId: CanvasId,
     owner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current),
 ): CanvasViewModel = viewModel(owner) {
-    CanvasViewModel(canvasId, container.canvases, container.snippets, ProcessScope.scope, savedState = createSavedStateHandle())
+    CanvasViewModel(
+        canvasId,
+        container.canvases,
+        container.snippets,
+        ProcessScope.scope,
+        savedState = createSavedStateHandle(),
+        canvasUpdates = container.canvasUpdates,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,8 +110,15 @@ fun CanvasScreen(
     onBack: () -> Unit,
     onOpenEditor: (SnippetId) -> Unit,
     onOpenWordBank: () -> Unit = {},
+    /** Open another canvas (a transfer's snackbar "Open", the badge's canvas list). */
+    onOpenCanvas: (CanvasId) -> Unit = {},
 ) {
     val vm = canvasViewModel(container, canvasId)
+    val transferVm: TransferViewModel = viewModel {
+        TransferViewModel(canvasId, container.canvases, container.snippets, vm, container.canvasUpdates)
+    }
+    val transfer by transferVm.state.collectAsStateWithLifecycle()
+    val rename by vm.rename.collectAsStateWithLifecycle()
     val quickAdd = wordBankQuickAdd(container)
     QuickAddToasts(quickAdd)
     val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets) }
@@ -107,6 +130,8 @@ fun CanvasScreen(
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteEverywhere by rememberSaveable { mutableStateOf(false) }
+    var showCanvases by rememberSaveable { mutableStateOf(false) }
     val voice = voiceCaptureViewModel(container, canvasId, key = "voice-canvas")
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -119,6 +144,16 @@ fun CanvasScreen(
                 is CanvasEvent.RevealSnippet -> {
                     val index = (vm.state.value as? CanvasUiState.Ready)?.listRows?.indexOfFirst { it.id == event.snippetId } ?: -1
                     if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                }
+            }
+        }
+    }
+    LaunchedEffect(transferVm) {
+        transferVm.events.collect { event ->
+            when (event) {
+                is TransferEvent.Done -> scope.launch {
+                    val result = snackbar.showSnackbar(event.text, actionLabel = "Open", duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) onOpenCanvas(event.target)
                 }
             }
         }
@@ -158,9 +193,22 @@ fun CanvasScreen(
                         busy = ready?.busy == true,
                         onExit = vm::exitSelection,
                         onMerge = vm::merge,
-                        onDelete = { confirmDelete = true },
+                        onDelete = {
+                            val plan = ready?.removalPlan
+                            if (plan != null) {
+                                if (plan.needsConfirm) confirmDelete = true else vm.deleteSelected()
+                            }
+                        },
                         onRhymes = rhymeVm::open,
                         onTags = { tagsVm.openPicker(selection.ids) },
+                        placements = SelectionPlacementActions(
+                            deleteLabel = ready?.removalPlan?.actionLabel() ?: "Delete",
+                            onOtherCanvases = ready?.selectionOtherCanvases?.isNotEmpty() == true,
+                            onMoveTo = { transferVm.open(TransferMode.MOVE, selection.ids) },
+                            onAlsoShow = { transferVm.open(TransferMode.SHOW, selection.ids) },
+                            onShowCanvases = { showCanvases = true },
+                            onDeleteEverywhere = { confirmDeleteEverywhere = true },
+                        ),
                     )
                 } else {
                     CanvasTopBar(
@@ -172,6 +220,7 @@ fun CanvasScreen(
                         onToggleRhymes = toggleRhymes,
                         onRecord = if (ready != null) ({ vm.voiceTarget()?.let(voice::open) }) else null,
                         onWordBank = if (ready != null) onOpenWordBank else null,
+                        onRename = if (ready != null) vm::startRename else null,
                     )
                 }
             },
@@ -245,19 +294,40 @@ fun CanvasScreen(
     VoiceCaptureHost(voice)
     TagPickerSheet(tags, tagsVm)
 
-    if (confirmDelete) {
-        val count = selection.ids.size
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text(if (count == 1) "Delete snippet?" else "Delete $count snippets?") },
-            text = { Text("This cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    vm.deleteSelected()
-                }) { Text("Delete", color = Palette.Error) }
+    CanvasPickerSheet(transfer, transferVm)
+    RenameCanvasDialog(rename, onSubmit = vm::submitRename, onDismiss = vm::dismissRename)
+
+    val removal = ready?.removalPlan
+    if (confirmDelete && removal != null) {
+        RemovalConfirmDialog(
+            plan = removal,
+            onConfirm = {
+                confirmDelete = false
+                vm.deleteSelected()
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            onDismiss = { confirmDelete = false },
+        )
+    }
+    val everywhere = ready?.deleteEverywherePlan
+    if (confirmDeleteEverywhere && everywhere != null) {
+        DeleteEverywhereDialog(
+            plan = everywhere,
+            onConfirm = {
+                confirmDeleteEverywhere = false
+                vm.deleteEverywhereSelected()
+            },
+            onDismiss = { confirmDeleteEverywhere = false },
+        )
+    }
+    val others = ready?.selectionOtherCanvases.orEmpty()
+    if (showCanvases && others.isNotEmpty()) {
+        OtherCanvasesDialog(
+            canvases = others,
+            onOpen = { id ->
+                showCanvases = false
+                onOpenCanvas(id)
+            },
+            onDismiss = { showCanvases = false },
         )
     }
 }

@@ -16,6 +16,7 @@ import dev.nymph.lyrics.model.CanvasDetail
 import dev.nymph.lyrics.model.MergeMode
 import dev.nymph.lyrics.model.MergeResponse
 import dev.nymph.lyrics.model.PositionUpdate
+import dev.nymph.lyrics.model.RemovePlacementResponse
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.ViewportState
@@ -321,14 +322,14 @@ class CanvasViewModelTest {
     @Test
     fun `delete removes the selected snippets that the server deleted`() = runTest(main.dispatcher) {
         val snippets = FakeSnippetRepository().apply {
-            deleteResult = { id -> if (id == b.id) ApiResult.Failure(ApiError.Server(500, "boom")) else ApiResult.Success(Unit) }
+            removeResult = { id -> if (id == b.id) ApiResult.Failure(ApiError.Server(500, "boom")) else ApiResult.Success(RemovePlacementResponse(true)) }
         }
         val vm = vm(snippets = snippets)
         vm.onLongPress(a.id)
         vm.onTap(b.id)
         vm.deleteSelected()
         runCurrent()
-        assertEquals(setOf(a.id, b.id), snippets.deleted.toSet())
+        assertEquals(setOf(a.id, b.id), snippets.removed.toSet())
         assertEquals(listOf(b, c), vm.ready().snippets)
         assertEquals(setOf(b.id), vm.selected())
     }

@@ -107,6 +107,15 @@ fun DrawScope.drawCard(
             )
         }
 
+        layout.linkBadge?.let { badge ->
+            drawRoundRect(
+                Palette.LinkBadge,
+                topLeft = badge.bounds.offset(),
+                size = badge.bounds.size(),
+                cornerRadius = CornerRadius((CardMetrics.TAG_PILL_HEIGHT / 2).toFloat()),
+            )
+        }
+
         layout.grid?.let { grid ->
             for (stripe in grid.stripes()) drawRect(Palette.GridStripe, topLeft = stripe.offset(), size = stripe.size())
             val stroke = dp
@@ -121,6 +130,9 @@ fun DrawScope.drawCard(
         if (!textVisible(zoom)) return@withTransform
 
         drawText(measurer, layout.headerLabel, Offset(layout.headerLabelX.toFloat(), layout.headerLabelY.toFloat()), styles.header, maxLines = 1)
+        layout.linkBadge?.let { badge ->
+            drawText(measurer, badge.label, Offset(badge.labelX.toFloat(), badge.labelY.toFloat()), styles.tag, maxLines = 1)
+        }
         for (pill in layout.tags) {
             drawText(measurer, pill.label, Offset(pill.labelX.toFloat(), pill.labelY.toFloat()), styles.tag, maxLines = 1)
         }

@@ -87,7 +87,8 @@ private class LayoutCache {
         val cached = byId[snippet.id]
         val c = cached?.first
         if (c != null && c.gridData === snippet.gridData && c.width == snippet.width && c.height == snippet.height &&
-            c.snippetType == snippet.snippetType && c.tags == snippet.tags && c.rawText == snippet.rawText
+            c.snippetType == snippet.snippetType && c.tags == snippet.tags && c.rawText == snippet.rawText &&
+            c.canvases.size == snippet.canvases.size
         ) {
             return cached.second
         }

@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.di.AppContainer
+import dev.nymph.lyrics.app.editor.ui.AlsoOnLine
 import dev.nymph.lyrics.app.editor.ui.GridEditorScreen
 import dev.nymph.lyrics.app.editor.ui.LocalAddToWordBank
 import dev.nymph.lyrics.app.ui.userMessage
@@ -27,6 +28,7 @@ import dev.nymph.lyrics.app.voice.recordings.RecordingsSection
 import dev.nymph.lyrics.app.voice.recordings.RecordingsViewModel
 import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
 import dev.nymph.lyrics.app.voice.ui.voiceCaptureViewModel
+import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.RecordingId
@@ -57,6 +59,8 @@ fun GridEditorRoute(
     onAddToWordBank: ((String) -> Unit)? = null,
     /** A recording's "Check transcript" (the host navigates to the check screen). */
     onCheckTranscript: (RecordingId) -> Unit = {},
+    /** Opens another canvas from the "Also on: …" line; null leaves the names as plain text. */
+    onOpenCanvas: ((CanvasId) -> Unit)? = null,
 ) {
     // One ViewModel per visit: survives rotation (saveable key), fresh when the editor is reopened,
     // even if the host keeps one ViewModelStore across visits.
@@ -124,6 +128,7 @@ fun GridEditorRoute(
                 extraTopBarActions()
                 TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
             },
+            header = { AlsoOnLine(snippet, onOpenCanvas) },
             bottomPanel = {
                 RecordingsSection(recordingsState, recordings, onCheckTranscript = { recording ->
                     recordings.stopPlayback()
