@@ -16,7 +16,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.canvas import Canvas
 from app.models.snippet import Snippet
 from app.models.tag import Tag, snippet_tags
 from app.models.tag_preset import TagPreset
@@ -71,7 +70,7 @@ async def _owned_tag(db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID) -
 
 async def _owned_snippet_exists(db: AsyncSession, snippet_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     result = await db.execute(
-        select(Snippet.id).join(Canvas).where(Snippet.id == snippet_id, Canvas.owner_id == owner_id)
+        select(Snippet.id).where(Snippet.id == snippet_id, Snippet.owner_id == owner_id)
     )
     if result.scalar_one_or_none() is None:
         raise SnippetNotFoundError(f"snippet {snippet_id} not found")

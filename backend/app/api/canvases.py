@@ -6,10 +6,13 @@ from app.api.deps import get_current_user
 from app.models.user import User
 from app.schemas.canvas import CanvasCreate, CanvasUpdate, CanvasResponse, CanvasDetailResponse, ShareResponse
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
-from app.schemas.snippet import GridDataModel, SnippetResponse
+from app.schemas.snippet import GridDataModel, SnippetCanvasRef, SnippetResponse
 from app.schemas.group import GroupResponse
 from app.schemas.tag import SnippetTagResponse
+from app.api.placement_errors import placement_errors, placement_http_error
 from app.services import canvas_service
+from app.services.canvas_title import new_canvas_title, rename_title
+from app.services.placements.errors import InvalidCanvasTitleError
 
 router = APIRouter(prefix="/api/canvases", tags=["canvases"])
 
@@ -32,10 +35,13 @@ def _snippet_tag_response(t) -> SnippetTagResponse:
 
 
 def _snippet_response(s) -> SnippetResponse:
+    """``s`` is a snippet on one canvas (services.placements.PlacedSnippet or the same attributes):
+    content from the snippet, layout from that canvas's placement."""
     # Stored JSONB (grid_data, phonetics, derived_from) is validated as-is; the grid models
     # emit only the keys that were stored, so the wire shape is the stored shape.
     return SnippetResponse(
         id=str(s.id),
+        placement_id=str(s.placement_id),
         canvas_id=str(s.canvas_id),
         snippet_type=s.snippet_type.value,
         grid_mode=s.grid_mode.value,
@@ -54,6 +60,7 @@ def _snippet_response(s) -> SnippetResponse:
         created_at=str(s.created_at),
         updated_at=str(s.updated_at),
         content_updated_at=str(s.content_updated_at),
+        canvases=[SnippetCanvasRef(id=str(c.id), title=c.title) for c in s.canvases],
     )
 
 
@@ -64,7 +71,8 @@ def _group_response(g) -> GroupResponse:
         name=g.name,
         position_x=g.position_x,
         position_y=g.position_y,
-        snippet_ids=[str(s.id) for s in (g.snippets or [])],
+        # members are placements of the group's canvas
+        snippet_ids=[str(p.snippet_id) for p in (g.placements or [])],
         created_at=str(g.created_at),
     )
 
@@ -83,9 +91,13 @@ async def list_canvases(user: User = Depends(get_current_user), db: AsyncSession
     return [_canvas_response(c) for c in canvases]
 
 
-@router.post("", response_model=CanvasResponse, status_code=201)
+@router.post("", response_model=CanvasResponse, status_code=201, responses=placement_errors(422))
 async def create_canvas(req: CanvasCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    canvas = await canvas_service.create_canvas(db, str(user.id), req.title)
+    try:
+        title = new_canvas_title(req.title)
+    except InvalidCanvasTitleError as exc:
+        raise placement_http_error(exc) from exc
+    canvas = await canvas_service.create_canvas(db, str(user.id), title)
     return _canvas_response(canvas)
 
 
@@ -105,9 +117,15 @@ async def get_canvas(canvas_id: str, user: User = Depends(get_current_user), db:
     return _canvas_detail_response(canvas)
 
 
-@router.put("/{canvas_id}", response_model=CanvasResponse)
+@router.put("/{canvas_id}", response_model=CanvasResponse, responses=placement_errors(422))
 async def update_canvas(canvas_id: str, req: CanvasUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    canvas = await canvas_service.update_canvas(db, canvas_id, str(user.id), **req.model_dump(exclude_none=True))
+    changes = req.model_dump(exclude_none=True)
+    if req.title is not None:
+        try:
+            changes["title"] = rename_title(req.title)
+        except InvalidCanvasTitleError as exc:
+            raise placement_http_error(exc) from exc
+    canvas = await canvas_service.update_canvas(db, canvas_id, str(user.id), **changes)
     if not canvas:
         raise HTTPException(status_code=404, detail="Canvas not found")
     return _canvas_response(canvas)

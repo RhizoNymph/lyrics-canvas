@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.models.canvas import Canvas
+from app.models.placement import SnippetPlacement
 from app.models.recording import SnippetRecording, SplitMode
 from app.models.snippet import Snippet
 from app.models.user import User
@@ -73,9 +74,9 @@ async def make_owner(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]
     db.add(canvas)
     await db.flush()
     content = derive_new_content("cat")
-    snippet = Snippet(canvas_id=canvas.id, raw_text="cat", grid_data=content.grid_data, phonetics=content.phonetics,
-                      width=content.width, height=content.height)
+    snippet = Snippet(id=uuid.uuid4(), owner_id=user.id, raw_text="cat", grid_data=content.grid_data, phonetics=content.phonetics)
     db.add(snippet)
+    db.add(SnippetPlacement(snippet_id=snippet.id, canvas_id=canvas.id, width=content.width, height=content.height))
     await db.commit()
     return user.id, canvas.id, snippet.id
 
@@ -168,9 +169,9 @@ async def test_stats_cover_all_canvases_of_the_user(db):
     db.add(other_canvas)
     await db.commit()
     content = derive_new_content("dog")
-    second = Snippet(canvas_id=other_canvas.id, raw_text="dog", grid_data=content.grid_data, phonetics=content.phonetics,
-                     width=content.width, height=content.height)
+    second = Snippet(id=uuid.uuid4(), owner_id=owner, raw_text="dog", grid_data=content.grid_data, phonetics=content.phonetics)
     db.add(second)
+    db.add(SnippetPlacement(snippet_id=second.id, canvas_id=other_canvas.id, width=content.width, height=content.height))
     await db.commit()
     a = await append(db, owner, canvas, snippet, duration=1000)
     await append(db, owner, canvas, snippet, duration=2000, timings=None, transcript="x")

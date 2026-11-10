@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.models.canvas import Canvas
+from app.models.placement import SnippetPlacement
 from app.models.recording import SnippetRecording, SplitMode
 from app.models.snippet import Snippet, SnippetType
 from app.models.user import User
@@ -89,11 +90,13 @@ def take(text: str = "a b\nc d", audio: bytes = b"OggS-audio", split_mode: Split
 
 async def add_snippet(db: AsyncSession, canvas_id: uuid.UUID, text: str, grid: dict | None = None) -> Snippet:
     content = derive_new_content(text, grid)
+    # owned by the canvas's user and placed on it (docs/features/snippet_placements.md)
+    canvas = await db.get(Canvas, canvas_id)
     snippet = Snippet(
-        canvas_id=canvas_id, raw_text=text, grid_data=content.grid_data, phonetics=content.phonetics,
-        width=content.width, height=content.height,
+        id=uuid.uuid4(), owner_id=canvas.owner_id, raw_text=text, grid_data=content.grid_data, phonetics=content.phonetics,
     )
     db.add(snippet)
+    db.add(SnippetPlacement(snippet_id=snippet.id, canvas_id=canvas_id, width=content.width, height=content.height))
     await db.commit()
     return snippet
 

@@ -39,7 +39,9 @@ async def merge_snippets(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Replace two or more snippets with one merged snippet (see docs/features/merge_blocks.md)."""
+    """Replace two or more snippets on this canvas with one merged snippet (see
+    docs/features/merge_blocks.md). ``deleted_ids`` are the originals taken off this canvas; one
+    also placed on other canvases stays there unchanged with its recordings."""
     originals = await snippet_service.get_canvas_snippets(db, canvas_id, str(user.id), req.snippet_ids)
     try:
         found = {str(s.id) for s in originals}
@@ -71,7 +73,7 @@ async def merge_snippets(
             },
             [tags_by_id[t] for t in merged.tag_ids],
             [by_id[i] for i in merged.source_ids],
-            # voice-take recordings follow their lines into the merged snippet
+            # recordings of originals deleted by the merge follow their lines into the merged snippet
             reparent=recording_service.reassign_recordings,
         )
     except MergeSourcesNotFoundError as exc:

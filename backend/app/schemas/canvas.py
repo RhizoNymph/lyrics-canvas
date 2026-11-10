@@ -5,10 +5,12 @@ from app.schemas.snippet import SnippetResponse
 
 
 class CanvasCreate(BaseModel):
+    # stripped; empty falls back to "Untitled Canvas"; over 255 characters is invalid_canvas_title
     title: str = "Untitled Canvas"
 
 
 class CanvasUpdate(BaseModel):
+    # stripped; must then be 1-255 characters, else invalid_canvas_title
     title: str | None = None
     is_public: bool | None = None
     viewport_state: dict | None = None
