@@ -11,21 +11,20 @@ from sqlalchemy.exc import OperationalError
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.main import app
-from app.models.snippet import Snippet
 from app.services import recording_service, snippet_service
 from app.services.merge_service import MergePersistError
 from tests.route_fakes import fake_snippet
-from tests.test_snippet_service_merge import FakeSession
+from tests.test_snippet_service_merge import FakeSession, placed, reload_added  # noqa: F401 (fixture)
 
 CANVAS = uuid.uuid4()
 FIELDS = {"raw_text": "a\nb", "grid_data": {"lines": []}, "position_x": 1.0, "position_y": 2.0}
 
 
-def originals() -> list[Snippet]:
-    return [Snippet(id=uuid.uuid4(), canvas_id=CANVAS, raw_text="a"), Snippet(id=uuid.uuid4(), canvas_id=CANVAS, raw_text="b")]
+def originals() -> list:
+    return [placed("a"), placed("b")]
 
 
-async def test_reparent_runs_after_the_insert_and_before_the_deletes():
+async def test_reparent_runs_after_the_insert_and_before_the_deletes(reload_added):
     db = FakeSession()
     olds = originals()
     calls: list[tuple] = []
@@ -37,7 +36,7 @@ async def test_reparent_runs_after_the_insert_and_before_the_deletes():
     created = await snippet_service.replace_with_merged(db, CANVAS, FIELDS, [], olds, reparent=reparent)
 
     assert calls == [(db, created.id, [o.id for o in olds])]
-    assert [name for name, _ in db.log] == ["add", "flush", "reparent", "delete", "delete", "commit", "execute"]
+    assert [name for name, _ in db.log] == ["add", "add", "flush", "reparent", "delete", "delete", "commit", "execute"]
 
 
 async def test_a_failing_reparent_rolls_the_merge_back():

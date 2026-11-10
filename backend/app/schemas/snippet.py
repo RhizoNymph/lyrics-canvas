@@ -1,3 +1,5 @@
+import uuid
+
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer
 
 from app.models.snippet import SnippetType, GridMode
@@ -75,16 +77,36 @@ class SnippetUpdate(BaseModel):
     group_id: str | None = None
 
 
+class BatchPositionItem(BaseModel):
+    id: uuid.UUID
+    position_x: float | None = None
+    position_y: float | None = None
+
+
 class BatchPositionUpdate(BaseModel):
-    updates: list[dict]  # [{"id": "...", "position_x": ..., "position_y": ...}]
+    """Positions of placements on ``canvas_id`` (required; applies to every update)."""
+
+    canvas_id: uuid.UUID
+    updates: list[BatchPositionItem]
 
 
 class BatchPositionResult(BaseModel):
     updated: int
 
 
-class SnippetResponse(BaseModel):
+class SnippetCanvasRef(BaseModel):
     id: str
+    title: str
+
+
+class SnippetResponse(BaseModel):
+    """A snippet in the context of one canvas: content is shared by every canvas holding it;
+    ``canvas_id, position_x, position_y, width, height, z_index, group_id`` and ``placement_id``
+    are that canvas's placement. ``canvases`` lists every canvas holding the snippet (including
+    this one), sorted by lower-cased title, then id."""
+
+    id: str
+    placement_id: str
     canvas_id: str
     snippet_type: SnippetType
     grid_mode: GridMode
@@ -104,6 +126,7 @@ class SnippetResponse(BaseModel):
     updated_at: str
     # Last content edit (text, type, grid); moves, resizes and tags do not change it.
     content_updated_at: str
+    canvases: list[SnippetCanvasRef] = []
 
     # Responses always carry every field, so defaulted fields are required in the output schema.
     model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}

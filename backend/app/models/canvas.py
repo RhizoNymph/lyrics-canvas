@@ -25,5 +25,7 @@ class Canvas(Base):
     )
 
     owner = relationship("User", back_populates="canvases")
-    snippets = relationship("Snippet", back_populates="canvas", cascade="all, delete-orphan")
+    # Placements go with the canvas by the FK cascade; canvas_service.delete_canvas then deletes the
+    # snippets left with no placement.
+    placements = relationship("SnippetPlacement", cascade="save-update, merge, delete", passive_deletes=True, lazy="raise")
     groups = relationship("Group", back_populates="canvas", cascade="all, delete-orphan")

@@ -36,9 +36,15 @@ the other parts have their own feature docs:
   pause length, syllable balance and end rhyme (phonetic engine), or a single line.
 - Append keeps the existing (possibly hand-arranged) grid lines verbatim, syllabifies only the new
   lines, reuses a blank trailing line, recomputes phonetics and size, bumps `content_updated_at`.
+  The target must be placed on the take's canvas; the content is shared by every canvas holding the
+  snippet, the new size goes to the take canvas's placement only
+  ([snippet_placements.md](./snippet_placements.md#voice-takes)). A new take is placed on the take's
+  canvas.
 - Recordings: list per snippet (newest first, no audio), stream one recording's audio, delete one.
-- Recordings follow their snippet: deleted with it (database cascade, also when the canvas is
-  deleted), moved onto the merged snippet when snippets are merged.
+- Recordings follow their snippet, whatever canvas the take was recorded on: deleted with it (database
+  cascade, also when a canvas delete leaves it with no placement), kept when it is only removed from
+  one of several canvases or moved, moved onto the merged snippet when a merge deletes it (an original
+  also placed on another canvas keeps them).
 - Feature switch: `STT_URL` empty (the default) answers 503 `stt_disabled`.
 - Vocabulary hints: the user's word bank, ranked (rarest, newest first) and cut to a character
   budget, sent as Whisper's `initial_prompt`; per take opt-out `meta.vocabulary_hints=false`, server
@@ -147,7 +153,7 @@ assembly). Positions must be finite numbers. Unknown extra keys are ignored.
 | Status | `error` | When |
 |---|---|---|
 | 404 | `canvas_not_found` | the canvas does not exist or is not the caller's |
-| 404 | `snippet_not_found` | append target missing, not the caller's, or in another canvas |
+| 404 | `snippet_not_found` | append target missing, not the caller's, or not placed on this canvas |
 | 413 | `audio_too_large` | more than `VOICE_MAX_UPLOAD_BYTES`, or the STT service answered 413 |
 | 415 | `unsupported_audio_type` | missing or non-allow-listed `Content-Type` on the `audio` part |
 | 422 | `invalid_meta` | `meta` missing, not JSON, or failing validation (message lists field paths, never values) |
@@ -222,8 +228,8 @@ derived from `transcript`. Example (one take, two lines by taps, checked):
 
 ### `PUT /api/recordings/{recording_id}/verification`
 
-Body `{"text": string}`; 200 `RecordingResponse`. The owner is checked through snippet -> canvas ->
-owner like the audio and delete routes (404 `recording_not_found` for missing or foreign ids). The text
+Body `{"text": string}`; 200 `RecordingResponse`. The owner is checked through `snippets.owner_id`
+like the audio and delete routes (404 `recording_not_found` for missing or foreign ids). The text
 is normalized (`app/services/voice/verification.py`, pure): CR LF and CR become LF; trailing whitespace
 is stripped from every line; blank lines at the start and end are dropped; runs of blank lines collapse
 to one. The result must be non-empty and at most 10 000 code points, else 422 `invalid_verification`.
@@ -372,7 +378,7 @@ Worked examples (12 one-syllable words, 100 ms normal gaps):
 `backend/app/services/voice/append.py` (`append_lines`, pure) and
 `recording_service.append_with_recording`:
 
-1. Lock the snippet row (`SELECT ... FOR UPDATE`, joined to the caller's canvas).
+1. Lock the snippet row (`SELECT ... FOR UPDATE`, through its placement on the caller's canvas).
 2. Strip trailing blank lines from `raw_text` (whitespace-only lines at the end); middle blank lines
    and trailing spaces on the last real line stay.
 3. Copy the stored grid lines verbatim (rests, hand-set stress, client keys such as `arranged`), minus
@@ -418,11 +424,13 @@ type cannot hold spans that do not tile the words. An append that reuses a blank
 still records the take's own lines; a merge moves recordings unchanged.
 
 There is deliberately no ORM relationship on `Snippet`: loading snippets never touches recordings.
-Deletion is the database's job (snippet delete, and canvas delete via the ORM cascade to snippets).
-**Merging** calls `snippet_service.replace_with_merged(..., reparent=recording_service.reassign_recordings)`:
-after the merged snippet is flushed and before the originals are deleted, one `UPDATE` moves every
-recording of the originals onto the merged snippet, inside the same transaction (a failure rolls the
-whole merge back).
+Deletion is the database's job (snippet delete, and canvas delete, which deletes the snippets it leaves
+with no placement). **Merging** calls
+`snippet_service.replace_with_merged(..., reparent=recording_service.reassign_recordings)`: after the
+merged snippet is flushed and before the originals are deleted, one `UPDATE` moves every recording of
+the originals the merge deletes (those only on the merge canvas) onto the merged snippet, inside the
+same transaction (a failure rolls the whole merge back). An original also placed on other canvases is
+not deleted and keeps its recordings.
 
 ## Backend data / control flow
 
@@ -446,12 +454,14 @@ app/api/voice.py create_voice_take(canvas_id: UUID, audio: UploadFile, meta: str
     match target:
       NewSnippetTarget -> create_snippet_with_recording(db, canvas, owner, position, lines, recording)
                             canvas owned again; derive_new_content("\n".join(lines))  (same as POST /snippets)
-                            Snippet(freestyle, auto grid mode, position, grid, phonetics, size)
+                            Snippet(owner, freestyle, auto grid mode, grid, phonetics)
+                            + SnippetPlacement(canvas, position, size)
                             add -> flush -> add recording -> commit (rollback -> VoicePersistError)
       AppendTarget     -> append_with_recording(db, canvas, owner, snippet_id, lines, recording)
-                            SELECT ... FOR UPDATE -> append_lines -> content_for -> content_updated_at = now()
+                            placement on canvas, snippet SELECT ... FOR UPDATE -> append_lines -> content_for
+                            -> content_updated_at = now(); placement width/height = new size
                             add recording -> commit (rollback -> VoicePersistError)
-    re-fetch snippet with tags (populate_existing) -> VoiceTakeResponse
+    re-fetch the snippet on this canvas (PlacedSnippet: tags, canvases) -> VoiceTakeResponse
   except VoiceTakeError -> HTTPException(exc.status, {"error": exc.code, "message": exc.message})
 
 put_recording_verification(recording_id, {text})
@@ -573,8 +583,8 @@ end-to-end flow above.
   syllabified; grid lines and non-blank text lines stay index-aligned for phonetics.
 - Taps always win over the auto split; lines are never empty; a tap exactly halfway through a word
   splits before it; `split_mode = single` iff exactly one line came from the auto split.
-- Recordings live and die with their snippet (FK cascade) and survive merges (moved before the
-  originals are deleted).
+- Recordings live and die with their snippet (FK cascade), not with a canvas or a placement, and
+  survive merges (moved before an original is deleted; kept by an original that stays elsewhere).
 - The STT service is called only after the request is validated and ownership is confirmed.
 - Upload size is bounded by `VOICE_MAX_UPLOAD_BYTES` (and by nginx/ingress in front).
 - `STT_URL` empty is a supported state (feature off), not an error at startup.

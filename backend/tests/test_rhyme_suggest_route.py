@@ -107,6 +107,7 @@ def test_create_snippet_computes_phonetics_and_keeps_derived_from(client: TestCl
         captured.update(kwargs)
         return SimpleNamespace(
             id=uuid.uuid4(),
+            placement_id=uuid.uuid4(),
             canvas_id=uuid.UUID(canvas_id),
             snippet_type=SimpleNamespace(value="freestyle"),
             grid_mode=SimpleNamespace(value="auto"),
@@ -125,6 +126,7 @@ def test_create_snippet_computes_phonetics_and_keeps_derived_from(client: TestCl
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)
@@ -189,6 +191,7 @@ def test_create_snippet_passes_enum_types_to_service(client: TestClient, monkeyp
         captured.update(kwargs)
         return SimpleNamespace(
             id=uuid.uuid4(),
+            placement_id=uuid.uuid4(),
             canvas_id=uuid.UUID(canvas_id),
             snippet_type=kwargs["snippet_type"],
             grid_mode=kwargs["grid_mode"],
@@ -207,6 +210,7 @@ def test_create_snippet_passes_enum_types_to_service(client: TestClient, monkeyp
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 
     monkeypatch.setattr(snippet_service, "create_snippet", fake_create)

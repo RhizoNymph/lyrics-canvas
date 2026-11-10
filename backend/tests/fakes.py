@@ -37,10 +37,15 @@ class FakeDictionary:
         return suggest_from_index(self.index, self.name, anchors, k, min_score, limit, exclude, self.weights)
 
 
+# who owns each fake canvas; a record made "on" a canvas is owned by that canvas's owner
+CANVAS_OWNERS = {"c1": "u1", "c2": "u1", "c-other": "u2"}
+
+
 def make_record(snippet_id: str, text: str, tags: Sequence[str] = (), canvas_id: str = "c1", with_phonetics: bool = True) -> SnippetRecord:
     grid = syllabify_text(text)
     phonetics = compute_snippet_phonetics(text, grid, None).model_dump(mode="json") if with_phonetics else None
-    return SnippetRecord(id=snippet_id, canvas_id=canvas_id, raw_text=text, grid_data=grid, phonetics=phonetics, tag_ids=tuple(tags))
+    owner = CANVAS_OWNERS[canvas_id]
+    return SnippetRecord(id=snippet_id, owner_id=owner, raw_text=text, grid_data=grid, phonetics=phonetics, tag_ids=tuple(tags))
 
 
 @dataclass
@@ -53,16 +58,16 @@ class FakeRepository:
 
     async def snippet(self, snippet_id: str, user_id: str) -> SnippetRecord | None:
         record = self.snippets.get(snippet_id)
-        if record is None or self.canvases.get(record.canvas_id) != user_id:
+        if record is None or record.owner_id != user_id:
             return None
         return record
 
     async def user_snippets(self, user_id: str) -> list[SnippetRecord]:
-        return [r for r in self.snippets.values() if self.canvases.get(r.canvas_id) == user_id and r.raw_text]
+        return [r for r in self.snippets.values() if r.owner_id == user_id and r.raw_text]
 
 
 def default_repo() -> FakeRepository:
-    repo = FakeRepository(canvases={"c1": "u1", "c2": "u1", "c-other": "u2"})
+    repo = FakeRepository(canvases=dict(CANVAS_OWNERS))
     repo.snippets = {
         "s-cat": make_record("s-cat", "I saw a black cat\nsleeping on the mat", tags=("t-animals",)),
         "s-hat": make_record("s-hat", "wearing my hat", tags=("t-clothes", "t-animals")),
