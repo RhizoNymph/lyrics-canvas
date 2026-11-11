@@ -54,6 +54,7 @@ import dev.nymph.lyrics.app.canvas.placements.ui.DeleteEverywhereDialog
 import dev.nymph.lyrics.app.canvas.placements.ui.OtherCanvasesDialog
 import dev.nymph.lyrics.app.canvas.placements.ui.RemovalConfirmDialog
 import dev.nymph.lyrics.app.canvas.rename.RenameCanvasDialog
+import dev.nymph.lyrics.app.canvas.search.CanvasSearchBar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import dev.nymph.lyrics.model.TransferMode
@@ -64,7 +65,6 @@ import dev.nymph.lyrics.app.rhyme.ui.RhymePanel
 import dev.nymph.lyrics.app.tags.tagsViewModel
 import dev.nymph.lyrics.app.tags.ui.FilterBar
 import dev.nymph.lyrics.app.tags.ui.TagPickerSheet
-import dev.nymph.lyrics.logic.tags.TagFilter
 import androidx.compose.foundation.layout.fillMaxWidth
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.ui.VoiceCaptureHost
@@ -99,6 +99,7 @@ fun canvasViewModel(
         ProcessScope.scope,
         savedState = createSavedStateHandle(),
         canvasUpdates = container.canvasUpdates,
+        searchMemory = container.canvasSearches,
     )
 }
 
@@ -126,6 +127,7 @@ fun CanvasScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val rhyme by rhymeVm.state.collectAsStateWithLifecycle()
     val tags by tagsVm.state.collectAsStateWithLifecycle()
+    val searchText by vm.searchInput.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -237,8 +239,11 @@ fun CanvasScreen(
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    // The tag filter applies to the canvas and the list alike.
-                    if (ready != null) FilterBar(tags, tagsVm)
+                    // The search and the tag filter apply to the canvas and the list alike.
+                    if (ready != null) {
+                        CanvasSearchBar(searchText, ready.searchCount, onEdit = vm::editSearch, onClear = vm::clearSearch)
+                        FilterBar(tags, tagsVm)
+                    }
                     // Also reported in list mode, so a voice take there lands at the centre of the last canvas viewport.
                     Box(
                         Modifier.weight(1f).fillMaxWidth().onSizeChanged { px ->
@@ -268,7 +273,7 @@ fun CanvasScreen(
                                     onTap = { id -> vm.onTap(id) },
                                     onLongPress = vm::onListLongPress,
                                     listState = listState,
-                                    filtered = s.filter != TagFilter.Everything,
+                                    filtered = s.isFiltered,
                                 )
                             }
                         }

@@ -73,6 +73,7 @@ fun AppNavHost(container: AppContainer) {
                 container = container,
                 onOpen = { id -> nav.navigate(CanvasRoute(id.value)) },
                 onSignOut = session::signOut,
+                onOpenSnippet = { canvas, snippet -> nav.navigate(CanvasRoute(canvas.value, focusSnippetId = snippet.value)) },
             )
         }
         composable<CanvasRoute> { entry ->
