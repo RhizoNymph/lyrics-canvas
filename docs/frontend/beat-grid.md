@@ -2,6 +2,11 @@
 
 Syllable-aligned grid display and editing system for lyrics. Each line of text is broken into syllable cells with stress markers and optional rests.
 
+**Rest rule** ([rest_marks.md](../features/rest_marks.md)): every `_` in a line is one rest cell and also
+separates words; `word_index` counts words only. Rests made in the grid are written back into the text
+as `_`, so the text always matches the grid. Export, rhyme, phonetics, similarity and search read the
+display text (marks removed).
+
 ## Data Structure
 
 ```typescript
@@ -9,7 +14,7 @@ interface GridCell {
   syllable?: string;       // Syllable text (e.g., "ra", "dio")
   stress?: number;         // 0=unstressed, 1=primary, 2=secondary
   word_index?: number;     // Which word in the line
-  rest?: boolean;          // True = silence beat
+  rest?: boolean;          // True = silence beat; written as `_` in the text
   word?: string;           // Surface word (as typed) this syllable belongs to; set when raw_text and word_index agree
 }
 

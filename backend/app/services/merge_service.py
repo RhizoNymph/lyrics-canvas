@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.models.snippet import GridMode, SnippetType
 from app.schemas.merge import MergeMode
 from app.schemas.snippet import GridCellModel, GridDataModel, GridLineModel
+from app.services.rest_marks import word_tokens
 
 
 class MergeError(Exception):
@@ -83,7 +84,8 @@ def text_lines(raw_text: str) -> list[str]:
 
 
 def word_count(text: str) -> int:
-    return sum(len(line.split()) for line in text_lines(text))
+    """Words only: rest marks are not words (docs/features/rest_marks.md)."""
+    return sum(len(word_tokens(line)) for line in text_lines(text))
 
 
 def lines_of(source: MergeSource) -> list[GridLineModel]:

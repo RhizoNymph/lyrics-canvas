@@ -7,6 +7,7 @@ disagree for new text. Only the mapping of syllables back onto the word's letter
 
 from app.services.phonetics import pronounce_word
 from app.services.phonetics.pronounce import clean_word
+from app.services.rest_marks import Rest, Word, tokenize_line
 
 
 def syllabify_word(word: str) -> list[dict]:
@@ -61,24 +62,33 @@ def _split_word_text(word: str, n_syllables: int) -> list[str]:
 
 
 def syllabify_text(text: str) -> dict:
-    """Syllabify full text into beat grid data structure."""
+    """Syllabify full text into beat grid data structure.
+
+    Blank lines are skipped. Each ``_`` is a rest cell ``{"rest": true}`` (docs/features/rest_marks.md);
+    ``word_index`` counts word tokens only and ``syllable_count`` excludes rests, so a line of rests
+    is a line of rest cells with count 0.
+    """
     lines_data = []
     for line_text in text.strip().split("\n"):
         line_text = line_text.strip()
         if not line_text:
             continue
-        words = line_text.split()
-        cells = []
+        cells: list[dict] = []
         syllable_count = 0
-        for word_index, word in enumerate(words):
-            syllables = syllabify_word(word)
-            for syl in syllables:
-                cells.append({
-                    "syllable": syl["syllable"],
-                    "stress": syl["stress"],
-                    "word_index": word_index,
-                })
-                syllable_count += 1
+        word_index = 0
+        for token in tokenize_line(line_text):
+            match token:
+                case Rest():
+                    cells.append({"rest": True})
+                case Word(text=word):
+                    for syl in syllabify_word(word):
+                        cells.append({
+                            "syllable": syl["syllable"],
+                            "stress": syl["stress"],
+                            "word_index": word_index,
+                        })
+                        syllable_count += 1
+                    word_index += 1
         lines_data.append({
             "cells": cells,
             "syllable_count": syllable_count,

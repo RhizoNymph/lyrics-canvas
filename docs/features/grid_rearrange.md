@@ -26,6 +26,10 @@ first guess; this feature lets the writer fix where things land.
   [Editor Line Split / Join](./editor_line_split_join.md). Split and joined rows lose `arranged`.
 - Save sends `raw_text` rebuilt from the grid for arranged rows (typed text for the rest) together with
   `grid_data`; the backend keeps the layout and recomputes phonetics from them (grid stress wins).
+- Rests live in the text: the rebuilt text writes each rest as `_`, and a typed `_` is a rest cell after
+  syllabify (backend and local estimate), so the text always matches the grid. Legacy rows saved with
+  grid rests but no `_` are matched on display text in the arranged check and get the canonical text on
+  their next save. See [rest_marks.md](./rest_marks.md).
 
 ## Non-scope
 
@@ -105,7 +109,7 @@ Every `lib/grid` module and `editorState.ts` has a sibling `*.test.ts` (vitest).
   safe.
 - `raw_text` is always derivable from the grid: `rebuildRawText` walks the cells, writing `_` per rest and
   each word at its first syllable (its `word` when present, else its concatenated syllables), and the
-  rebuilt text's word tokens (`lineWords`, rest marks excluded) match the re-based `word_index`es.
+  rebuilt text's word tokens (`lineWords`, rest marks excluded; [rest_marks.md](./rest_marks.md)) match the re-based `word_index`es.
 - Rows matched to a saved grid line on open compare trimmed text or, failing that, display text (rest marks
   and spacing ignored; a rest-only row needs the exact text), so rows saved before rest marks open arranged
   with their rests; the kept line takes the row's text as `raw_text`, and the next save writes the canonical

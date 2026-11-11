@@ -18,6 +18,7 @@ from app.services.nlp.tsne_service import compute_tsne
 from app.services.nlp.rhyme_service import find_rhymes, find_rhymes_in_texts
 from app.services.nlp.search_service import search_snippets
 from app.services.nlp.embedding_service import compute_embedding
+from app.services.rest_marks import display_text
 from app.services import recording_service, rhyme_suggest_service, snippet_service
 from app.services.placements.errors import PlacementNotFoundError
 from app.services.phonetics.errors import DialectRuleError, PronunciationError, RhymeQueryError
@@ -73,18 +74,21 @@ async def find_similar(
         )
         .order_by(Snippet.created_at, Snippet.id)
     )
-    others = result.scalars().all()
-    if not others:
+    # compared on display text (rest marks removed); snippets with no words take no part
+    target_text = display_text(target.raw_text)
+    others = [s for s in result.scalars().all() if display_text(s.raw_text).strip()]
+    if not others or not target_text.strip():
         return []
 
-    corpus_texts = [s.raw_text for s in others]
-    corpus_ids = [str(s.id) for s in others]
+    by_id = {str(s.id): s for s in others}
+    corpus_texts = [display_text(s.raw_text) for s in others]
+    corpus_ids = list(by_id)
 
-    results = compute_tfidf_similarity(target.raw_text, corpus_texts, corpus_ids, top_k)
+    results = compute_tfidf_similarity(target_text, corpus_texts, corpus_ids, top_k)
     for r in results:
-        snippet = next((s for s in others if str(s.id) == r["snippet_id"]), None)
-        if snippet:
-            r["snippet_type"] = snippet.snippet_type.value
+        snippet = by_id[r["snippet_id"]]
+        r["raw_text"] = snippet.raw_text
+        r["snippet_type"] = snippet.snippet_type.value
     return results
 
 
@@ -113,7 +117,10 @@ async def tsne_layout(
     embeddings = []
     snippet_ids = []
     for s in snippets:
-        emb = compute_embedding(s.raw_text)
+        text = display_text(s.raw_text)  # rest marks removed; a snippet of only rests has no embedding
+        if not text.strip():
+            continue
+        emb = compute_embedding(text)
         if emb:
             embeddings.append(emb)
             snippet_ids.append(str(s.id))
