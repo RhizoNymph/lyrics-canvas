@@ -129,6 +129,7 @@ useSnippetFocus                       -> runSnippetFocus(sid, ports):
 | `frontend/src/lib/grid/wordIndex.ts` | `attachWords` over word tokens | `attachWords` |
 | `frontend/src/components/canvas/editorState.ts` | Display-text match on open; nudge | `initEditorState`, `nudgeSelection`, `CellSelection` |
 | `frontend/src/components/canvas/InlineGridEditor.tsx` | Arrow keys -> `nudgeSelection`; word bank add strips rest marks; hint line | |
+| `frontend/src/lib/rhyme/slotFit.ts` | `lastNonEmptyLineIndex` skips grid lines made only of rests, matching the backend's default snippet anchor (last line with words) | `lastNonEmptyLineIndex`, `slotFromSnippet` |
 | `frontend/src/lib/rhyme/anchorRange.ts`, `queryFromSelection.ts`, `components/rhyme/AnchorChips.tsx` | Anchor words, labels and the anchor check use word tokens / display text | `lineWords`, `anchorSnippets` |
 | `frontend/src/components/list/ListRow.tsx`, `canvas/SnippetCard.tsx`, `sidebar/SimilarityPanel.tsx` | Text fallbacks and previews show display text | |
 | `frontend/src/lib/search/match.ts` | Query parsing and matching | `SearchQuery`, `EMPTY_SEARCH`, `parseSearchQuery`, `isSearchActive`, `matchesSearch`, `searchableText` |
