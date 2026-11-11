@@ -21,6 +21,10 @@ first guess; this feature lets the writer fix where things land.
   [Editor Line Split / Join](./editor_line_split_join.md). Split and joined rows lose `arranged`.
 - Save sends `raw_text` rebuilt from the grid for arranged rows (typed text for the rest) together with
   `grid_data`; the backend keeps the layout and recomputes phonetics from them (grid stress wins).
+- Rests live in the text: the rebuilt text writes each rest as `_`, and a typed `_` is a rest cell after
+  syllabify (backend and local estimate), so the text always matches the grid. Legacy rows saved with
+  grid rests but no `_` are matched on display text in the arranged check and get the canonical text on
+  their next save. See [rest_marks.md](./rest_marks.md).
 
 ## Non-scope
 
@@ -94,9 +98,10 @@ Every `lib/grid` module and `editorState.ts` has a sibling `*.test.ts` (vitest).
   appearances are strictly increasing from 0 and all syllables of one word share one index, even when
   another word's syllables sit between them. The backend's `reconcile` groups by index, so interleaving is
   safe.
-- `raw_text` is always derivable from the grid: `rebuildRawText` lists words by first appearance, using
-  `word` when present and the concatenated syllables otherwise, and the rebuilt text's `split()` positions
-  match the re-based `word_index`es.
+- `raw_text` is always derivable from the grid: `rebuildRawText` walks the cells, writing `_` per rest and
+  each word at its first appearance (by `word` when present, else the concatenated syllables), and the
+  rebuilt text's word tokens (rest marks excluded; [rest_marks.md](./rest_marks.md)) match the re-based
+  `word_index`es.
 - Arranged rows survive the debounce: `mergeSyllabified` never touches a row in `arranged`; only
   `typeLine` (and a split or join that changes the row's text) clears the flag. Rows loaded from a saved grid whose text still matches start arranged, so a
   saved layout survives reopening the editor.

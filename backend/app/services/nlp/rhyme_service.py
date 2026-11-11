@@ -16,6 +16,7 @@ from app.services.phonetics.score import MAX_K, score
 from app.services.phonetics.sources.dictionary import DictionarySource
 from app.services.phonetics.types import Unit
 from app.services.phonetics.units import rhyme_key_depth, unit_from_text
+from app.services.rest_marks import display_text
 
 PERFECT_LIMIT = 50
 NEAR_LIMIT = 30
@@ -62,13 +63,15 @@ def find_rhymes(word: str, include_near: bool = True) -> dict:
 
 
 def find_rhymes_in_texts(word: str, texts: dict[str, str]) -> list[dict]:
-    """Rhyming words inside the user's snippets. texts: {snippet_id: raw_text}."""
+    """Rhyming words inside the user's snippets. texts: {snippet_id: raw_text}; read as display text
+    (rest marks removed), which is also the preview."""
     query = _word_unit(word)
     if query is None:
         return []
     depth = _depth(query)
     results: list[dict] = []
-    for snippet_id, text in texts.items():
+    for snippet_id, raw_text in texts.items():
+        text = display_text(raw_text)
         seen: set[str] = set()
         for token in text.split():
             unit = _word_unit(token)
