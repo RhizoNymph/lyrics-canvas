@@ -123,11 +123,11 @@ class EditorRowsStateTest {
     }
 
     @Test
-    fun `inserts a rest, keeps the text and marks the row arranged`() {
+    fun `inserts a rest, writes it into the text and marks the row arranged`() {
         var s = initEditorState("hello", null)
         s = insertRestInRow(s, 0, 1)
         assertEquals(listOf("hel", "·", "lo"), syls(gridLineForRow(s, 0)))
-        assertEquals("hello", s.lines[0])
+        assertEquals("hello _", s.lines[0])
         assertTrue(0 in s.arranged)
     }
 

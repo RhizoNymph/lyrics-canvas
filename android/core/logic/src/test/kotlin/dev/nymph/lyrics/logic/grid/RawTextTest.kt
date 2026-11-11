@@ -26,8 +26,8 @@ class RawTextTest {
     }
 
     @Test
-    fun `skips rests and keeps a word together when its syllables are interleaved`() {
-        assertEquals("hello world", rebuildRawText(line(listOf(c("hel", 0), rest(), c("world", 1), c("lo", 0), rest()))))
+    fun `writes rests as rest marks and keeps a word together when its syllables are interleaved`() {
+        assertEquals("hello _ world _", rebuildRawText(line(listOf(c("hel", 0), rest(), c("world", 1), c("lo", 0), rest()))))
     }
 
     @Test
@@ -38,7 +38,8 @@ class RawTextTest {
     @Test
     fun `drops words that have no text`() {
         assertEquals("x", rebuildRawText(line(listOf(c("", 0), c("x", 1)))))
-        assertEquals("", rebuildRawText(line(listOf(rest(), rest()))))
+        assertEquals("_ _", rebuildRawText(line(listOf(rest(), rest()))))
+        assertEquals("", rebuildRawText(line(listOf())))
     }
 
     @Test

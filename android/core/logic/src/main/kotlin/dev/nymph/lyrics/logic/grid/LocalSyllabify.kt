@@ -1,8 +1,9 @@
 package dev.nymph.lyrics.logic.grid
 
 import dev.nymph.lyrics.logic.jsSlice
-import dev.nymph.lyrics.logic.jsSplitWhitespace
 import dev.nymph.lyrics.logic.jsTrim
+import dev.nymph.lyrics.logic.rests.LineToken
+import dev.nymph.lyrics.logic.rests.tokenizeLine
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.GridLine
 import kotlin.math.ceil
@@ -33,13 +34,18 @@ fun splitWord(word: String): List<String> {
     }
 }
 
-/** Instant local syllabification of one line; the API result replaces it once it arrives. */
+/**
+ * Instant local syllabification of one line; the API result replaces it once it arrives. Each
+ * rest mark (`_`) becomes a rest cell in token order; `wordIndex` counts words only.
+ */
 fun localSyllabifyLine(text: String): GridLine {
     val rawText = jsTrim(text)
     if (rawText.isEmpty()) return GridLine(emptyList(), 0, "")
-    val words = jsSplitWhitespace(rawText)
-    val cells = words.flatMapIndexed { wi, word ->
-        splitWord(word).map { syllable -> GridCell(syllable = syllable, wordIndex = wi, word = word) }
+    val cells = tokenizeLine(rawText).flatMap { token ->
+        when (token) {
+            LineToken.Rest -> listOf(GridCell.REST)
+            is LineToken.Word -> splitWord(token.text).map { syllable -> GridCell(syllable = syllable, wordIndex = token.wordIndex, word = token.text) }
+        }
     }
-    return GridLine(cells, cells.size, rawText)
+    return GridLine(cells, countSyllables(cells), rawText)
 }
