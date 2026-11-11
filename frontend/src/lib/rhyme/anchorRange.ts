@@ -6,6 +6,7 @@
  */
 import type { GridLine, Snippet } from '@/types';
 import type { AnchorRange, SnippetAnchorRef } from '@/types/rhyme';
+import { lineWords as textWords } from '@/lib/grid/restMarks';
 
 /** The chip's click state: the range so far, and whether the next click sets its end. */
 export interface RangeClickState {
@@ -63,10 +64,9 @@ export function sliceGridLine(line: GridLine, range: AnchorRange): GridLine {
   };
 }
 
-/** The line's words as the server tokenises them (whitespace split of the stripped line). */
+/** The line's words as the server tokenises them (word tokens; rest marks `_` are not words). */
 export function lineWords(line: GridLine): string[] {
-  const text = line.raw_text.trim();
-  return text.length === 0 ? [] : text.split(/\s+/);
+  return textWords(line.raw_text);
 }
 
 export function lineWordCount(line: GridLine): number {

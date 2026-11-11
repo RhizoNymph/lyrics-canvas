@@ -15,8 +15,13 @@ describe('rebuildRawText', () => {
     expect(rebuildRawText(line([c('hul', 0, 'hullabaloo,'), c('lab', 0, 'hullabaloo,'), c('alo', 0, 'hullabaloo,'), c('o', 0, 'hullabaloo,'), c('yo', 1, 'yo')]))).toBe('hullabaloo, yo');
   });
 
-  it('skips rests and keeps a word together when its syllables are interleaved', () => {
-    expect(rebuildRawText(line([c('hel', 0), rest(), c('world', 1), c('lo', 0), rest()]))).toBe('hello world');
+  it('writes each rest as _ and a word at its first syllable, even when its syllables are interleaved', () => {
+    expect(rebuildRawText(line([c('hel', 0), rest(), c('world', 1), c('lo', 0), rest()]))).toBe('hello _ world _');
+  });
+
+  it('keeps leading rests and rest-only lines', () => {
+    expect(rebuildRawText(line([rest(), c('go', 0, 'go,')]))).toBe('_ go,');
+    expect(rebuildRawText(line([rest(), rest()]))).toBe('_ _');
   });
 
   it('treats cells without a word_index as their own words', () => {
@@ -25,7 +30,6 @@ describe('rebuildRawText', () => {
 
   it('drops words that have no text', () => {
     expect(rebuildRawText(line([c('', 0), c('x', 1)]))).toBe('x');
-    expect(rebuildRawText(line([rest(), rest()]))).toBe('');
   });
 
   it('withRebuiltText writes the text into raw_text', () => {

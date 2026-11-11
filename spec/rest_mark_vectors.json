@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "tokenize": [
+    {"line": "I _ go", "tokens": [{"word": "I"}, {"rest": true}, {"word": "go"}]},
+    {"line": "I __ go", "tokens": [{"word": "I"}, {"rest": true}, {"rest": true}, {"word": "go"}]},
+    {"line": "go_ now", "tokens": [{"word": "go"}, {"rest": true}, {"word": "now"}]},
+    {"line": "_go", "tokens": [{"rest": true}, {"word": "go"}]},
+    {"line": "go_now", "tokens": [{"word": "go"}, {"rest": true}, {"word": "now"}]},
+    {"line": "_", "tokens": [{"rest": true}]},
+    {"line": "  _  _ ", "tokens": [{"rest": true}, {"rest": true}]},
+    {"line": "hello world", "tokens": [{"word": "hello"}, {"word": "world"}]},
+    {"line": "don't_stop,", "tokens": [{"word": "don't"}, {"rest": true}, {"word": "stop,"}]},
+    {"line": "", "tokens": []},
+    {"line": "a\t_ b", "tokens": [{"word": "a"}, {"rest": true}, {"word": "b"}]},
+    {"line": "_ _ _ yeah _", "tokens": [{"rest": true}, {"rest": true}, {"rest": true}, {"word": "yeah"}, {"rest": true}]}
+  ],
+  "word_indexes": [
+    {"line": "I _ go _ home", "word_index_per_token": [0, null, 1, null, 2]},
+    {"line": "_ _ x", "word_index_per_token": [null, null, 0]}
+  ],
+  "rebuild": [
+    {"cells": [{"syllable": "I", "word_index": 0, "word": "I"}, {"rest": true}, {"syllable": "go", "word_index": 1, "word": "go"}], "text": "I _ go"},
+    {"cells": [{"rest": true}, {"rest": true}, {"syllable": "I", "word_index": 0}], "text": "_ _ I"},
+    {"cells": [{"syllable": "hel", "word_index": 0, "word": "hello"}, {"rest": true}, {"syllable": "lo", "word_index": 0, "word": "hello"}], "text": "hello _"},
+    {"cells": [{"syllable": "hul", "word_index": 0}, {"syllable": "la", "word_index": 0}, {"rest": true}], "text": "hulla _"},
+    {"cells": [{"rest": true}], "text": "_"},
+    {"cells": [], "text": ""},
+    {"cells": [{"syllable": "a", "word_index": 0, "word": "a"}, {"syllable": "b", "word_index": 1, "word": "b,"}, {"rest": true}, {"rest": true}], "text": "a b, _ _"}
+  ],
+  "display": [
+    {"text": "I _ go", "display": "I go"},
+    {"text": "go_now", "display": "go now"},
+    {"text": "_", "display": ""},
+    {"text": "a _\n_\nb", "display": "a\nb"},
+    {"text": "verse one\n\nverse _ two", "display": "verse one\n\nverse two"},
+    {"text": "  spaced   out  ", "display": "spaced out"},
+    {"text": "no rests here", "display": "no rests here"},
+    {"text": "line\n_ _\n\nnext", "display": "line\n\nnext"}
+  ],
+  "match": [
+    {"query": "go now", "text": "go_now", "matches": true},
+    {"query": "I GO", "text": "I _ go", "matches": true},
+    {"query": "i go", "text": "I _ go", "matches": true},
+    {"query": "_", "text": "I _ go", "matches": false},
+    {"query": "  ", "text": "anything", "matches": true},
+    {"query": "cat night", "text": "black cat\nwhite night", "matches": true},
+    {"query": "cat dog", "text": "black cat\nwhite night", "matches": false},
+    {"query": "100%", "text": "give 100% now", "matches": true},
+    {"query": "100%", "text": "give 1000 now", "matches": false},
+    {"query": "café", "text": "Café au lait", "matches": true}
+  ]
+}

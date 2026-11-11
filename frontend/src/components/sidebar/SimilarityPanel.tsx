@@ -4,6 +4,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import type { SimilarityResult } from '@/types';
 import { SNIPPET_TYPE_COLORS } from '@/types';
+import { displayText } from '@/lib/grid/restMarks';
 
 export default function SimilarityPanel() {
   const { similarityPanelOpen, toggleSimilarityPanel, similarityTargetId } = useUIStore();
@@ -72,7 +73,7 @@ export default function SimilarityPanel() {
               <span style={{ fontSize: 11, color: '#6366f1' }}>{(r.score * 100).toFixed(0)}% match</span>
             </div>
             <div style={{ fontSize: 12, color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {r.raw_text.slice(0, 80)}
+              {displayText(r.raw_text).slice(0, 80)}
             </div>
           </div>
         ))}
