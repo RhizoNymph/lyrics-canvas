@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.rhyme
 
+import dev.nymph.lyrics.logic.rests.displayText
 import dev.nymph.lyrics.logic.rhyme.anchorSnippets
 import dev.nymph.lyrics.logic.rhyme.lastNonEmptyLineIndex
 import dev.nymph.lyrics.logic.rhyme.rangeText
@@ -38,7 +39,7 @@ fun chipLabel(snippet: Snippet, range: AnchorRange?): String {
     }
     val index = lastNonEmptyLineIndex(snippet)
     val text = if (index == null) snippet.rawText else snippet.gridData?.lines?.getOrNull(index)?.rawText ?: snippet.rawText
-    return truncateChip(text.trim())
+    return truncateChip(displayText(text).trim())
 }
 
 fun chipHint(snippet: Snippet, range: AnchorRange?, awaitingEnd: Boolean): String = when {

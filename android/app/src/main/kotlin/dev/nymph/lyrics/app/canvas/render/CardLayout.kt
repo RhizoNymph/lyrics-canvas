@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.canvas.render
 
+import dev.nymph.lyrics.logic.rests.displayText
 import dev.nymph.lyrics.logic.canvas.Rect
 import dev.nymph.lyrics.logic.placements.linkBadgeCount
 import dev.nymph.lyrics.logic.placements.linkBadgeLabel
@@ -137,7 +138,7 @@ fun cardLayout(snippet: Snippet): CardLayout {
     val counts = lines.mapIndexed { row, line ->
         CountText(line.syllableCount.toString(), w - m.PADDING - 14.0, gridTop + row * m.CELL_HEIGHT + 5.0)
     }
-    val fallback = if (lines.isEmpty() && snippet.rawText.isNotEmpty()) snippet.rawText.take(m.FALLBACK_MAX_CHARS) else null
+    val fallback = if (lines.isEmpty()) fallbackTextOf(snippet) else null
     val headerLabel = snippet.snippetType.name
     val badge = linkBadgeCount(snippet)?.let { count ->
         val label = linkBadgeLabel(count)
@@ -171,3 +172,10 @@ fun cardLayout(snippet: Snippet): CardLayout {
 
 /** Whether card text is legible at [scale] (canvas zoom); below it only shapes are drawn. */
 fun textVisible(scale: Double): Boolean = CardMetrics.CELL_FONT * scale >= CardMetrics.MIN_TEXT_SIZE
+
+/**
+ * The text a card shows when it has no grid lines: the display text (rest marks stripped), cut to
+ * [CardMetrics.FALLBACK_MAX_CHARS]; null when that is empty.
+ */
+fun fallbackTextOf(snippet: Snippet): String? =
+    displayText(snippet.rawText).takeIf { it.isNotEmpty() }?.take(CardMetrics.FALLBACK_MAX_CHARS)

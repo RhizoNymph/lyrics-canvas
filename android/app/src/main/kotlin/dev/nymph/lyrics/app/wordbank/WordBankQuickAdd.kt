@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.wordbank
 
+import dev.nymph.lyrics.logic.rests.displayText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.data.repository.WordBankRepository
@@ -15,7 +16,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Adding to the word bank from elsewhere: a rhyme candidate's "+ bank" and the editor's "Add to
- * word bank" on a text selection. The text is trimmed, split on commas and newlines, validated and
+ * word bank" on a text selection. The text's rest marks are stripped (display text), then it is trimmed, split on commas and newlines, validated and
  * posted (no tags); [messages] carries the result line for a toast. Lives in the canvas back-stack
  * entry, so the canvas and the editor share it.
  */
@@ -25,7 +26,8 @@ class WordBankQuickAddViewModel(private val repo: WordBankRepository) : ViewMode
     val messages: Flow<String> = _messages.receiveAsFlow()
 
     fun add(raw: String) {
-        val words = when (val plan = planAdd(raw)) {
+        // Snippet text (an editor selection) can carry rest marks; the bank gets the words only.
+        val words = when (val plan = planAdd(displayText(raw))) {
             AddPlan.Nothing -> return
             is AddPlan.Invalid, is AddPlan.TooMany -> return message(checkNotNull(plan.problemMessage()))
             is AddPlan.Ready -> plan.words.map { it.value }
