@@ -1,1 +1,1 @@
-export { isSnippetVisible, visibleSnippets } from './visibility';
+export { isSnippetShown, isSnippetVisible, visibleSnippets } from './visibility';

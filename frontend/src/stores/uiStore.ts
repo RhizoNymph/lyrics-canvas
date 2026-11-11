@@ -22,7 +22,6 @@ interface UIState {
   // Panels
   rightPanel: RightPanel;
   similarityPanelOpen: boolean;
-  searchModalOpen: boolean;
   exportDialogOpen: boolean;
 
   /** Canvas page view: the Pixi canvas or the snippet list. Persisted per viewer. */
@@ -42,7 +41,6 @@ interface UIState {
   /** Open the word bank (closing the rhyme sidebar), or close it. */
   toggleWordBank: () => void;
   toggleSimilarityPanel: () => void;
-  setSearchModalOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
   /** Switch view; closes the editor and context menu, whose placement belongs to the old view. */
   setViewMode: (mode: ViewMode) => void;
@@ -62,7 +60,6 @@ interface UIState {
 export const useUIStore = create<UIState>((set, get) => ({
   rightPanel: 'none',
   similarityPanelOpen: false,
-  searchModalOpen: false,
   exportDialogOpen: false,
   viewMode: loadViewMode(browserStorage()),
   editingSnippetId: null,
@@ -73,7 +70,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   toggleRhymeSidebar: () => set((s) => ({ rightPanel: s.rightPanel === 'rhymes' ? 'none' : 'rhymes' })),
   toggleWordBank: () => set((s) => ({ rightPanel: s.rightPanel === 'words' ? 'none' : 'words' })),
   toggleSimilarityPanel: () => set((s) => ({ similarityPanelOpen: !s.similarityPanelOpen })),
-  setSearchModalOpen: (open) => set({ searchModalOpen: open }),
   setExportDialogOpen: (open) => set({ exportDialogOpen: open }),
   setViewMode: (mode) => {
     // A failed write is already logged; the in-memory mode still applies for this session.

@@ -7,6 +7,7 @@ import InlineGridEditor from './InlineGridEditor';
 import SnippetContextMenu from './SnippetContextMenu';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useTagFilterStore } from '@/stores/tagFilterStore';
+import { useCanvasSearchStore } from '@/stores/canvasSearchStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useRhymeStore } from '@/stores/rhymeStore';
 import { visibleSnippets } from '@/lib/canvas';
@@ -24,6 +25,7 @@ export default function CanvasViewport() {
   const { viewport, setViewport, snippets, groups, addSnippet, clearSelection, commitPositions } =
     useCanvasStore();
   const tagFilter = useTagFilterStore((s) => s.filter.applied);
+  const search = useCanvasSearchStore((s) => s.query);
   const { editingSnippetId, setEditingSnippet } = useUIStore();
   // The rhyme store needs the canvas size to place materialized snippets at the viewport centre.
   const setRhymeViewSize = useRhymeStore((s) => s.setViewSize);
@@ -139,7 +141,7 @@ export default function CanvasViewport() {
     }, 50);
   }, [clearSelection]);
 
-  const visible = visibleSnippets(snippets, tagFilter);
+  const visible = visibleSnippets(snippets, tagFilter, search);
 
   const groupArray = Array.from(groups.values());
 

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import CanvasViewport from '@/components/canvas/CanvasViewport';
@@ -10,7 +10,6 @@ import RhymeSidebar from '@/components/sidebar/RhymeSidebar';
 import WordBankPanel from '@/components/wordBank/WordBankPanel';
 import WordBankToast from '@/components/wordBank/WordBankToast';
 import SimilarityPanel from '@/components/sidebar/SimilarityPanel';
-import SearchModal from '@/components/modals/SearchModal';
 import ExportDialog from '@/components/modals/ExportDialog';
 import VoiceCaptureModal from '@/components/voice/VoiceCaptureModal';
 import { useVoiceStore } from '@/stores/voiceStore';
@@ -23,13 +22,19 @@ import { removalFailureNotice } from '@/lib/placements';
 import { usePlacementNoticeStore } from '@/stores/placementNoticeStore';
 import PlacementToast from '@/components/placements/PlacementToast';
 import CanvasesPopover from '@/components/placements/CanvasesPopover';
+import { useCanvasSearchStore } from '@/stores/canvasSearchStore';
+import { useSnippetFocus } from '@/hooks/useSnippetFocus';
 
 export default function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { loadCanvas, undo, redo, removeFromCanvas, mergeSelected } = useCanvasStore();
-  const { setSearchModalOpen, rightPanel, viewMode, toggleViewMode } = useUIStore();
+  const { rightPanel, viewMode, toggleViewMode } = useUIStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   useRhymeQuery();
+  /** The canvas this page finished loading (null while a load is pending): focus waits for fresh snippets. */
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  useSnippetFocus(id ?? null, loadedId, searchParams, setSearchParams);
 
   // Tags and presets are user-wide: (re)load them whenever the page mounts.
   useEffect(() => {
@@ -37,13 +42,21 @@ export default function CanvasPage() {
   }, []);
 
   useEffect(() => {
+    let left = false;
     if (id) {
       useTagFilterStore.getState().open(id);
-      loadCanvas(id).catch(() => navigate('/'));
+      useCanvasSearchStore.getState().open(id);
+      setLoadedId(null);
+      loadCanvas(id)
+        .then(() => {
+          if (!left) setLoadedId(id);
+        })
+        .catch(() => navigate('/'));
     }
     // Leaving the canvas closes the recorder (its session releases the mic on unmount), and the editor and
     // menus, whose snippet belongs to the canvas left (another canvas may open in this same page).
     return () => {
+      left = true;
       useVoiceStore.getState().closeRecorder();
       useUIStore.getState().leaveCanvas();
     };
@@ -88,9 +101,10 @@ export default function CanvasPage() {
       } else if (ctrl && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
         redo();
-      } else if (ctrl && e.key === 'f') {
+      } else if (ctrl && !e.shiftKey && !e.altKey && key === 'f') {
+        // Focus the in-canvas search box (instead of the browser's find). Works while typing.
         e.preventDefault();
-        setSearchModalOpen(true);
+        useCanvasSearchStore.getState().requestFocus();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !ctrl) {
         // Delete selected snippets — only when not editing text
         if (typingOrEditing(e)) return;
@@ -106,7 +120,7 @@ export default function CanvasPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, setSearchModalOpen, removeFromCanvas, mergeSelected, toggleViewMode]);
+  }, [undo, redo, removeFromCanvas, mergeSelected, toggleViewMode]);
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -120,7 +134,6 @@ export default function CanvasPage() {
         {rightPanel === 'rhymes' && <RhymeSidebar />}
         {rightPanel === 'words' && <WordBankPanel />}
       </div>
-      <SearchModal />
       <ExportDialog />
       <VoiceCaptureModal />
       <WordBankToast />
