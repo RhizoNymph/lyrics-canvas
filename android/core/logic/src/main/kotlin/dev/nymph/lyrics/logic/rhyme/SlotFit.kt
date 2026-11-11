@@ -15,9 +15,10 @@ fun slotFromGridLine(line: GridLine): Slot? {
     return Slot(line.cells.size, stress)
 }
 
+/** The last grid line with at least one syllable (a line of only rests has nothing to rhyme on). */
 fun lastNonEmptyLineIndex(snippet: Snippet): Int? {
     val lines = snippet.gridData?.lines ?: return null
-    return lines.indices.lastOrNull { lines[it].cells.isNotEmpty() }
+    return lines.indices.lastOrNull { i -> lines[i].cells.any { !it.isRest } }
 }
 
 /** `lineIndex == null` selects the last non-empty line, matching the API's anchor semantics. */

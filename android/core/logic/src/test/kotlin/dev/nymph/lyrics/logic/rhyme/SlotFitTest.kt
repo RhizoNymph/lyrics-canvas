@@ -53,6 +53,16 @@ class SlotFitTest {
     }
 
     @Test
+    fun `null line index skips trailing lines made only of rests`() {
+        val withRests = snippet(
+            "r",
+            gridData = GridData(listOf(line(listOf(C(1), C(0))), line(listOf(C(rest = true), C(rest = true))))),
+        )
+        assertEquals(0, lastNonEmptyLineIndex(withRests))
+        assertEquals(Slot(2, "10"), slotFromSnippet(withRests, null))
+    }
+
+    @Test
     fun `slotFromSnippet returns null with no grid data or an out-of-range line`() {
         assertNull(slotFromSnippet(snippet("n", gridData = null), null))
         assertNull(slotFromSnippet(threeLines, 9))

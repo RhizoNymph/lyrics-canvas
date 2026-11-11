@@ -134,6 +134,7 @@ setTagFilter (the DataStore filter restored after load) -> if it hides the watch
 
 | File | Role / key exports |
 |---|---|
+| `android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/rhyme/SlotFit.kt` | `lastNonEmptyLineIndex` skips grid lines made only of rests, matching the backend's default snippet anchor (last line with words) |
 | `android/core/logic/.../logic/rests/RestMarks.kt` | `REST_MARK`, sealed `LineToken` (`Word(text, wordIndex)`, `Rest`), `tokenizeLine`, `lineWordTokens`, `displayLine`, `displayText` |
 | `.../logic/grid/LocalSyllabify.kt` | `localSyllabifyLine` emits rest cells for `_` |
 | `.../logic/grid/RawText.kt` | `rebuildRawText` emits `_` per rest (vectors `rebuild`) |
