@@ -2068,6 +2068,118 @@
         "title": "ScoreWeightsModel",
         "type": "object"
       },
+      "SearchCanvasHit": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "updated_at"
+        ],
+        "title": "SearchCanvasHit",
+        "type": "object"
+      },
+      "SearchErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "SearchErrorBody",
+        "type": "object"
+      },
+      "SearchErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SearchErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SearchErrorResponse",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "canvases": {
+            "items": {
+              "$ref": "#/components/schemas/SearchCanvasHit"
+            },
+            "title": "Canvases",
+            "type": "array"
+          },
+          "snippets": {
+            "items": {
+              "$ref": "#/components/schemas/SearchSnippetHit"
+            },
+            "title": "Snippets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "canvases",
+          "snippets"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchSnippetHit": {
+        "properties": {
+          "canvases": {
+            "items": {
+              "$ref": "#/components/schemas/SnippetCanvasRef"
+            },
+            "title": "Canvases",
+            "type": "array"
+          },
+          "content_updated_at": {
+            "title": "Content Updated At",
+            "type": "string"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "snippet_id": {
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "snippet_type": {
+            "$ref": "#/components/schemas/SnippetType"
+          }
+        },
+        "required": [
+          "snippet_id",
+          "snippet_type",
+          "content_updated_at",
+          "excerpt",
+          "canvases"
+        ],
+        "title": "SearchSnippetHit",
+        "type": "object"
+      },
       "ShareResponse": {
         "properties": {
           "share_token": {
@@ -5057,6 +5169,76 @@
         "summary": "Put Recording Verification",
         "tags": [
           "voice"
+        ]
+      }
+    },
+    "/api/search": {
+      "get": {
+        "operationId": "search_all_api_search_get",
+        "parameters": [
+          {
+            "description": "1-200 characters after trimming; whitespace separates terms",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "1-200 characters after trimming; whitespace separates terms",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "maximum hits in each list",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "maximum hits in each list",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search All",
+        "tags": [
+          "search"
         ]
       }
     },
