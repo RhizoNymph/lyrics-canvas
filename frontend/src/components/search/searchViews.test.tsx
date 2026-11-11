@@ -78,3 +78,21 @@ describe('GlobalSearchResultsView', () => {
     expect(html).toContain('Night songs');
   });
 });
+
+describe('GlobalSearchResultsView excerpts', () => {
+  it('highlights inside a cut excerpt and marks an empty one', () => {
+    const cut: GlobalSearchResponse = {
+      canvases: [{ id: 'c_1', title: 'my_draft', updated_at: '2026-11-01 10:00:00' }],
+      snippets: [
+        { snippet_id: 'a', snippet_type: 'verse', content_updated_at: '', excerpt: '…the night is long…', canvases: [{ id: 'c1', title: 'A' }] },
+        { snippet_id: 'b', snippet_type: 'hook', content_updated_at: '', excerpt: '', canvases: [{ id: 'c1', title: 'A' }] },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <GlobalSearchResultsView view={{ kind: 'results', q: 'night _', query: parseSearchQuery('night _'), result: cut }} onOpenCanvas={noop} onOpenSnippet={noop} />,
+    );
+    expect(html).toMatch(/<span>…the <\/span><mark[^>]*>night<\/mark><span> is long…<\/span>/);
+    expect(html).toMatch(/<span>my<\/span><mark[^>]*>_<\/mark><span>draft<\/span>/);
+    expect(html).toContain('No text');
+  });
+});

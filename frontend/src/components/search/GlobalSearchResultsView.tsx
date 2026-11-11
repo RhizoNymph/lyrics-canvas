@@ -26,6 +26,7 @@ const rowStyle = {
 } as const;
 const linkStyle = { background: 'none', border: 'none', padding: 0, color: '#c7d2fe', cursor: 'pointer', fontSize: 11, textDecoration: 'underline' } as const;
 
+/** Highlights are computed here with the matching rule; the server's excerpt may be cut (leading/trailing …). */
 function Excerpt({ text, query }: { text: string; query: SearchQuery }) {
   return (
     <>
@@ -82,7 +83,7 @@ function SnippetHit({ hit, query, onOpenSnippet }: { hit: SearchSnippetHit; quer
         </span>
       </div>
       <div style={{ fontFamily: 'monospace', fontSize: 13, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-        <Excerpt text={hit.excerpt} query={query} />
+        {hit.excerpt === '' ? <span style={{ color: '#6a6a8a' }}>No text</span> : <Excerpt text={hit.excerpt} query={query} />}
       </div>
     </div>
   );
