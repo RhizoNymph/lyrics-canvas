@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.canvas.list
 
+import dev.nymph.lyrics.app.canvas.render.fallbackTextOf
 import dev.nymph.lyrics.app.canvas.render.CardMetrics
 import dev.nymph.lyrics.model.Snippet
 
@@ -64,7 +65,7 @@ fun listCardHeight(snippet: Snippet, fallbackTextHeight: Double): Double {
     val rows = snippet.gridData?.lines.orEmpty().size
     return when {
         rows > 0 -> m.HEADER_HEIGHT + m.PADDING + rows * m.CELL_HEIGHT + m.PADDING
-        snippet.rawText.isNotEmpty() -> m.HEADER_HEIGHT + m.PADDING + maxOf(fallbackTextHeight, m.CELL_HEIGHT) + m.PADDING
+        fallbackTextOf(snippet) != null -> m.HEADER_HEIGHT + m.PADDING + maxOf(fallbackTextHeight, m.CELL_HEIGHT) + m.PADDING
         else -> m.HEADER_HEIGHT + m.CELL_HEIGHT
     }
 }

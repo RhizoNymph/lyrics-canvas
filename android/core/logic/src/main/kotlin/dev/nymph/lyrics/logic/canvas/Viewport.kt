@@ -60,3 +60,9 @@ fun viewportCenter(viewport: Viewport, viewSize: ViewSize): Point = Point(
     viewSize.width / (2 * viewport.zoom) - viewport.x,
     viewSize.height / (2 * viewport.zoom) - viewport.y,
 )
+
+/** [viewport] panned (zoom kept) so the world point [world] sits at the centre of the canvas element. */
+fun centredOn(viewport: Viewport, world: Point, viewSize: ViewSize): Viewport = viewport.copy(
+    x = viewSize.width / (2 * viewport.zoom) - world.x,
+    y = viewSize.height / (2 * viewport.zoom) - world.y,
+)

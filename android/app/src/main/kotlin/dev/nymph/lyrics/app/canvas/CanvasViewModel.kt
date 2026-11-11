@@ -4,6 +4,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.app.canvas.placements.PlacementCanvasPort
+import dev.nymph.lyrics.app.canvas.search.CANVAS_SEARCH_DEBOUNCE_MS
+import dev.nymph.lyrics.app.canvas.search.CanvasSearchMemory
+import dev.nymph.lyrics.app.canvas.search.FOCUS_SNIPPET_MISSING
+import dev.nymph.lyrics.app.canvas.search.FocusPlan
+import dev.nymph.lyrics.app.canvas.search.HIDDEN_BY_TAG_FILTER
+import dev.nymph.lyrics.app.canvas.search.planFocus
 import dev.nymph.lyrics.app.canvas.placements.userMessage
 import dev.nymph.lyrics.app.canvas.rename.CanvasRenamer
 import dev.nymph.lyrics.app.canvas.rename.RenameDialog
@@ -20,6 +26,8 @@ import dev.nymph.lyrics.logic.canvas.MergeError
 import dev.nymph.lyrics.logic.canvas.Point
 import dev.nymph.lyrics.logic.canvas.ViewSize
 import dev.nymph.lyrics.logic.canvas.Viewport
+import dev.nymph.lyrics.logic.canvas.cardBounds
+import dev.nymph.lyrics.logic.canvas.centredOn
 import dev.nymph.lyrics.logic.canvas.hitTestScreen
 import dev.nymph.lyrics.logic.canvas.toMergeError
 import dev.nymph.lyrics.logic.canvas.viewportCenter
@@ -28,7 +36,9 @@ import dev.nymph.lyrics.logic.placements.RemovalPlan
 import dev.nymph.lyrics.logic.placements.applyTransfer
 import dev.nymph.lyrics.logic.placements.toPlacementError
 import dev.nymph.lyrics.logic.placements.withCanvasRenamed
+import dev.nymph.lyrics.logic.search.SearchQuery
 import dev.nymph.lyrics.logic.tags.TagFilter
+import dev.nymph.lyrics.logic.tags.matches
 import dev.nymph.lyrics.logic.tags.withTagDeleted
 import dev.nymph.lyrics.logic.tags.withTagEdited
 import dev.nymph.lyrics.logic.tags.withTagLinked
@@ -50,6 +60,7 @@ import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.voice.VoiceTakeResponse
 import dev.nymph.lyrics.model.voice.VoiceTakeTarget
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -59,6 +70,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -69,6 +81,12 @@ const val VIEWPORT_SAVE_DELAY_MS: Long = 1_000
 
 /** [SavedStateHandle] key of the canvas / list mode ([CanvasModeKind.name]). */
 const val CANVAS_MODE_KEY: String = "canvas_mode"
+
+/** [SavedStateHandle] key of the snippet to focus on open: the `CanvasRoute.focusSnippetId` nav argument. */
+const val FOCUS_SNIPPET_KEY: String = "focusSnippetId"
+
+/** [SavedStateHandle] key set once the focus was applied, so a rotation or reload does not apply it again. */
+const val FOCUS_HANDLED_KEY: String = "focus_handled"
 
 /**
  * The canvas screen: loaded snippets, camera, selection mode, card moves, merge / delete, and the
@@ -84,6 +102,11 @@ const val CANVAS_MODE_KEY: String = "canvas_mode"
  * ([CanvasUiState.Ready.visibleSnippets]) and deselects them; picker links, renames and deletes
  * update the snippets' embedded tags.
  *
+ * Search: [editSearch] filters live (debounced [CANVAS_SEARCH_DEBOUNCE_MS], a clear at once) on the
+ * loaded snippets' display text, ANDed with the tag filter in [CanvasUiState.Ready.visibleSnippets];
+ * the text lasts per canvas for the app session ([CanvasSearchMemory]). A [FOCUS_SNIPPET_KEY] nav
+ * argument opens the canvas focused on that snippet (see [planFocus]).
+ *
  * Placements: every layout save names this canvas; plain Delete removes the selection from this
  * canvas only ([deleteSelected], deleted for good where it was the last canvas), [deleteEverywhereSelected]
  * deletes it from every canvas; [PlacementCanvasPort] applies transfers from the picker; the title is
@@ -92,7 +115,9 @@ const val CANVAS_MODE_KEY: String = "canvas_mode"
  * @param persistScope outlives this ViewModel, so a viewport save started on leave completes
  * @param savedState keeps the canvas / list mode across configuration changes and process death
  * @param canvasUpdates tells the canvas list about a rename
+ * @param searchMemory the in-canvas search text per canvas for the session
  */
+@OptIn(FlowPreview::class)
 class CanvasViewModel(
     private val canvasId: CanvasId,
     private val canvases: CanvasRepository,
@@ -101,6 +126,8 @@ class CanvasViewModel(
     private val viewportSaveDelayMs: Long = VIEWPORT_SAVE_DELAY_MS,
     private val savedState: SavedStateHandle = SavedStateHandle(),
     canvasUpdates: CanvasUpdates = CanvasUpdates(),
+    private val searchMemory: CanvasSearchMemory = CanvasSearchMemory(),
+    private val searchDebounceMs: Long = CANVAS_SEARCH_DEBOUNCE_MS,
 ) : ViewModel(), RhymeCanvasPort, TagCanvasPort, WordBankCanvasPort, PlacementCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
@@ -117,6 +144,20 @@ class CanvasViewModel(
     private var tagFilter: TagFilter = TagFilter.Everything
     private var viewportSaveJob: Job? = null
 
+    private val _searchInput = MutableStateFlow(searchMemory.get(canvasId))
+
+    /** The search field's text (applied after [searchDebounceMs]). */
+    val searchInput: StateFlow<String> = _searchInput.asStateFlow()
+
+    /** The applied search, also before the canvas loads. */
+    private var search: SearchQuery = SearchQuery.parse(_searchInput.value)
+
+    /** The snippet just focused from search, until the tag filter's first say on it (it may be restored later). */
+    private var watchedFocus: SnippetId? = null
+
+    /** A focused snippet to centre once the canvas has a size. */
+    private var pendingCentre: SnippetId? = null
+
     private val renamer = CanvasRenamer(canvases, viewModelScope, canvasUpdates) { canvas ->
         updateReady { it.copy(title = canvas.title, snippets = withCanvasRenamed(it.snippets, canvas.id, canvas.title)) }
     }
@@ -126,6 +167,11 @@ class CanvasViewModel(
 
     init {
         reload()
+        viewModelScope.launch {
+            _searchInput
+                .debounce { if (it.isBlank()) 0L else searchDebounceMs }
+                .collect { applySearch(SearchQuery.parse(it)) }
+        }
     }
 
     fun reload() {
@@ -144,10 +190,12 @@ class CanvasViewModel(
                         viewSize = ViewSize(0.0, 0.0),
                         mode = modeFor(savedModeKind(), detail.snippets),
                         filter = tagFilter,
+                        search = search,
                     )
                 }
                 is ApiResult.Failure -> CanvasUiState.Failed(result.error.userMessage())
             }
+            applyFocus()
         }
     }
 
@@ -191,7 +239,10 @@ class CanvasViewModel(
 
     // ---- Camera ----
 
-    fun setViewSize(size: ViewSize) = updateReady { if (it.viewSize == size) it else it.copy(viewSize = size) }
+    fun setViewSize(size: ViewSize) {
+        updateReady { if (it.viewSize == size) it else it.copy(viewSize = size) }
+        pendingCentre?.let(::centreOn)
+    }
 
     fun panBy(delta: Point) = setViewport { it.panBy(delta) }
 
@@ -474,12 +525,11 @@ class CanvasViewModel(
 
     override fun setTagFilter(filter: TagFilter) {
         tagFilter = filter
-        updateReady { ready ->
-            if (ready.filter == filter) return@updateReady ready
-            val next = ready.copy(filter = filter)
-            val shown = next.visibleSnippets.mapTo(HashSet()) { it.id }
-            next.copy(selection = Selection.of(ready.selection.ids.filterTo(LinkedHashSet()) { it in shown }))
-        }
+        updateReady { ready -> if (ready.filter == filter) ready else ready.copy(filter = filter).pruneHidden() }
+        val watched = watchedFocus ?: return
+        val snippet = ready()?.byId?.get(watched) ?: return
+        watchedFocus = null
+        if (!filter.matches(snippet)) message(HIDDEN_BY_TAG_FILTER)
     }
 
     private inline fun mapSnippet(id: SnippetId, change: (Snippet) -> Snippet) = updateReady { ready ->
@@ -493,4 +543,67 @@ class CanvasViewModel(
     override fun onTagEdited(tag: Tag) = updateReady { it.copy(snippets = it.snippets.withTagEdited(tag)) }
 
     override fun onTagDeleted(tag: TagId) = updateReady { it.copy(snippets = it.snippets.withTagDeleted(tag)) }
+
+    // ---- In-canvas search ----
+
+    /** The search field changed: remembered for the session, applied after the debounce. */
+    fun editSearch(text: String) {
+        _searchInput.value = text
+        searchMemory.set(canvasId, text)
+    }
+
+    /** The × (or Escape): clear the search at once. */
+    fun clearSearch() {
+        editSearch("")
+        applySearch(SearchQuery.EVERYTHING)
+    }
+
+    private fun applySearch(query: SearchQuery) {
+        search = query
+        updateReady { ready -> if (ready.search == query) ready else ready.copy(search = query).pruneHidden() }
+    }
+
+    /** Hidden snippets leave the selection. */
+    private fun CanvasUiState.Ready.pruneHidden(): CanvasUiState.Ready {
+        val shown = visibleSnippets.mapTo(HashSet()) { it.id }
+        return copy(selection = Selection.of(selection.ids.filterTo(LinkedHashSet()) { it in shown }))
+    }
+
+    // ---- Focus on a snippet (opened from search) ----
+
+    private fun applyFocus() {
+        val id = savedState.get<String>(FOCUS_SNIPPET_KEY)?.let(::SnippetId) ?: return
+        if (savedState.get<Boolean>(FOCUS_HANDLED_KEY) == true) return
+        val ready = ready() ?: return
+        savedState[FOCUS_HANDLED_KEY] = true
+        when (val plan = planFocus(ready.snippets, id, ready.filter, ready.search)) {
+            FocusPlan.Missing -> message(FOCUS_SNIPPET_MISSING)
+            is FocusPlan.Reveal -> {
+                if (plan.clearSearch) clearSearch()
+                if (plan.hiddenByTags) {
+                    message(HIDDEN_BY_TAG_FILTER)
+                } else {
+                    updateReady { it.copy(selection = Selection.of(setOf(id))) }
+                    watchedFocus = id
+                }
+                when (ready.mode) {
+                    CanvasMode.Canvas -> centreOn(id)
+                    is CanvasMode.SnippetList -> if (!plan.hiddenByTags) _events.trySend(CanvasEvent.RevealSnippet(id))
+                }
+            }
+        }
+    }
+
+    /** Pan (zoom kept) so the card's centre is the view's centre; waits for the canvas size. */
+    private fun centreOn(id: SnippetId) {
+        val ready = ready() ?: return
+        val snippet = ready.byId[id] ?: return run { pendingCentre = null }
+        if (ready.viewSize.width <= 0.0 || ready.viewSize.height <= 0.0) {
+            pendingCentre = id
+            return
+        }
+        pendingCentre = null
+        val bounds = cardBounds(snippet)
+        setViewport { centredOn(it, Point(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2), ready.viewSize) }
+    }
 }

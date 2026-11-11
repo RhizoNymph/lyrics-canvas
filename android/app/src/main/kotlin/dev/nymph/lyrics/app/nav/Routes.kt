@@ -9,8 +9,9 @@ data object AuthRoute
 @Serializable
 data object CanvasListRoute
 
+/** A canvas; [focusSnippetId] (a search hit) opens it with that snippet selected and centred. */
 @Serializable
-data class CanvasRoute(val canvasId: String)
+data class CanvasRoute(val canvasId: String, val focusSnippetId: String? = null)
 
 /** The grid editor for one snippet of the canvas below it on the back stack. */
 @Serializable

@@ -52,12 +52,25 @@ import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetDialog
 import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetViewModel
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.SnippetId
+import dev.nymph.lyrics.app.canvaslist.search.GlobalSearchField
+import dev.nymph.lyrics.app.canvaslist.search.GlobalSearchResults
+import dev.nymph.lyrics.app.canvaslist.search.GlobalSearchResultsView
+import dev.nymph.lyrics.app.canvaslist.search.GlobalSearchViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSignOut: () -> Unit) {
+fun CanvasListScreen(
+    container: AppContainer,
+    onOpen: (CanvasId) -> Unit,
+    onSignOut: () -> Unit,
+    /** A snippet search hit: open [CanvasId] focused on [SnippetId]. */
+    onOpenSnippet: (CanvasId, SnippetId) -> Unit = { canvas, _ -> onOpen(canvas) },
+) {
     val vm: CanvasListViewModel = viewModel { CanvasListViewModel(container.canvases, container.canvasUpdates) }
+    val searchVm: GlobalSearchViewModel = viewModel { GlobalSearchViewModel(container.search) }
+    val search by searchVm.state.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     val rename by vm.rename.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -108,27 +121,12 @@ fun CanvasListScreen(container: AppContainer, onOpen: (CanvasId) -> Unit, onSign
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when (val s = state) {
-                CanvasListUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is CanvasListUiState.Failed -> Column(
-                    Modifier.align(Alignment.Center).padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(s.message, color = Palette.Error)
-                    Button(onClick = vm::refresh) { Text("Retry") }
-                }
-                is CanvasListUiState.Ready -> if (s.canvases.isEmpty()) {
-                    Text("No canvases yet. Create one to start writing.", color = Palette.Muted, modifier = Modifier.align(Alignment.Center).padding(24.dp))
-                } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        items(s.canvases, key = { it.id.value }) { canvas ->
-                            CanvasRow(canvas, onOpen = { onOpen(canvas.id) }, onRename = { vm.startRename(canvas) })
-                            HorizontalDivider(color = Palette.Border)
-                        }
-                    }
-                }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            GlobalSearchField(search.text, onEdit = searchVm::edit, onClear = searchVm::clear)
+            if (search.results != GlobalSearchResults.Off) {
+                GlobalSearchResultsView(search.results, onOpenCanvas = onOpen, onOpenSnippet = onOpenSnippet, onRetry = searchVm::retry)
+            } else {
+                CanvasListBody(state, vm, onOpen)
             }
         }
     }
@@ -178,4 +176,32 @@ private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit) 
         colors = ListItemDefaults.colors(containerColor = Palette.CanvasBackground),
         modifier = Modifier.combinedClickable(onClick = onOpen, onLongClick = onRename, onLongClickLabel = "Rename"),
     )
+}
+
+/** The canvas list itself (no search query). */
+@Composable
+private fun CanvasListBody(state: CanvasListUiState, vm: CanvasListViewModel, onOpen: (CanvasId) -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        when (val s = state) {
+            CanvasListUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+            is CanvasListUiState.Failed -> Column(
+                Modifier.align(Alignment.Center).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(s.message, color = Palette.Error)
+                Button(onClick = vm::refresh) { Text("Retry") }
+            }
+            is CanvasListUiState.Ready -> if (s.canvases.isEmpty()) {
+                Text("No canvases yet. Create one to start writing.", color = Palette.Muted, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(s.canvases, key = { it.id.value }) { canvas ->
+                        CanvasRow(canvas, onOpen = { onOpen(canvas.id) }, onRename = { vm.startRename(canvas) })
+                        HorizontalDivider(color = Palette.Border)
+                    }
+                }
+            }
+        }
+    }
 }

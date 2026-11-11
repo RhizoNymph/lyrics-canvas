@@ -160,9 +160,16 @@ class GridEditorViewModel(
         moveSelection(to)
     }
 
-    /** Move the selected chunk one cell left (-1) or right (+1). */
+    /**
+     * Move the selected chunk one cell left (-1) or right (+1). Right with nothing after the chunk
+     * (the end of the line) inserts a rest before it instead, as `+·` does, so the chunk still moves
+     * one cell right; left at the start of the line does nothing.
+     */
     override fun nudgeSelection(direction: Int) {
-        val sel = _state.value.selection ?: return
+        val current = _state.value
+        val sel = current.selection ?: return
+        val cells = current.rowLines.getOrNull(sel.row)?.cells?.size ?: return
+        if (direction > 0 && sel.end == cells) return insertRestBeforeSelection()
         moveSelection(sel.start + direction)
     }
 

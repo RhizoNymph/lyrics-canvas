@@ -244,14 +244,14 @@ class GridEditorViewModelTest {
             assertEquals(setOf(0), vm.now.rows.arranged)
 
             vm.reorderRow(0, 2)
-            assertEquals(listOf("b", "c", "a"), vm.now.rows.lines)
+            assertEquals(listOf("b", "c", "_ a"), vm.now.rows.lines)
             assertEquals(sel(2, 1, 2), vm.now.selection)
             assertEquals(setOf(2), vm.now.rows.arranged)
             assertEquals("c", vm.now.rows.lines[vm.now.rows.activeRow])
             assertEquals(listOf("·", "a"), vm.now.syllables(2))
 
             vm.moveRow(2, -1)
-            assertEquals(listOf("b", "a", "c"), vm.now.rows.lines)
+            assertEquals(listOf("b", "_ a", "c"), vm.now.rows.lines)
             assertEquals(sel(1, 1, 2), vm.now.selection)
             assertEquals(setOf(1), vm.now.rows.arranged)
             assertEquals("c", vm.now.rows.lines[vm.now.rows.activeRow])
@@ -339,7 +339,7 @@ class GridEditorViewModelTest {
         }
 
         @Test
-        fun `nudge moves the chunk one cell and stops at the row edges`() = runTest {
+        fun `nudge moves the chunk one cell and stops at the start of the row`() = runTest {
             val vm = settled(snippet("one two three"))
             vm.tapCell(0, 1)
             vm.nudgeSelection(-1)
@@ -348,10 +348,6 @@ class GridEditorViewModelTest {
             val before = vm.now
             vm.nudgeSelection(-1)
             assertSame(before, vm.now)
-            vm.tapCell(0, 2)
-            val atEnd = vm.now
-            vm.nudgeSelection(1)
-            assertSame(atEnd, vm.now)
         }
 
         @Test
@@ -363,14 +359,14 @@ class GridEditorViewModelTest {
         }
 
         @Test
-        fun `insert rest before the selection shifts it right and keeps the text`() = runTest {
+        fun `insert rest before the selection shifts it right and writes the rest into the text`() = runTest {
             val vm = settled(snippet("one two three"))
             vm.tapCell(0, 1)
             vm.insertRestBeforeSelection()
             val s = vm.now
             assertEquals(listOf("one", "·", "two", "three"), s.syllables(0))
             assertEquals(sel(0, 2, 3), s.selection)
-            assertEquals("one two three", s.rows.lines[0])
+            assertEquals("one _ two three", s.rows.lines[0])
             assertEquals(3, s.rowLines[0]!!.syllableCount)
             assertEquals(setOf(0), s.rows.arranged)
         }
@@ -403,11 +399,11 @@ class GridEditorViewModelTest {
         fun `arranged rows survive a later syllabify of other rows`() = runTest {
             val vm = settled(snippet("alpha beta\ngamma delta"))
             vm.tapCell(0, 0)
-            vm.insertRestBeforeSelection() // row 0: · alpha beta, text unchanged
+            vm.insertRestBeforeSelection() // row 0: · alpha beta, text "_ alpha beta"
             val arrangedLine = vm.now.rowLines[0]
             vm.typeLine(1, "gamma delta epsilon")
             advanceUntilIdle()
-            assertEquals("alpha beta\ngamma delta epsilon", nlp.calls.last())
+            assertEquals("_ alpha beta\ngamma delta epsilon", nlp.calls.last())
             assertEquals(arrangedLine, vm.now.rowLines[0])
             assertEquals(listOf("gamma", "delta", "epsilon"), vm.now.syllables(1))
             assertEquals(1, vm.now.rowLines[1]!!.cells[2].stress)

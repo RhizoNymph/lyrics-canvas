@@ -1,8 +1,7 @@
 package dev.nymph.lyrics.logic.rhyme
 
 import dev.nymph.lyrics.logic.jsSlice
-import dev.nymph.lyrics.logic.jsSplitWhitespace
-import dev.nymph.lyrics.logic.jsTrim
+import dev.nymph.lyrics.logic.rests.lineWordTokens
 import dev.nymph.lyrics.model.AnchorRange
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.GridLine
@@ -84,11 +83,8 @@ fun sliceGridLine(line: GridLine, range: AnchorRange): GridLine {
     )
 }
 
-/** The line's words as the server tokenises them (whitespace split of the stripped line). */
-fun lineWords(line: GridLine): List<String> {
-    val text = jsTrim(line.rawText)
-    return if (text.isEmpty()) emptyList() else jsSplitWhitespace(text)
-}
+/** The line's words as the server tokenises them (the word tokens of the line; rest marks skipped). */
+fun lineWords(line: GridLine): List<String> = lineWordTokens(line.rawText)
 
 fun lineWordCount(line: GridLine): Int = lineWords(line).size
 

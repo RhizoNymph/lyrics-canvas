@@ -1,7 +1,6 @@
 package dev.nymph.lyrics.logic.grid
 
-import dev.nymph.lyrics.logic.jsSplitWhitespace
-import dev.nymph.lyrics.logic.jsTrim
+import dev.nymph.lyrics.logic.rests.lineWordTokens
 import dev.nymph.lyrics.model.GridCell
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
@@ -25,14 +24,13 @@ fun rebaseWordIndexes(cells: List<GridCell>): List<GridCell> {
 fun countSyllables(cells: List<GridCell>): Int = cells.count { !it.isRest }
 
 /**
- * Fill `cell.word` from the whitespace-split `rawText` at `wordIndex` where it is missing. Only
+ * Fill `cell.word` from the word tokens of `rawText` (rest marks skipped) at `wordIndex` where it is missing. Only
  * meaningful while rawText and wordIndex agree (a fresh grid, or one rebuilt by [withRebuiltText]).
  * Returns the same line when nothing changes.
  */
 fun attachWords(line: GridLine): GridLine {
-    val text = jsTrim(line.rawText)
-    if (text.isEmpty()) return line
-    val words = jsSplitWhitespace(text)
+    val words = lineWordTokens(line.rawText)
+    if (words.isEmpty()) return line
     var changed = false
     val cells = line.cells.map { cell ->
         val index = cell.wordIndex

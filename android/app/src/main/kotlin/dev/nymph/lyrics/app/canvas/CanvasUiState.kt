@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.canvas
 
+import dev.nymph.lyrics.app.canvas.search.SearchCount
 import dev.nymph.lyrics.logic.canvas.MergeError
 import dev.nymph.lyrics.logic.canvas.ViewSize
 import dev.nymph.lyrics.logic.canvas.Viewport
@@ -8,6 +9,7 @@ import dev.nymph.lyrics.logic.placements.DeleteEverywherePlan
 import dev.nymph.lyrics.logic.placements.RemovalPlan
 import dev.nymph.lyrics.logic.placements.otherCanvases
 import dev.nymph.lyrics.logic.placements.sortCanvasRefs
+import dev.nymph.lyrics.logic.search.SearchQuery
 import dev.nymph.lyrics.logic.tags.TagFilter
 import dev.nymph.lyrics.logic.tags.matches
 import dev.nymph.lyrics.model.CanvasId
@@ -82,13 +84,27 @@ sealed interface CanvasUiState {
         val mode: CanvasMode = CanvasMode.Canvas,
         /** The filter bar's last valid expression; snippets it does not match are hidden from the canvas and the list. */
         val filter: TagFilter = TagFilter.Everything,
+        /** The applied in-canvas search (debounced); combined with [filter] by AND, same treatment. */
+        val search: SearchQuery = SearchQuery.EVERYTHING,
     ) : CanvasUiState {
         val byId: Map<SnippetId, Snippet> = snippets.associateBy { it.id }
 
-        /** The snippets [filter] matches, in [snippets] order: what the canvas draws and hit-tests. */
+        /** The snippets [filter] and [search] both match, in [snippets] order: what the canvas draws and hit-tests. */
         val visibleSnippets: List<Snippet> by lazy {
-            if (filter == TagFilter.Everything) snippets else snippets.filter { filter.matches(it) }
+            if (filter == TagFilter.Everything && search.isEmpty) {
+                snippets
+            } else {
+                snippets.filter { filter.matches(it) && search.matches(it.rawText) }
+            }
         }
+
+        /** "N of M" while a search is applied; null otherwise. */
+        val searchCount: SearchCount? by lazy {
+            if (search.isEmpty) null else SearchCount(visibleSnippets.size, snippets.size)
+        }
+
+        /** True when the tag filter or the search hides snippets (the list's empty text). */
+        val isFiltered: Boolean get() = filter != TagFilter.Everything || !search.isEmpty
 
         /** The selected snippets that are loaded, in [snippets] order. */
         val selectedSnippets: List<Snippet> by lazy {

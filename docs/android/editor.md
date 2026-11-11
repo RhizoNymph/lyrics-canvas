@@ -83,10 +83,11 @@ tapCell   tapSelection(sel, row, col, extendMode)
 beginChunkDrag(row, col)  long-press: keep the selection if it holds col, else select col
 resizeSelection(edge, col) handle drag: resizeSelection (never crosses the other edge)
 dropSelectionAt(gap)      moveTargetFromGap(gap, start, end) ?: no-op -> moveSelection(to)
-nudgeSelection(±1)        moveSelection(start ± 1)
+nudgeSelection(±1)        +1 with nothing after the selection (end of line): insertRestBeforeSelection
+                          (rests and search: docs/features/android_rests_and_search.md); else moveSelection(start ± 1)
 moveSelection(to)         landing = clamp(to, 0, cells - size); landing == start -> no-op;
                           moveChunkInRow (text rebuilt, row arranged); selection follows the landing
-insertRestBeforeSelection insertRestInRow(row, start); selection shifts right by one
+insertRestBeforeSelection insertRestInRow(row, start); selection shifts right by one; the row text gains `_`
 removeSelectedRests       only when every selected cell is a rest: removeCellsInRow; selection cleared
 reorderRow(from, to)      reorderRows (text, grid line, arranged, active row move together);
 moveRow(row, ±1)          selection row via indexAfterReorder
@@ -150,7 +151,7 @@ column has `imePadding()` (the activity uses `adjustResize`).
 - All row/grid state changes go through the `:core:logic` reducers; `EditorRowsState`'s invariant
   (one grid line per non-blank row, arranged rows never replaced by syllabify) holds on Android.
 - `EditorUiState.selection` always lies within its row's cells (`CellSelection` is never empty).
-- A chunk drop or nudge that would not move anything leaves the state object unchanged (no arranged
+- A chunk drop or left nudge that would not move anything leaves the state object unchanged (no arranged
   flag, no recomposition).
 - The syllabify request is keyed on the joined text; a newer text cancels the in-flight request
   (`mapLatest`) and a merged result never re-triggers it.

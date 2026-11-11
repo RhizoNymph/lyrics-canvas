@@ -10,6 +10,7 @@ import dev.nymph.lyrics.logic.jsIsSpace
 import dev.nymph.lyrics.logic.jsTrim
 import dev.nymph.lyrics.logic.jsTrimEnd
 import dev.nymph.lyrics.logic.jsTrimStart
+import dev.nymph.lyrics.logic.rests.displayLine
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridLine
 
@@ -75,7 +76,12 @@ private fun fromRows(rows: List<Row>, activeRow: Int, caret: CaretRequest?): Edi
     )
 }
 
-/** Build the state from a snippet's text and saved grid; matching saved lines are kept and pinned. */
+/**
+ * Build the state from a snippet's text and saved grid; matching saved lines are kept and pinned.
+ * A saved line matches its row when their display text (rest marks stripped) is equal, so rows
+ * saved before rest marks existed (grid rests, no `_` in the text) open arranged with their rests;
+ * the next save writes the canonical text.
+ */
 fun initEditorState(rawText: String, savedGrid: GridData?): EditorRowsState {
     val lines = if (rawText.isNotEmpty()) rawText.split("\n") else listOf("")
     val saved = savedGrid?.lines ?: emptyList()
@@ -83,9 +89,12 @@ fun initEditorState(rawText: String, savedGrid: GridData?): EditorRowsState {
     val rows = lines.map { text ->
         if (isBlank(text)) return@map Row(text, null, false)
         val candidate = saved.getOrNull(si)
-        if (candidate != null && jsTrim(candidate.rawText) == jsTrim(text)) {
+        if (candidate != null && displayLine(candidate.rawText) == displayLine(text)) {
             si++
-            Row(text, attachWords(candidate), true)
+            // Same words, so the same word tokens; the line takes the row's own spelling (invariant).
+            val trimmed = jsTrim(text)
+            val line = attachWords(candidate)
+            Row(text, if (line.rawText == trimmed) line else line.copy(rawText = trimmed), true)
         } else {
             Row(text, localSyllabifyLine(text), false)
         }

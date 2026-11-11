@@ -59,7 +59,7 @@ fun SnippetList(
     onLongPress: (SnippetId) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
-    /** A tag filter is hiding snippets (changes the empty-list text). */
+    /** The tag filter or the search is hiding snippets (changes the empty-list text). */
     filtered: Boolean = false,
 ) {
     if (rows.isEmpty()) {

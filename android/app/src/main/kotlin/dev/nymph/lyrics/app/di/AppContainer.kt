@@ -11,6 +11,9 @@ import dev.nymph.lyrics.data.repository.CanvasRepository
 import dev.nymph.lyrics.data.repository.HttpAuthRepository
 import dev.nymph.lyrics.data.repository.HttpCanvasRepository
 import dev.nymph.lyrics.data.repository.HttpNlpRepository
+import dev.nymph.lyrics.data.repository.HttpSearchRepository
+import dev.nymph.lyrics.data.repository.SearchRepository
+import dev.nymph.lyrics.app.canvas.search.CanvasSearchMemory
 import dev.nymph.lyrics.data.repository.HttpSnippetRepository
 import dev.nymph.lyrics.app.canvaslist.CanvasUpdates
 import dev.nymph.lyrics.data.repository.NlpRepository
@@ -83,6 +86,12 @@ class AppContainer(
 
     /** Canvases renamed or created away from the canvas list, for the list on the back stack. */
     val canvasUpdates: CanvasUpdates = CanvasUpdates()
+
+    /** The in-canvas search text per canvas, for this process only. */
+    val canvasSearches: CanvasSearchMemory = CanvasSearchMemory()
+
+    /** Search across canvases (`GET /api/search`). */
+    val search: SearchRepository = HttpSearchRepository(api)
     val snippets: SnippetRepository = HttpSnippetRepository(api)
     val nlp: NlpRepository = HttpNlpRepository(api)
     val tags: TagRepository = HttpTagRepository(api)
