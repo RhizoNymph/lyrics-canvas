@@ -1,6 +1,7 @@
 # Export
 
-Export canvas snippets as Markdown, plain text, or PDF.
+Export canvas snippets as Markdown, plain text, or PDF. Snippet text is exported as display text: rest
+marks (`_`) removed and lines of only rests dropped ([rest_marks.md](../features/rest_marks.md)).
 
 **File:** `app/services/export_service.py`, `app/api/export.py`
 

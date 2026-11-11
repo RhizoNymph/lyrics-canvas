@@ -26,6 +26,12 @@ Input word -> pronounce_word(word)        (engine: clean, CMU dict -> g2p_en -> 
 ```
 
 Words that clean to nothing (numbers, symbols) yield no cells but still occupy a `word_index`.
+
+**Rest marks.** Each `_` in a line is a rest and also separates words
+([rest_marks.md](../features/rest_marks.md)): it becomes the cell `{"rest": true}` (no other keys) in
+token order, `word_index` counts word tokens only, and `syllable_count` excludes rests. A line of only
+rests is kept (a line of rest cells, count 0); `raw_text` stays the trimmed line with its marks.
+Tokenizing is `rest_marks.tokenize_line`.
 Because the same `pronounce_word` feeds `snippets.phonetics`, grid stress and phonetics stress
 agree for every newly syllabified text (`tests/test_phonetics_service.py` checks this); user
 edits to grid stress are preserved as phonetics overrides (see
@@ -44,6 +50,15 @@ edits to grid stress are preserved as phonetics overrides (see
       ],
       "syllable_count": 3,
       "raw_text": "hello world"
+    },
+    {
+      "cells": [
+        {"syllable": "go", "stress": 1, "word_index": 0},
+        {"rest": true},
+        {"syllable": "now", "stress": 1, "word_index": 1}
+      ],
+      "syllable_count": 2,
+      "raw_text": "go_now"
     }
   ]
 }
@@ -54,11 +69,12 @@ edits to grid stress are preserved as phonetics overrides (see
 ```
 syllabify_text(text):
   Split text by newlines
-  For each line:
-    Split by spaces into words
-    For each word:
-      syllabify_word(word) -> list of {syllable, stress}
-      Track word_index for each cell
+  For each non-blank (trimmed) line:
+    tokenize_line: "_" -> rest token (also a separator), whitespace-separated words
+    For each token:
+      rest -> {"rest": true}
+      word -> syllabify_word(word) -> list of {syllable, stress}, tagged with the word's index
+              (word tokens only; rests take no index)
     Collect cells, count syllables, preserve raw_text
   Return {lines: [...]}
 ```

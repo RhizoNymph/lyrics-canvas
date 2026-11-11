@@ -1,6 +1,8 @@
 # NLP: Similarity & Embeddings
 
-TF-IDF cosine similarity for snippet comparison and sentence-transformer embeddings for t-SNE.
+TF-IDF cosine similarity for snippet comparison and sentence-transformer embeddings for t-SNE. Both read
+the display text (rest marks `_` removed, [rest_marks.md](../features/rest_marks.md)); snippets whose
+display text is empty are left out. The similarity response's `raw_text` is the stored text.
 
 ## Similarity Service
 
