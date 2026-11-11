@@ -1,5 +1,10 @@
+"""Canvas export as text, Markdown or PDF. Snippet text is exported as display text: rest marks
+(``_``) are removed and lines of only rests dropped (docs/features/rest_marks.md)."""
+
 import io
+
 from app.models.snippet import Snippet, SnippetType
+from app.services.rest_marks import display_lines, display_text
 
 
 SNIPPET_TYPE_LABELS = {
@@ -16,7 +21,7 @@ def export_as_text(snippets: list[Snippet]) -> str:
     for snippet in snippets:
         label = SNIPPET_TYPE_LABELS.get(snippet.snippet_type, "Section")
         lines.append(f"[{label}]")
-        lines.append(snippet.raw_text)
+        lines.append(display_text(snippet.raw_text))
         lines.append("")
     return "\n".join(lines)
 
@@ -27,7 +32,7 @@ def export_as_markdown(snippets: list[Snippet]) -> str:
         label = SNIPPET_TYPE_LABELS.get(snippet.snippet_type, "Section")
         lines.append(f"## {label}")
         lines.append("")
-        lines.append(snippet.raw_text)
+        lines.append(display_text(snippet.raw_text))
         tags = [t.name for t in snippet.tags] if snippet.tags else []
         if tags:
             lines.append("")
@@ -61,7 +66,7 @@ def export_as_pdf(snippets: list[Snippet]) -> bytes:
         y -= 18
 
         c.setFont("Helvetica", 10)
-        for line in snippet.raw_text.split("\n"):
+        for line in display_lines(snippet.raw_text):
             if y < 72:
                 c.showPage()
                 y = height - 72

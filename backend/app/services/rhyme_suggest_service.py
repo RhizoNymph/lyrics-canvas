@@ -41,6 +41,7 @@ from app.services.phonetics.sources.notes import NotesSource
 from app.services.phonetics.types import Unit
 from app.services.phonetics.units import unit_from_text
 from app.services.phonetics_service import compute_snippet_phonetics, note_unit
+from app.services.rest_marks import display_text, word_tokens
 from app.services.tag_expr import Expr, SnippetFacts, matches, parse
 
 logger = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ def slice_grid_line(line: Mapping[str, object], offset: int, end: int | None) ->
     if end is not None:
         while cells and cells[-1].rest:
             cells.pop()
-    raw_text = " ".join(str(line.get("raw_text", "")).split()[offset:end])
+    raw_text = " ".join(word_tokens(str(line.get("raw_text", "")))[offset:end])
     return RhymeGridLineModel(cells=cells, syllable_count=sum(1 for c in cells if not c.rest), raw_text=raw_text)
 
 
@@ -301,7 +302,7 @@ async def resolve_anchor(anchor: Anchor, user_id: str, repo: SnippetRepository, 
     match anchor:
         case TextAnchor(text=text):
             try:
-                return ResolvedAnchor(unit_from_text(text.strip(), dialect), None)
+                return ResolvedAnchor(unit_from_text(display_text(text).strip(), dialect), None)
             except PronunciationError as exc:
                 raise RhymeQueryError(f"text anchor {text!r} has no pronounceable words") from exc
         case SnippetAnchor(snippet_id=snippet_id, line_index=line_index):

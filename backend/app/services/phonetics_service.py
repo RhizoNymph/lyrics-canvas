@@ -31,6 +31,7 @@ from app.services.phonetics.types import (
     WordPronunciation,
 )
 from app.services.phonetics.units import _derive, note_unit_id
+from app.services.rest_marks import word_tokens
 
 FILLER_NUCLEUS = "AH"
 
@@ -140,7 +141,8 @@ def reconcile(
 
 
 def split_lines(raw_text: str) -> list[str]:
-    """The same line splitting ``syllabify_text`` uses, so line indexes match the grid."""
+    """The same line splitting ``syllabify_text`` uses, so line indexes match the grid (a line of
+    rest marks is a line, with no words)."""
     return [line.strip() for line in raw_text.strip().split("\n") if line.strip()]
 
 
@@ -206,7 +208,7 @@ def compute_snippet_phonetics_with_report(
     overrides: dict[str, PronunciationOverride] = {}
     report: list[Disagreement] = []
     for line_index, text in enumerate(split_lines(raw_text)):
-        engine_words = [_engine_word(token) for token in text.split()]
+        engine_words = [_engine_word(token) for token in word_tokens(text)]
         engine = Pronunciation(words=tuple(engine_words))
         cells = grid_lines[line_index].get("cells", []) if line_index < len(grid_lines) else []
         grid_stress = _grid_stresses(cells)
