@@ -120,7 +120,8 @@ Main editing view that orchestrates all canvas editing components.
 ### Lifecycle
 
 - On mount: `canvasStore.loadCanvas(id)` -- navigates home on error
-- On mount: `tagStore.load()` (user-wide tags and presets); per canvas id: `tagFilterStore.open(id)` restores that canvas's filter
+- On mount: `tagStore.load()` (user-wide tags and presets); per canvas id: `tagFilterStore.open(id)` restores that canvas's filter and `canvasSearchStore.open(id)` its session search text
+- `/canvas/:id?snippet=<sid>`: after this page's load of the canvas resolves, `useSnippetFocus` selects the snippet and centres the viewport on it (list mode scrolls to it), clearing the in-canvas search if it hides it; a tag filter that still hides it shows the toast "Hidden by the tag filter". The parameter is then removed (replace)
 - Registers keyboard listeners, cleans up on unmount
 - On unmount (or canvas change): `voiceStore.closeRecorder()`, so a recorder never reopens on the next canvas
 
@@ -130,7 +131,7 @@ Main editing view that orchestrates all canvas editing components.
 |----------|--------|
 | Ctrl+Z / Cmd+Z | `canvasStore.undo()` |
 | Ctrl+Shift+Z / Cmd+Shift+Z | `canvasStore.redo()` |
-| Ctrl+F / Cmd+F | `uiStore.setSearchModalOpen(true)` |
+| Ctrl+F / Cmd+F | `canvasSearchStore.requestFocus()`: focus the in-canvas search box (works while typing) |
 | Ctrl+Shift+L / Cmd+Shift+L | `uiStore.toggleViewMode()` (canvas / list; ignored while typing or editing) |
 | Delete / Backspace | `canvasStore.removeFromCanvas(selection)`: remove the selected snippets from this canvas (deleted for good when on no other canvas; ignored when focus is in an input, textarea, select, or when a snippet is being edited) |
 | Alt+Shift+R (Option+Shift+R) | `voiceStore.openRecorder()`: record by voice; works while typing in the editor (matched on `code === 'KeyR'`) |
@@ -144,7 +145,7 @@ All page shortcuts are ignored while the voice recorder modal is open; the modal
 +--------------------------------------------------+
 | Toolbar                                           |
 +--------------------------------------------------+
-| TagExpressionBar (tag expression filter)          |
+| TagExpressionBar (search box + tag filter)        |
 +--------------------------------------+-----------+
 |                                      |           |
 | CanvasViewport or ListView (viewMode)| Rhyme     |
@@ -153,7 +154,6 @@ All page shortcuts are ignored while the voice recorder modal is open; the modal
 +--------------------------------------+           |
 | SimilarityPanel                      |           |
 +--------------------------------------+-----------+
-| SearchModal (overlay)                             |
 | ExportDialog (overlay)                            |
 | VoiceCaptureModal (overlay, voiceStore.request)   |
 +--------------------------------------------------+
@@ -166,3 +166,12 @@ All page shortcuts are ignored while the voice recorder modal is open; the modal
 **File:** `src/main.tsx`
 
 Renders `<App />` into DOM root with `React.StrictMode`.
+
+## Canvas list search
+
+The canvas list header has a search input ("Search all canvases and snippets"). Typing (250 ms debounce,
+`hooks/useGlobalSearch.ts` over `lib/search/globalSearch.ts`) calls `GET /api/search` and replaces the list with
+`GlobalSearchResultsView`: a Canvases section (open the canvas) and a Snippets section (type chip, excerpt with the
+terms highlighted, every canvas title as its own link; the row opens the first). Blank input (or Escape) shows the
+normal list. Typed errors (`invalid_search_query`, network) and "No matches". See
+[web_rests_and_search.md](../features/web_rests_and_search.md).

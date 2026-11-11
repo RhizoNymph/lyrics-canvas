@@ -76,7 +76,7 @@ server merge is one transaction, so a failure changed nothing). Clicking it call
 | Store | State/Actions Used |
 |-------|-------------------|
 | canvasStore | `canvasTitle`, `canvasId`, `viewport`, `setViewport`, `undo`, `redo`, `tsneMode`, `enterTSNE`, `exitTSNE`, `selectedSnippetIds`, `mergeSelected`, `mergeError`, `clearMergeError` |
-| uiStore | `setSearchModalOpen`, `setExportDialogOpen`, `toggleRhymeSidebar`, `toggleWordBank`, `rightPanel` |
+| uiStore | `setExportDialogOpen`, `toggleRhymeSidebar`, `toggleWordBank`, `rightPanel` |
 
 ### Styling
 
@@ -117,3 +117,11 @@ layout) bound to `tagFilterStore`. Full description in [web_tag_expressions.md](
 Tags are created, renamed, recolored and deleted from the snippet context menu's tag picker (and the
 word bank's Tags menu), not here. Both pickers are `components/tags/TagChecklist.tsx` over different
 targets.
+
+## Search box (TagExpressionBar row)
+
+The filter row under the toolbar starts with the in-canvas search box (`components/search/CanvasSearchBox.tsx`,
+state in `canvasSearchStore`), followed by the tag filter bar. The search filters the canvas and list mode live
+(150 ms debounce) by display text, AND the tag filter; it shows "N of M", × and Escape clear it, Ctrl/Cmd+F
+focuses it. The toolbar no longer has a Search button. See
+[web_rests_and_search.md](../features/web_rests_and_search.md).
