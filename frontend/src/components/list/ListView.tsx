@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useTagFilterStore } from '@/stores/tagFilterStore';
+import { useCanvasSearchStore } from '@/stores/canvasSearchStore';
+import { isSearchActive } from '@/lib/search';
 import { useUIStore } from '@/stores/uiStore';
 import { useVoiceStore } from '@/stores/voiceStore';
 import { visibleSnippets } from '@/lib/canvas';
@@ -11,13 +13,14 @@ import ListRow from './ListRow';
 import { useFrozenOrder } from './useFrozenOrder';
 
 /**
- * List mode: the canvas's snippets (same tag expression filter as the canvas) as a vertical list, last content
+ * List mode: the canvas's snippets (same tag expression filter and in-canvas search as the canvas) as a vertical list, last content
  * edit first. Rows share the canvas selection, open the inline editor in place, and use the canvas
  * context menu; merge / delete / undo go through the same store actions and page shortcuts.
  */
 export default function ListView() {
   const snippets = useCanvasStore((s) => s.snippets);
   const tagFilter = useTagFilterStore((s) => s.filter.applied);
+  const search = useCanvasSearchStore((s) => s.query);
   const selectedSnippetIds = useCanvasStore((s) => s.selectedSnippetIds);
   const setSelection = useCanvasStore((s) => s.setSelection);
   const clearSelection = useCanvasStore((s) => s.clearSelection);
@@ -29,25 +32,40 @@ export default function ListView() {
   const listRef = useRef<HTMLDivElement>(null);
   const revealSnippetId = useVoiceStore((s) => s.revealSnippetId);
   const clearReveal = useVoiceStore((s) => s.clearReveal);
+  const searchRevealId = useCanvasSearchStore((s) => s.revealSnippetId);
+  const clearSearchReveal = useCanvasSearchStore((s) => s.clearReveal);
 
   const sortedIds = useMemo(
-    () => sortForList(visibleSnippets(snippets, tagFilter)).map((s) => s.id),
-    [snippets, tagFilter],
+    () => sortForList(visibleSnippets(snippets, tagFilter, search)).map((s) => s.id),
+    [snippets, tagFilter, search],
   );
   const order = useFrozenOrder(sortedIds, editingSnippetId !== null);
+
+  /** Scroll a rendered row into view and focus it; false when it is not rendered. */
+  const scrollToRow = (snippetId: string): boolean => {
+    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-snippet-id]') ?? []).find(
+      (el) => el.dataset.snippetId === snippetId,
+    );
+    if (!row) return false;
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.focus({ preventScroll: true });
+    return true;
+  };
 
   // Scroll to a snippet a voice take just created (it is already selected).
   useEffect(() => {
     if (revealSnippetId === null) return;
-    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-snippet-id]') ?? []).find(
-      (el) => el.dataset.snippetId === revealSnippetId,
-    );
-    if (row) {
-      row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      row.focus({ preventScroll: true });
-    }
+    scrollToRow(revealSnippetId);
     clearReveal(revealSnippetId);
   }, [revealSnippetId, order, clearReveal]);
+
+  // Scroll to a snippet opened from a search hit (already selected; a hiding in-canvas search was cleared).
+  useEffect(() => {
+    if (searchRevealId === null) return;
+    // Wait for the row while it is in the list order (the cleared search may not have re-rendered yet); a
+    // snippet the tag filter hides is never rendered, so give up on it.
+    if (scrollToRow(searchRevealId) || !order.includes(searchRevealId)) clearSearchReveal(searchRevealId);
+  }, [searchRevealId, order, clearSearchReveal]);
 
   const onRowClick = (id: string, e: ReactMouseEvent) => {
     const result = listClick(
@@ -80,7 +98,14 @@ export default function ListView() {
     if (e.target === e.currentTarget && editingSnippetId === null) clearSelection();
   };
 
-  const filtered = tagFilter !== null;
+  const emptyText =
+    tagFilter !== null && isSearchActive(search)
+      ? 'No snippets match the search and the tag filter.'
+      : isSearchActive(search)
+        ? 'No snippets match the search.'
+        : tagFilter !== null
+          ? 'No snippets match the tag filter.'
+          : 'No snippets yet. Switch to the canvas and double-click to add one.';
 
   return (
     <div
@@ -95,7 +120,7 @@ export default function ListView() {
       <div onClick={onBackgroundClick} style={{ maxWidth: 960, margin: '0 auto' }}>
         {order.length === 0 && (
           <div style={{ color: '#6a6a8a', fontSize: 13, textAlign: 'center', marginTop: 48 }}>
-            {filtered ? 'No snippets match the tag filter.' : 'No snippets yet. Switch to the canvas and double-click to add one.'}
+            {emptyText}
           </div>
         )}
         {order.map((id) => {

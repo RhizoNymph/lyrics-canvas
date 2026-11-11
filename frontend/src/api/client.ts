@@ -6,6 +6,7 @@ import type { DerivedFrom, RhymeSuggestRequest, RhymeSuggestResponse } from '@/t
 import { createPlacementApi } from './placements';
 import { createVoiceApi } from './voice';
 import { createWordBankApi } from './wordBank';
+import { createSearchApi } from './search';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -132,8 +133,6 @@ export const tagPresetApi = {
 // ---- NLP ----
 export const nlpApi = {
   syllabify: (text: string) => api.post('/api/nlp/syllabify', { text }),
-  search: (canvasId: string, q: string) =>
-    api.get(`/api/canvases/${canvasId}/search`, { params: { q } }),
   similar: (snippetId: string, topK = 10) =>
     api.get(`/api/snippets/${snippetId}/similar`, { params: { top_k: topK } }),
   tsne: (canvasId: string, nComponents = 2) =>
@@ -151,6 +150,9 @@ export const exportApi = {
 
 // ---- Voice takes and recordings (see api/voice.ts) ----
 export const voiceApi = createVoiceApi(api);
+
+// ---- Search across the user's canvases (see api/search.ts) ----
+export const searchApi = createSearchApi(api);
 
 // ---- Word bank (see api/wordBank.ts) ----
 export const wordBankApi = createWordBankApi(api);

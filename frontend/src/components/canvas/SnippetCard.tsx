@@ -3,6 +3,7 @@ import { Container, Graphics, Text } from '@pixi/react';
 import { TextStyle } from 'pixi.js';
 import type { Graphics as PixiGraphics, FederatedPointerEvent } from 'pixi.js';
 import { SNIPPET_TYPE_COLORS } from '@/types';
+import { displayText } from '@/lib/grid/restMarks';
 import type { Snippet } from '@/types';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -349,9 +350,9 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         />
       ))}
       {/* Fallback: show raw text if no grid data */}
-      {gridLines.length === 0 && snippet.raw_text && (
+      {gridLines.length === 0 && displayText(snippet.raw_text) && (
         <Text
-          text={snippet.raw_text.slice(0, 200)}
+          text={displayText(snippet.raw_text).slice(0, 200)}
           style={rawTextStyle}
           x={PADDING * s}
           y={gridTop}

@@ -7,13 +7,16 @@
  * `arranged` were laid out by hand (or loaded from a saved grid) and are never
  * replaced by a syllabify result until their text is typed again.
  *
+ * Row text carries rest marks (`_`, lib/grid/restMarks.ts): typed `_` become rest cells, and grid edits
+ * write their rests back as `_` (the row text of an arranged row is its grid's canonical text).
+ *
  * `caret` asks the view to put the caret of row `caret.row` at `caret.offset` when it focuses
  * that row. Structural edits (insert, delete, split, join) issue a fresh object every time, so the
  * view can react to identity; typing, grid edits and syllabify merges keep it, and focusing another
  * row or reordering clears it (the caret then goes to the end of the row, the default).
  */
 import type { GridData, GridLine } from '@/types';
-import { attachWords, insertRest, localSyllabifyLine, moveChunk, removeCell, withRebuiltText } from '@/lib/grid';
+import { attachWords, displayLine, insertRest, localSyllabifyLine, moveChunk, removeCell, withRebuiltText } from '@/lib/grid';
 
 export interface EditorRowsState {
   lines: string[];
@@ -56,7 +59,21 @@ function fromRows(rows: Row[], activeRow: number, caret: CaretRequest | null): E
   return { lines, gridData: gridLines.length > 0 ? { lines: gridLines } : null, arranged, activeRow, caret };
 }
 
-/** Build the state from a snippet's text and saved grid; matching saved lines are kept and pinned. */
+/**
+ * Whether a saved grid line still belongs to a row: same trimmed text, or the same display text (rest
+ * marks and spacing ignored), so rows saved before rest marks (grid rests, no `_` in the text) still
+ * match. A rest-only row (empty display text) needs the exact text.
+ */
+function savedLineMatches(saved: GridLine, text: string): boolean {
+  if (saved.raw_text.trim() === text.trim()) return true;
+  const display = displayLine(text);
+  return display !== '' && displayLine(saved.raw_text) === display;
+}
+
+/**
+ * Build the state from a snippet's text and saved grid; matching saved lines are kept and pinned. A kept
+ * line takes the row's text as its `raw_text`; the next save writes the canonical text (with `_`).
+ */
 export function initEditorState(rawText: string, savedGrid: GridData | null): EditorRowsState {
   const lines = rawText ? rawText.split('\n') : [''];
   const saved = savedGrid?.lines ?? [];
@@ -64,9 +81,11 @@ export function initEditorState(rawText: string, savedGrid: GridData | null): Ed
   const rows: Row[] = lines.map((text) => {
     if (!text.trim()) return { text, grid: null, arranged: false };
     const candidate = saved[si];
-    if (candidate && candidate.raw_text.trim() === text.trim()) {
+    if (candidate && savedLineMatches(candidate, text)) {
       si++;
-      return { text, grid: attachWords(candidate), arranged: true };
+      const raw_text = text.trim();
+      const grid = attachWords(candidate.raw_text === raw_text ? candidate : { ...candidate, raw_text });
+      return { text, grid, arranged: true };
     }
     return { text, grid: localSyllabifyLine(text), arranged: false };
   });
@@ -200,6 +219,35 @@ export function moveChunkInRow(state: EditorRowsState, row: number, start: numbe
 
 export function insertRestInRow(state: EditorRowsState, row: number, at: number): EditorRowsState {
   return updateGrid(state, row, (line) => insertRest(line, at));
+}
+
+/** Selected cells `[start, end)` of one row. */
+export interface CellSelection {
+  readonly row: number;
+  readonly start: number;
+  /** Exclusive. */
+  readonly end: number;
+}
+
+/**
+ * Left / Right arrow on a selection: move the chunk one cell. Right with nothing after the chunk inserts a
+ * rest before it instead (it moves one cell right, as with `+·`); left at index 0 does nothing.
+ */
+export function nudgeSelection(
+  state: EditorRowsState,
+  selection: CellSelection,
+  direction: -1 | 1,
+): { state: EditorRowsState; selection: CellSelection } {
+  const line = gridLineForRow(state, selection.row);
+  const unchanged = { state, selection };
+  if (!line || selection.start < 0 || selection.end > line.cells.length || selection.start >= selection.end) return unchanged;
+  const { row, start, end } = selection;
+  if (direction === 1 && end === line.cells.length) {
+    return { state: insertRestInRow(state, row, start), selection: { row, start: start + 1, end: end + 1 } };
+  }
+  if (direction === -1 && start === 0) return unchanged;
+  const to = start + direction;
+  return { state: moveChunkInRow(state, row, start, end, to), selection: { row, start: to, end: end + direction } };
 }
 
 /** Remove cells `[start, end)` of a row. */

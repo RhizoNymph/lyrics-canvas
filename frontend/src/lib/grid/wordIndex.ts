@@ -1,4 +1,5 @@
 import type { GridCell, GridData, GridLine } from '@/types';
+import { lineWords } from './restMarks';
 
 /**
  * Renumber `word_index` by order of first appearance (0, 1, 2, ...).
@@ -26,14 +27,14 @@ export function countSyllables(cells: readonly GridCell[]): number {
 }
 
 /**
- * Fill `cell.word` from `raw_text.split(/\s+/)[word_index]` where it is missing.
+ * Fill `cell.word` from the line's word tokens (`lineWords(raw_text)[word_index]`, rest marks skipped)
+ * where it is missing.
  * Only meaningful while raw_text and word_index agree (a fresh grid, or one
  * rebuilt by `withRebuiltText`).
  */
 export function attachWords(line: GridLine): GridLine {
-  const text = line.raw_text.trim();
-  if (!text) return line;
-  const words = text.split(/\s+/);
+  const words = lineWords(line.raw_text);
+  if (words.length === 0) return line;
   let changed = false;
   const cells = line.cells.map((cell) => {
     if (cell.rest || cell.word !== undefined || typeof cell.word_index !== 'number') return cell;

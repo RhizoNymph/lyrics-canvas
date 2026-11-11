@@ -7,6 +7,7 @@ import { NO_RANGE, clickWord, rangeText } from '@/lib/rhyme/anchorRange';
 import type { Snippet } from '@/types';
 import type { AnchorRange } from '@/types/rhyme';
 import SyllableStrip from './SyllableStrip';
+import { displayText, hasWords } from '@/lib/grid/restMarks';
 import { mutedStyle, monoStyle } from './sidebarStyles';
 
 const CHIP_TEXT_MAX = 28;
@@ -22,7 +23,7 @@ function chipLabel(s: Snippet, range: AnchorRange | undefined): string {
     if (picked !== null && picked.length > 0) return truncate(picked);
   }
   const idx = lastNonEmptyLineIndex(s);
-  const text = (idx === null ? s.raw_text : s.grid_data?.lines[idx]?.raw_text ?? s.raw_text).trim();
+  const text = displayText(idx === null ? s.raw_text : s.grid_data?.lines[idx]?.raw_text ?? s.raw_text).trim();
   return truncate(text);
 }
 
@@ -48,7 +49,7 @@ export default function AnchorChips() {
   /** Chips whose next click closes a range (first word already picked). */
   const [awaitingEnd, setAwaitingEnd] = useState<Set<string>>(() => new Set());
 
-  const selected = selectedSnippets(selectedIds, snippets).filter((s) => s.raw_text.trim().length > 0);
+  const selected = selectedSnippets(selectedIds, snippets).filter((s) => hasWords(s.raw_text));
   if (selected.length === 0) {
     return <div style={mutedStyle}>No snippet selected. Select one on the canvas or type a phrase.</div>;
   }
@@ -93,7 +94,7 @@ export default function AnchorChips() {
         return (
           <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '100%' }}>
             <span
-              title={s.raw_text}
+              title={displayText(s.raw_text)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

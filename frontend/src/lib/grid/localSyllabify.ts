@@ -1,4 +1,5 @@
 import type { GridCell, GridLine } from '@/types';
+import { tokenizeLine } from './restMarks';
 
 /** Count vowel groups in a word as a rough syllable estimate (silent-e adjusted). */
 export function estimateSyllableCount(word: string): number {
@@ -25,16 +26,24 @@ export function splitWord(word: string): string[] {
   return parts;
 }
 
-/** Instant local syllabification of one line; the API result replaces it once it arrives. */
+/**
+ * Instant local syllabification of one line; the API result replaces it once it arrives. Each `_`
+ * becomes a bare rest cell (rest marks, see restMarks.ts); words are split by the vowel-group estimate.
+ */
 export function localSyllabifyLine(text: string): GridLine {
   const raw_text = text.trim();
   if (!raw_text) return { cells: [], syllable_count: 0, raw_text: '' };
-  const words = raw_text.split(/\s+/);
   const cells: GridCell[] = [];
-  for (let wi = 0; wi < words.length; wi++) {
-    for (const syllable of splitWord(words[wi])) {
-      cells.push({ syllable, word_index: wi, word: words[wi] });
+  let syllables = 0;
+  for (const token of tokenizeLine(raw_text)) {
+    if (token.kind === 'rest') {
+      cells.push({ rest: true });
+      continue;
+    }
+    for (const syllable of splitWord(token.text)) {
+      cells.push({ syllable, word_index: token.wordIndex, word: token.text });
+      syllables++;
     }
   }
-  return { cells, syllable_count: cells.length, raw_text };
+  return { cells, syllable_count: syllables, raw_text };
 }

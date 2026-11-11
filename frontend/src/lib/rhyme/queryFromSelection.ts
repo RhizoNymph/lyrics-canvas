@@ -7,6 +7,7 @@
 import type { Snippet } from '@/types';
 import type { AnchorRange, AnchorRef } from '@/types/rhyme';
 import { anchorRefFor } from './anchorRange';
+import { hasWords } from '@/lib/grid/restMarks';
 
 /** Selected snippets that exist, in id order for deterministic requests. */
 export function selectedSnippets(selectedIds: ReadonlySet<string>, snippets: ReadonlyMap<string, Snippet>): Snippet[] {
@@ -16,13 +17,13 @@ export function selectedSnippets(selectedIds: ReadonlySet<string>, snippets: Rea
     .filter((s): s is Snippet => s !== undefined);
 }
 
-/** Selected snippets that act as anchors: present, non-blank, and not excluded via a chip. */
+/** Selected snippets that act as anchors: present, with at least one word (not blank or only rests), and not excluded via a chip. */
 export function anchorSnippets(
   selectedIds: ReadonlySet<string>,
   snippets: ReadonlyMap<string, Snippet>,
   excluded: ReadonlySet<string>
 ): Snippet[] {
-  return selectedSnippets(selectedIds, snippets).filter((s) => s.raw_text.trim().length > 0 && !excluded.has(s.id));
+  return selectedSnippets(selectedIds, snippets).filter((s) => hasWords(s.raw_text) && !excluded.has(s.id));
 }
 
 export function anchorsFromSelection(

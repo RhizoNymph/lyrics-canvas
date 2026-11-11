@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { SNIPPET_TYPE_COLORS } from '@/types';
+import { displayText } from '@/lib/grid/restMarks';
 import type { Snippet } from '@/types';
 import InlineGridEditor from '@/components/canvas/InlineGridEditor';
 import CanvasBadge from '@/components/placements/CanvasBadge';
@@ -97,7 +98,7 @@ export default function ListRow({ snippet, selected, editing, onClick, onContext
           <GridPreview lines={lines} />
         ) : (
           <div style={{ fontFamily: 'monospace', fontSize: 13, color: '#a0a0c0', whiteSpace: 'pre-wrap' }}>
-            {snippet.raw_text.trim() || <span style={{ color: '#4a4a6a' }}>Empty snippet, click to write</span>}
+            {displayText(snippet.raw_text).trim() || <span style={{ color: '#4a4a6a' }}>Empty snippet, click to write</span>}
           </div>
         )}
       </div>

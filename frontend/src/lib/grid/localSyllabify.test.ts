@@ -31,3 +31,22 @@ describe('localSyllabifyLine', () => {
     expect(localSyllabifyLine('   ')).toEqual({ cells: [], syllable_count: 0, raw_text: '' });
   });
 });
+
+describe('localSyllabifyLine with rest marks', () => {
+  it('emits a bare rest cell per _ and numbers words only', () => {
+    const line = localSyllabifyLine('I _ go_home');
+    expect(line.cells).toEqual([
+      { syllable: 'I', word_index: 0, word: 'I' },
+      { rest: true },
+      { syllable: 'go', word_index: 1, word: 'go' },
+      { rest: true },
+      { syllable: 'home', word_index: 2, word: 'home' },
+    ]);
+    expect(line.syllable_count).toBe(3);
+    expect(line.raw_text).toBe('I _ go_home');
+  });
+
+  it('a rest-only line is non-blank with only rest cells', () => {
+    expect(localSyllabifyLine(' __ ')).toEqual({ cells: [{ rest: true }, { rest: true }], syllable_count: 0, raw_text: '__' });
+  });
+});

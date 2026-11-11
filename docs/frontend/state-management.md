@@ -159,7 +159,6 @@ Lightweight store for UI panel visibility and editing state.
 |-------|------|---------|
 | `rightPanel` | `'none' \| 'rhymes' \| 'words'` | `'none'` (at most one right sidebar) |
 | `similarityPanelOpen` | boolean | false |
-| `searchModalOpen` | boolean | false |
 | `exportDialogOpen` | boolean | false |
 | `viewMode` | `'canvas' \| 'list'` | `loadViewMode(browserStorage())` (localStorage `lyrics-canvas.viewMode`, else `'canvas'`) |
 | `editingSnippetId` | `string \| null` | null |
@@ -173,7 +172,6 @@ Lightweight store for UI panel visibility and editing state.
 | `toggleRhymeSidebar()` | `rightPanel` 'rhymes' <-> 'none' (closes the word bank); `CanvasPage` mounts `RhymeSidebar` while it is 'rhymes', which runs `rhymeStore.enter()` / `exit()` |
 | `toggleWordBank()` | `rightPanel` 'words' <-> 'none' (closes the rhyme sidebar); `CanvasPage` mounts `WordBankPanel` |
 | `toggleSimilarityPanel()` | Toggle boolean |
-| `setSearchModalOpen(open)` | Set directly |
 | `setExportDialogOpen(open)` | Set directly |
 | `setEditingSnippet(id)` | Set editing state |
 | `closeEditor(id)` | Clear `editingSnippetId` only if it still equals `id` (a slow save cannot close a newer editor) |
@@ -285,3 +283,13 @@ Full description in [web_voice_capture.md](../features/web_voice_capture.md).
 - **Undo snapshots**: Deep copies of snippet + group Maps, 50-state limit
 - **Typed errors for async views**: `rhymeStore` stores a `RhymeError` instead of throwing so the sidebar can render the failure; `canvasStore.mergeSelected` returns a `MergeResult` and mirrors a `MergeError` into `mergeError`
 - **Server-side merge**: `mergeSelected` sends ids + mode only; local state changes only from the server's answer (all or nothing)
+
+## canvasSearchStore
+
+**File:** `src/stores/canvasSearchStore.ts` (`useCanvasSearchStore`)
+
+The in-canvas search box. `text` is the box, `query` (`SearchQuery`) the applied filter, set 150 ms after the last
+`setText` (`clear()` applies at once). `open(canvasId)` switches canvas and restores that canvas's text from a
+session-only in-memory map (never persisted). `focusRequest` is bumped by Ctrl/Cmd+F (`requestFocus`) and the box
+focuses itself; `revealSnippetId` (`requestReveal` / `clearReveal`) asks list mode to scroll to a snippet opened
+from a search hit. See [web_rests_and_search.md](../features/web_rests_and_search.md).
