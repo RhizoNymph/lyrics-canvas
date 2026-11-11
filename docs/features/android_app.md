@@ -19,13 +19,17 @@ touch. Lives in `android/` of this repo.
 - Canvas rename and snippet placements: rename from the list or the canvas title, move / also show
   snippets on another canvas, remove from this canvas vs delete everywhere, the "⧉ N" badge and the
   editor's "Also on": [android_snippet_placements.md](./android_snippet_placements.md).
+- Rest marks (`_` in text is a grid rest, both ways), the ▶ nudge inserting a rest at the end of a
+  line, the in-canvas search filter and search across canvases from the canvas list:
+  [android_rests_and_search.md](./android_rests_and_search.md).
 
 ## Non-scope
 
 - Offline engine (CMU dict / scorer / g2p on device). The backend is required.
 - Hosting the backend. Dev builds point at the emulator host (`10.0.2.2:8000`) or a LAN IP via
   `-PapiBaseUrl=`.
-- Google sign-in (email/password only in v1), export, t-SNE, similarity, search, groups UI. (Tags:
+- Google sign-in (email/password only in v1), export, t-SNE, similarity, groups UI. (Search:
+  [android_rests_and_search.md](./android_rests_and_search.md).) (Tags:
   [android_tag_expressions.md](./android_tag_expressions.md).)
 - Server-side undo. The app keeps the web client's local-only undo semantics: none in v1.
 
@@ -51,6 +55,7 @@ server merge endpoint.
 | Snippets | `POST /api/canvases/{id}/snippets`, `PUT /api/snippets/{id}`, `DELETE /api/snippets/{id}`, `PATCH /api/snippets/batch-position` |
 | Merge | `POST /api/canvases/{id}/merge` (new, see Backend) |
 | NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest` |
+| Search | `GET /api/search?q=&limit=` (see [android_rests_and_search.md](./android_rests_and_search.md)) |
 | Status | `GET /api/health`, `GET /_status/alerts` (frontend nginx origin; see [android_health_banner.md](./android_health_banner.md)) |
 | Voice | `POST /api/canvases/{id}/voice-takes` (multipart), `GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}`, `PUT` / `DELETE /api/recordings/{id}/verification`, `GET /api/recordings/stats` (see [android_voice_capture.md](./android_voice_capture.md)) |
 
@@ -126,7 +131,8 @@ Screens, ViewModels, gestures, rendering and the rhyme sheet in detail:
 - The canvas only ever shows server-confirmed snippets; nothing from the rhyme sheet is drawn until
   Materialize succeeds.
 - Logic in `:core:logic` is pure and has the same results as the TypeScript it ports for the same inputs.
-- `word_index` stays increasing within a line after any edit; `raw_text` is always derivable from the grid.
+- `word_index` stays increasing within a line after any edit and counts words only (never rests);
+  `raw_text` is always derivable from the grid, rests included as `_`.
 - Errors are typed (`ApiError` sealed hierarchy; `RhymeError`, `MergeError` mapped from it). No
   exceptions escape a ViewModel; failures become UI state.
 - All dependency versions are pinned in `android/gradle/libs.versions.toml` and at least a week old.
@@ -180,6 +186,8 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `ApiResult.kt` | sealed `ApiResult<T>` (`Success`, `Failure`), `map`, `flatMap`, `fold`, `onSuccess`, `onFailure` |
 | `:core:logic` | `dev.nymph.lyrics.logic` | `JsCompat.kt` | internal `jsTrim`, `jsSplitWhitespace`, `jsSlice`: JS string/array semantics the ports rely on |
 | | `dev.nymph.lyrics.logic.grid` | `WordIndex.kt`, `RawText.kt`, `MoveChunk.kt`, `ReorderLines.kt`, `Rests.kt`, `DropIndex.kt`, `LocalSyllabify.kt` | `rebaseWordIndexes`, `countSyllables`, `attachWords(All)`, `rebuildRawText(All)`, `withRebuiltText`, `moveChunk`, `reorderLines`, `insertRest`, `removeCell`, `gapFromX`, `moveTargetFromGap`, `estimateSyllableCount`, `splitWord`, `localSyllabifyLine` |
+| | `dev.nymph.lyrics.logic.rests` | `RestMarks.kt` | `REST_MARK`, `LineToken`, `tokenizeLine`, `lineWordTokens`, `displayLine`, `displayText` ([android_rests_and_search.md](./android_rests_and_search.md#files)) |
+| | `dev.nymph.lyrics.logic.search` | `SearchQuery.kt`, `GlobalSearch.kt` | `SearchQuery`, `checkGlobalSearch`, `highlightSpans`, `SearchError`, `toSearchError` |
 | | `dev.nymph.lyrics.logic.rhyme` | `AnchorRange.kt` | sealed `RangeClickState` (`None`, `AwaitingEnd`, `Complete`), `wordSpan`, `clickWord`, `cellInRange`, `sliceGridLine`, `lineWords`, `lineWordCount`, `gridLineOf`, `rangeText`, `rangeFits`, `anchorRefFor` |
 | | | `SlotFit.kt` | `slotFromGridLine`, `lastNonEmptyLineIndex`, `slotFromSnippet`, `slotFromRange`, `fits`, `parseManualSlot` → `ManualSlotResult` (`Ok` / `Invalid(ManualSlotError)`) |
 | | | `MaterializePosition.kt` | `MATERIALIZE_GAP_X`, `MATERIALIZE_STEP_Y`, `AnchorRect`, `Snippet.toAnchorRect()`, `materializePosition` |
@@ -200,7 +208,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `…app.status` | `HealthMonitor.kt`, `AlertsMonitor.kt`, `StatusMonitors.kt`, `Connectivity.kt`, `BannerModel.kt`, `StatusBannerViewModel.kt`, `StatusBanner.kt` | Server health and cluster alerts banner, see [android_health_banner.md](./android_health_banner.md#files) |
 | | `…app.session` | `SessionViewModel.kt` | `SessionState`, `SessionViewModel` (token store -> signed in / out, `signOut`) |
 | | `…app.auth` | `AuthViewModel.kt`, `AuthScreen.kt` | Email / password login and register |
-| | `…app.canvaslist` | `CanvasListViewModel.kt`, `CanvasListScreen.kt` | List, create, open canvases |
+| | `…app.canvaslist` | `CanvasListViewModel.kt`, `CanvasListScreen.kt` | List, create, open canvases; search field (`canvaslist/search/`, [android_rests_and_search.md](./android_rests_and_search.md)) |
 | | `…app.canvas` | `CanvasUiState.kt`, `CanvasViewModel.kt`, `CanvasScreen.kt`, `CanvasTopBars.kt`, `SnippetCanvas.kt` | Canvas state (`Selection`, `CanvasMode`, `CanvasUiState`, `CanvasEvent`), ViewModel (camera, selection, moves, merge, delete, create, list mode, `RhymeCanvasPort`), screen with adaptive rhyme pane / sheet, contextual top bar, Compose `Canvas` drawing |
 | | `…app.canvas.list` | `ListCardSize.kt`, `SnippetList.kt` | List mode: pure row-card sizing; the `LazyColumn` of canvas cards |
 | | `…app.canvas.render` | `CardLayout.kt`, `Culling.kt`, `CardRenderer.kt` | Pure card geometry (web `gridDraw` / `SnippetCard`), culling and background grid; `DrawScope.drawCard` |
