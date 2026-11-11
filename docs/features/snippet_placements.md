@@ -276,7 +276,8 @@ not copied (as before; phonetics and `derived_from` are now copied too).
 ### Canvas-scoped readers
 
 - **Search** (`GET /api/canvases/{id}/search`): substring match over the snippets placed on the
-  canvas, now also checked against the caller (previously the owner was not checked).
+  canvas, now also checked against the caller (previously the owner was not checked). Matching is now
+  per term on display text ([global_search.md](./global_search.md)).
 - **Similarity** (`GET /api/snippets/{id}/similar`): new optional `canvas_id` query. With it, the
   other snippets placed on that canvas (the target must be placed there, else 404
   `placement_not_found`); without it, the other snippets on any canvas holding the target, each once.

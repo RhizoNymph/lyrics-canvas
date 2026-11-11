@@ -1,6 +1,7 @@
 # NLP: t-SNE Layout
 
-Dimensionality reduction of sentence embeddings for spatial clustering on the canvas.
+Dimensionality reduction of sentence embeddings for spatial clustering on the canvas. Embeddings are
+computed from display text (rest marks removed); a snippet of only rests gets no position.
 
 **File:** `app/services/nlp/tsne_service.py`
 

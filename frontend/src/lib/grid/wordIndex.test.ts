@@ -62,3 +62,14 @@ describe('attachWords', () => {
     expect(attachWordsAll(grid).lines.map((l) => l.cells[0].word)).toEqual(['one', 'two']);
   });
 });
+
+describe('attachWords with rest marks', () => {
+  it('maps word_index to word tokens, skipping _', () => {
+    const line: GridLine = {
+      cells: [{ rest: true }, c('I', 0), { rest: true }, c('go', 1)],
+      syllable_count: 2,
+      raw_text: '_ I _go',
+    };
+    expect(attachWords(line).cells.map((x) => x.word)).toEqual([undefined, 'I', undefined, 'go']);
+  });
+});

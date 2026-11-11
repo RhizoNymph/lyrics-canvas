@@ -17,7 +17,9 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [NLP: Rhymes](./backend/nlp-rhymes.md) | Rhyme suggest endpoint (ranking, slot fit, paging) and the legacy lookup | `rhyme_suggest_service.py`, `nlp/rhyme_service.py` |
 | [NLP: Similarity](./backend/nlp-similarity.md) | TF-IDF cosine similarity, sentence embeddings | `nlp/similarity_service.py`, `nlp/embedding_service.py` |
 | [NLP: t-SNE Layout](./backend/nlp-tsne.md) | Dimensionality reduction for spatial clustering | `nlp/tsne_service.py` |
-| [NLP: Search](./backend/nlp-search.md) | ILIKE full-text search | `nlp/search_service.py` |
+| [NLP: Search](./backend/nlp-search.md) | Per-canvas search (rest-aware matching) | `nlp/search_service.py` |
+| [Search across canvases](./features/global_search.md) | `GET /api/search`: canvases by title, snippets by display text | `search/`, `api/search.py` |
+| [Rest marks](./features/rest_marks.md) | `_` rest rule: tokens, word indexes, display text, every text consumer | `rest_marks.py` |
 | [Export](./backend/export.md) | Markdown, plain text, PDF generation | `export_service.py`, `export.py` |
 | [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: placements, migration 008, transfer, remove / delete everywhere, canvas titles, typed placement errors | `services/placements/`, `models/placement.py`, `api/placements.py`, `canvas_title.py` |
 | [Voice Capture](./features/voice_capture.md) | Voice takes: upload, STT client, line assembly, append, recordings storage | `api/voice.py`, `services/voice/`, `recording_service.py` |
@@ -72,10 +74,12 @@ app/
       similarity_service.py         TF-IDF cosine similarity
       embedding_service.py          Sentence-transformer embeddings
       tsne_service.py               t-SNE dimensionality reduction
-      search_service.py             ILIKE text search
+      search_service.py             Per-canvas search (shared matching rule)
+    rest_marks.py                   `_` rest rule: tokenize, word tokens, display text, rebuild
+    search/                         Search across canvases: query, matching, ILIKE prefilter, excerpt, service
   api/
     deps.py                         Auth dependency injection
-    auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py
+    auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py / search.py
     tag_presets.py / tag_errors.py  Preset routes; tag error envelope
 scripts/
   backfill_phonetics.py             Fill snippets.phonetics for existing rows
@@ -93,6 +97,7 @@ scripts/
 | Tags | 6 (list, create, update, delete, link, unlink) | Bearer |
 | Tag presets | 4 (list, create, update, delete) | Bearer |
 | NLP | 6 | Mixed |
+| Search | 1 (across canvases) | Bearer |
 | Export | 1 | Bearer |
 | Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
 | Health | 1 | Public |

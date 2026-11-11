@@ -14,10 +14,11 @@ export function slotFromGridLine(line: GridLine): Slot | null {
   return { syllable_count: line.cells.length, stress };
 }
 
+/** The last grid line with at least one syllable (a line of only rests has nothing to rhyme on). */
 export function lastNonEmptyLineIndex(snippet: Snippet): number | null {
   const lines = snippet.grid_data?.lines ?? [];
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].cells.length > 0) return i;
+    if (lines[i].cells.some((c) => !c.rest)) return i;
   }
   return null;
 }

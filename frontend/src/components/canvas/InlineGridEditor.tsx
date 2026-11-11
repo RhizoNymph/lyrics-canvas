@@ -24,8 +24,9 @@ import {
   mergeSyllabified,
   needsSyllabify,
   rawTextForSave,
+  nudgeSelection,
 } from './editorState';
-import type { EditorRowsState } from './editorState';
+import type { CellSelection, EditorRowsState } from './editorState';
 import { rowKeyAction } from './editorKeys';
 import { registerEditorBridge } from './editorBridge';
 import RecordButton from '@/components/voice/RecordButton';
@@ -35,14 +36,9 @@ import { isAddSelectionShortcut, selectedFieldText } from '@/lib/wordBank';
 import { useWordBankStore } from '@/stores/wordBankStore';
 import { useNavigate } from 'react-router-dom';
 import { alsoOnText, otherCanvases } from '@/lib/placements';
+import { displayText } from '@/lib/grid';
 
 const SYLLABIFY_DEBOUNCE_MS = 300;
-
-interface CellSelection {
-  row: number;
-  start: number;
-  end: number; // exclusive
-}
 
 /**
  * Where the editor sits. `canvas`: a fixed overlay over the snippet's card, scaled with canvas zoom and
@@ -209,8 +205,12 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     setSelection({ row, start: landing, end: landing + len });
   };
 
+  /** Arrow nudge; right at the end of the line inserts a rest before the selection (see nudgeSelection). */
   const nudgeChunk = (sel: CellSelection, direction: -1 | 1) => {
-    moveChunk(sel.row, sel.start, sel.end, sel.start + direction);
+    const next = nudgeSelection(rowsRef.current, sel, direction);
+    if (next.state === rowsRef.current) return;
+    setRows(next.state);
+    setSelection(next.selection);
   };
 
   const insertRestBefore = (sel: CellSelection) => {
@@ -272,7 +272,9 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   };
 
   /** Ctrl/Cmd+Shift+B and the context menu: add the selected text of a row input to the word bank. */
-  const addSelectionToBank = (text: string) => {
+  const addSelectionToBank = (selected: string) => {
+    // Rest marks are not part of words: "go_now" adds "go now".
+    const text = displayText(selected);
     if (text.trim() === '') return;
     void useWordBankStore.getState().addFromText(text, 'editor');
   };
@@ -607,8 +609,8 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
         })}
         <div style={{ paddingTop: 4 * s, fontSize: 9 * s, fontFamily: 'monospace', color: '#4a4a6a', whiteSpace: 'nowrap' }}>
           {selection
-            ? 'drag or ←/→ to move · shift-click extends · +· rest · − remove rest · alt+↑/↓ move line · esc'
-            : 'click a syllable to select · double-click to edit text · ▲▼ move line · enter splits · ⌫ at start joins'}
+            ? 'drag or ←/→ to move (→ at the end adds a rest) · shift-click extends · +· rest · − remove rest · alt+↑/↓ move line · esc'
+            : 'click a syllable to select · double-click to edit text · _ is a rest · ▲▼ move line · enter splits · ⌫ at start joins'}
         </div>
       </div>
 

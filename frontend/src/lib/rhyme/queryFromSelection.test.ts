@@ -85,3 +85,13 @@ describe('anchor word ranges', () => {
     expect(anchorsFromSelection(new Set(['a']), ranged, 'tin', new Set(['a']), ranges)).toEqual([{ kind: 'text', text: 'tin' }]);
   });
 });
+
+describe('anchorSnippets with rest marks', () => {
+  it('skips snippets whose text is only rests', () => {
+    const map = new Map<string, Snippet>([
+      ['r', snip('r', '_ _\n_')],
+      ['w', snip('w', '_ yo _')],
+    ]);
+    expect(anchorSnippets(new Set(['r', 'w']), map, new Set()).map((s) => s.id)).toEqual(['w']);
+  });
+});

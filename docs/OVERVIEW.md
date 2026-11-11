@@ -45,7 +45,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 A **canvas** is a user's titled workspace (1-255 characters after trimming; `invalid_canvas_title` otherwise; a new canvas without a title is "Untitled Canvas"), created and renamed from the canvas list and from inside the canvas. A **snippet** is a rectangular card holding lyrics text, owned by its user. Its **content** (text, type, grid mode, beats, grid, phonetics, tags, recordings) is shared, and its **layout** lives on a **placement** per canvas (`snippet_placements`: position, size, stacking order, group), so one snippet can be on several canvases with an independent layout on each. Every snippet has at least one placement. A snippet can be **moved** to another canvas or **also shown** on one (`POST /api/canvases/{id}/snippets/transfer`: same position and size, stacked on top, ungrouped). Plain delete removes it from the current canvas only, deleting it for good when that was its last canvas; **delete everywhere** removes it from all of them; deleting a canvas keeps its snippets that are also on other canvases. Each snippet in a canvas response carries its `placement_id` and the `canvases` holding it. Layout saves (PUT, batch-position) name the canvas (`canvas_id`, required). Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves, resizes and placements do not count), for "last edited" ordering. See [snippet_placements.md](./features/snippet_placements.md). On web, a canvas is renamed from the pencil on its list card or by clicking the header title, and the right-click menu moves snippets to another canvas or also shows them there (canvas picker with "New canvas…", result toast with Open), removes them from this canvas or deletes them everywhere (confirmed); a "⧉ N" badge on cards and list rows lists the other canvases holding a snippet (see [web_snippet_placements.md](./features/web_snippet_placements.md)). On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
 
 ### Beat Grid
-Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)). On Android, `_` typed in a line makes a rest cell in the local estimate, grid rests are written back as `_`, the ▶ nudge at the end of a line inserts a rest before the selection, and rhyme ranges, chips and word-bank adds read the display text ([android_rests_and_search.md](./features/android_rests_and_search.md)).
+Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Rests live in the text as `_`: every `_` is one rest cell and also separates words, `word_index` counts words only, and rests made in the grid are written back as `_`, so the text always matches the grid; export, rhyme, phonetics, similarity, embeddings and search read the display text with the marks removed (see [rest_marks.md](./features/rest_marks.md)). Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)). On web, `_` typed in the editor is a rest cell, rests made in the grid are written back as `_`, and → on a selection at the end of a line inserts a rest before it ([web_rests_and_search.md](./features/web_rests_and_search.md)). On Android, `_` typed in a line makes a rest cell in the local estimate, grid rests are written back as `_`, the ▶ nudge at the end of a line inserts a rest before the selection, and rhyme ranges, chips and word-bank adds read the display text ([android_rests_and_search.md](./features/android_rests_and_search.md)).
 
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases) attached to snippets. On web they are assigned from the right-click context menu's tag picker: a searchable checklist that links and unlinks immediately (on the whole multi-selection when the menu is opened on one of its members, with a mixed state), creates a tag from the search text, and edits (name, color) or deletes tags. Assigned tags appear as colored pill labels in the snippet header. Snippets are filtered with a **tag expression** (`love & !draft | type:chorus`; `!` > `&` > `|`, juxtaposition is AND, `type:` addresses the snippet type) typed into the filter bar under the toolbar, with autocomplete at the caret and tag pills that insert at the caret. An invalid expression keeps the last valid filter applied. The filter text is remembered per canvas per browser. Expressions can be saved as named **presets** (server-side, per user, shared with Android); renaming a tag rewrites the user's presets. The rhyme sidebar's "Only my lines matching" restricts the notes source with the same kind of expression. Android has the same tag picker (from the selection bar and the editor), filter bar, presets and rhyme filter. See [tag_expressions.md](./features/tag_expressions.md), [web_tag_expressions.md](./features/web_tag_expressions.md) and [android_tag_expressions.md](./features/android_tag_expressions.md).
@@ -58,7 +58,7 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
-- **Full-Text Search**: ILIKE-based search across snippet text within a canvas
+- **Search**: `GET /api/search` finds the caller's canvases by title and snippets by display text across all their canvases (all whitespace-separated terms, NFC, case-insensitive substrings; typed `invalid_search_query`); `GET /api/canvases/{id}/search` applies the same rule within one canvas (see [global_search.md](./features/global_search.md; in a canvas, web and Android filter live on the client, see [web_rests_and_search.md](./features/web_rests_and_search.md) and [android_rests_and_search.md](./features/android_rests_and_search.md))
 
 ### Canvas Interactions
 - **Pan**: Middle-mouse drag or Alt+Left-drag
@@ -66,6 +66,7 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 - **Select**: Click (Shift for multi-select)
 - **Edit**: Double-click a snippet to open the text/type editor
 - **Tag Assignment**: Right-click a snippet to open the context menu: tag picker (search, toggle, create, edit, delete; applies to the multi-selection), merge, delete
+- **Search in a canvas (web)**: The search box at the start of the filter row filters the canvas and list mode live by display text, AND the tag filter, with "N of M", × / Escape to clear and Ctrl/Cmd+F to focus; it lasts per canvas for the session. The canvas list page's header search finds canvases (by title) and snippets across all canvases, and opening a snippet hit focuses it (`/canvas/:id?snippet=<sid>`); see [web_rests_and_search.md](./features/web_rests_and_search.md)
 - **Tag filter**: The bar under the toolbar takes a tag expression with autocomplete, tag pills that insert at the caret, presets (apply, save, rename, overwrite, delete) and clear; it filters both the canvas and list mode; see [web_tag_expressions.md](./features/web_tag_expressions.md)
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
 - **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
@@ -125,6 +126,8 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
+| [Rest Marks](./features/rest_marks.md) | `_` as a rest in snippet text: tokenize, word indexes, display text, canonical text, shared vectors, every backend consumer |
+| [Search Across Canvases](./features/global_search.md) | `GET /api/search` (canvases by title, snippets by display text, excerpts, typed `invalid_search_query`) and the per-canvas search rule |
 | [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: `snippet_placements` and `snippets.owner_id` (migration 008, both directions), the at-least-one-placement invariant, PUT / batch-position with `canvas_id`, remove from canvas, delete everywhere, transfer (move / show), merge, voice, groups, fork, readers, canvas title validation, typed errors |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [Voice Dataset](./features/voice_dataset.md) | Word-bank vocabulary hints (Whisper `initial_prompt`), stored STT words / line spans (migration 007), transcript verification, recording stats and the zip dataset export format, fine-tuning outline |
@@ -144,7 +147,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Beat Grid](./frontend/beat-grid.md) | Syllable grid display and editing |
 | [Sidebars](./frontend/sidebars.md) | Rhyme sidebar, word bank panel and similarity analysis panel |
 | [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag expression filter bar |
-| [Modals](./frontend/modals.md) | Search and export dialogs |
+| [Modals](./frontend/modals.md) | Export and voice dialogs |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor |
 | [State Management](./frontend/state-management.md) | Zustand stores (auth, canvas, UI, tags, word bank) |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces |
@@ -162,7 +165,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [NLP: Rhymes](./backend/nlp-rhymes.md) | Rhyme suggest endpoint and legacy lookup |
 | [NLP: Similarity](./backend/nlp-similarity.md) | TF-IDF cosine similarity, sentence embeddings |
 | [NLP: t-SNE Layout](./backend/nlp-tsne.md) | Dimensionality reduction for spatial clustering |
-| [NLP: Search](./backend/nlp-search.md) | Full-text search |
+| [NLP: Search](./backend/nlp-search.md) | Per-canvas search (shared matching rule) |
 | [Export](./backend/export.md) | Markdown, plain text, PDF generation |
 
 ## Tech Stack Summary
@@ -216,11 +219,12 @@ User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
 | Tag presets | 4 (list, create, update, delete) | Bearer |
 | Groups | 3 (CRUD) | Bearer |
 | NLP | 6 (syllabify, search, similar, tsne, rhymes, rhyme-suggest) | Mixed |
+| Search | 1 (across canvases) | Bearer |
 | Export | 1 (text/md/pdf) | Bearer |
 | Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
 | Health | 1 | Public |
-| **Total** | **56 endpoints** | |
+| **Total** | **57 endpoints** | |
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -244,6 +248,26 @@ All services hot-reload via bind-mounted source volumes.
 
 ```yaml
 Features Index:
+  rest_marks:
+    description: "_" in snippet text is an intentional rest. Tokenize a line by replacing each _ with " _ " and splitting on whitespace (punctuation stays in its word); word_index counts word tokens only, so phonetics overrides keyed by (line, word) stay valid with no migration. syllabify_text emits {"rest": true} for each _ (syllable_count excludes rests; a line of only rests is a line of rest cells; raw_text is the trimmed line). Display text (each line's words joined by single spaces, lines with rests and no words dropped, stanza breaks kept) is what export, similarity, t-SNE embeddings, legacy snippet rhymes, rhyme-suggest text anchors and search read; phonetics, rhyme-suggest grid slices and the merge word count read word tokens. Canonical text from a grid line (rest -> _, each word once at its first syllable) is the clients' rebuildRawText. Shared vectors v1 (tokenize, word_indexes, rebuild, display, match) at backend/tests/fixtures/rest_mark_vectors.json, copied byte for byte by web and Android.
+    entry_points:
+      - backend/app/services/rest_marks.py
+      - backend/app/services/nlp/syllabifier.py (syllabify_text)
+      - backend/app/services/phonetics_service.py (word tokens per line)
+      - backend/app/services/rhyme_suggest_service.py (slice_grid_line, text anchors)
+      - backend/app/services/nlp/rhyme_service.py, merge_service.py, export_service.py, api/nlp.py (similarity, t-SNE)
+      - backend/tests/fixtures/rest_mark_vectors.json
+    depends_on: [grid_rearrange, rhyme_view, merge_blocks]
+    doc: docs/features/rest_marks.md
+  global_search:
+    description: GET /api/search?q=&limit= (Bearer, caller's rows only) - q NFC + trim 1-200 code points else 422 {detail:{error:"invalid_search_query", message}}; limit 1-200 (default 50) per list. Terms (whitespace split, lowercased) must all be substrings of the canvas title (canvases, updated_at desc) or of the snippet's display text (snippets by owner_id, content_updated_at desc then id). Snippet hits {snippet_id, snippet_type, content_updated_at, excerpt, canvases [{id, title}] lower(title), id}; excerpt is the first display line containing the first term (else the first non-empty one), at most 160 code points cut around the match with "…". Escaped ILIKE prefilter over normalize(col, NFC), confirmed in Python on display text so limits count real matches. GET /api/canvases/{id}/search uses the same rule (response unchanged).
+    entry_points:
+      - backend/app/api/search.py (GET /api/search)
+      - backend/app/schemas/search.py
+      - backend/app/services/search/ (errors, query, matching, sql, excerpt, service)
+      - backend/app/services/nlp/search_service.py (per-canvas search)
+    depends_on: [rest_marks, snippet_placements, snippet_content_timestamp]
+    doc: docs/features/global_search.md
   snippet_placements:
     description: Snippet content separated from per-canvas layout so one snippet can be on several canvases. Migration 008 adds snippet_placements (snippet_id, canvas_id, position_x/y, width/height, z_index, group_id ON DELETE SET NULL, created_at; unique (snippet_id, canvas_id)) and snippets.owner_id, copying one placement per snippet and dropping the layout columns; the downgrade restores them from the oldest placement and splits every other placement into a duplicated snippet (content and tag links copied, recordings not). Invariant - every snippet has at least one placement - enforced (row locks + delete of snippets left with none, same transaction) on canvas delete, remove from canvas, move and merge. SnippetResponse gains placement_id and canvases [{id, title}] (lower(title), id; only the shared canvas in the shared view); layout fields come from the placement on the canvas in context. PUT /api/snippets/{id}?canvas_id= and PATCH batch-position {canvas_id, updates} require canvas_id; DELETE /api/canvases/{cid}/snippets/{sid} -> {snippet_deleted}; DELETE /api/snippets/{id} deletes everywhere; POST /api/canvases/{cid}/snippets/transfer {snippet_ids 1..500, target_canvas_id, mode move|show} -> {target_canvas_id, placed, already_on_target, removed_from_source}, all or nothing, same layout, z = target max + 1 + source z rank, ungrouped. Merge removes originals from this canvas only (shared ones keep their recordings). Voice append needs a placement on the take's canvas. Groups hold placements of their canvas. Fork copies content into new snippets of the forker. Search, similarity (optional canvas_id), t-SNE (read only), export and the shared view read the canvas's placements; rhyme notes read owner_id once per snippet. Canvas titles stripped, 1-255 code points (invalid_canvas_title). Typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas, group_not_found.
     entry_points:
@@ -625,6 +649,21 @@ Features Index:
     depends_on: [snippet_placements, web_tag_expressions, list_mode, merge_blocks, typed_api]
     doc: docs/features/web_snippet_placements.md
 ```
+  web_rests_and_search:
+    description: Web client of rest marks and search. lib/grid/restMarks (tokenizeLine - every _ is a rest and a word separator, word_index counts words only; lineWords, displayText strip) passing spec/rest_mark_vectors.json; localSyllabifyLine emits {rest:true} per _, rebuildRawText writes _ per rest and each word at its first syllable, attachWords over word tokens; the editor keeps typed _, writes grid rests back as _, opens legacy rows (grid rests, no _) arranged by display-text match and saves canonical text; ArrowRight at the line end inserts a rest before the selection (nudgeSelection). Rhyme anchors, word bank add-from-selection, list/card text fallbacks and similarity previews use display text. In-canvas search box (canvasSearchStore, 150 ms debounce, session-only per canvas) filters canvas and list mode AND the tag filter, "N of M", ×/Esc clear, Ctrl/Cmd+F focus; SearchModal, its toolbar button and uiStore state removed. Canvas list header search over GET /api/search (typed SearchError incl. invalid_search_query and network, 250 ms debounce, latest-only), Canvases and Snippets sections with highlighted excerpts and canvas links; /canvas/:id?snippet=<sid> selects and centres (list mode scrolls), clears a hiding in-canvas search, toasts "Hidden by the tag filter".
+    entry_points:
+      - frontend/src/lib/grid/restMarks.ts
+      - frontend/src/lib/search/
+      - frontend/src/components/canvas/editorState.ts (nudgeSelection, initEditorState)
+      - frontend/src/stores/canvasSearchStore.ts
+      - frontend/src/components/search/
+      - frontend/src/components/toolbar/TagExpressionBar.tsx
+      - frontend/src/api/search.ts
+      - frontend/src/hooks/useGlobalSearch.ts
+      - frontend/src/hooks/useSnippetFocus.ts
+      - frontend/src/components/pages/CanvasListPage.tsx
+    depends_on: [grid_rearrange, web_tag_expressions, list_mode, web_snippet_placements]
+    doc: docs/features/web_rests_and_search.md
   android_snippet_placements:
     description: Android client of snippet placements and canvas rename. Snippet DTO gains placement_id and canvases; typed TransferRequest (1..500 distinct ids) / TransferResponse / RemovePlacementResponse and PlacementErrorCode (invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas). PUT /api/snippets/{id}?canvas_id= and batch-position with canvas_id from the open canvas; removeFromCanvas, deleteEverywhere, transfer, rename. Rename dialog from canvas list rows (long-press / ⋮) and the canvas title (trim, 1-255 code points, server error inline; list, header and badges update without reload via CanvasUpdates). Selection bar ⋮ - Move to canvas… / Also show on canvas… (bottom-sheet picker, search, newest updated first, New canvas… creating then acting; snackbar with Open navigating to the target), Remove from this canvas (placement delete, confirm only for last copies) vs Delete everywhere (confirm naming the other canvases), On other canvases… (the badge's list). "⧉ N" badge on cards and list rows; editor "Also on" with buttons. No undo on Android, so no history to clear.
     entry_points:

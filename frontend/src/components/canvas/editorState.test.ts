@@ -127,11 +127,11 @@ describe('moveChunkInRow', () => {
 });
 
 describe('insertRestInRow / removeCellsInRow', () => {
-  it('inserts a rest, keeps the text and marks the row arranged', () => {
+  it('inserts a rest, writes it into the text as _ and marks the row arranged', () => {
     let s = initEditorState('hello', null);
     s = insertRestInRow(s, 0, 1);
     expect(syls(gridLineForRow(s, 0))).toEqual(['hel', '·', 'lo']);
-    expect(s.lines[0]).toBe('hello');
+    expect(s.lines[0]).toBe('hello _');
     expect(s.arranged.has(0)).toBe(true);
   });
 

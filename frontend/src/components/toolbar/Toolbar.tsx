@@ -10,7 +10,7 @@ export default function Toolbar() {
     canvasId, viewport, setViewport, undo, redo, tsneMode, exitTSNE, enterTSNE,
     selectedSnippetIds, mergeSelected, mergeError, clearMergeError,
   } = useCanvasStore();
-  const { setSearchModalOpen, setExportDialogOpen, toggleRhymeSidebar, toggleWordBank, rightPanel, viewMode, toggleViewMode } = useUIStore();
+  const { setExportDialogOpen, toggleRhymeSidebar, toggleWordBank, rightPanel, viewMode, toggleViewMode } = useUIStore();
   const listMode = viewMode === 'list';
   const canMerge = selectedSnippetIds.size >= 2;
 
@@ -106,9 +106,6 @@ export default function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: '#3a3a5a' }} />
 
-      <button onClick={() => setSearchModalOpen(true)} style={btnStyle} title="Search (Ctrl+F)">
-        Search
-      </button>
       <button
         onClick={toggleRhymeSidebar}
         style={rightPanel === 'rhymes' ? activeBtnStyle : btnStyle}

@@ -18,6 +18,7 @@ from app.api.tags import router as tags_router
 from app.api.tag_presets import router as tag_presets_router
 from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
+from app.api.search import router as search_router
 from app.api.voice import router as voice_router
 from app.api.word_bank import related_words
 from app.api.word_bank import router as word_bank_router
@@ -65,6 +66,7 @@ app.include_router(tags_router)
 app.include_router(tag_presets_router)
 app.include_router(nlp_router)
 app.include_router(export_router)
+app.include_router(search_router)
 app.include_router(voice_router)
 app.include_router(word_bank_router)
 

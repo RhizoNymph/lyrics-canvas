@@ -13,7 +13,8 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 | [Sidebars](./frontend/sidebars.md) | Rhyme sidebar, similarity analysis panel | `RhymeSidebar`, `SimilarityPanel` |
 | [Toolbar & Tags](./frontend/toolbar.md) | Zoom, undo/redo, tool toggles, tag expression filter bar | `Toolbar`, `TagExpressionBar` |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | User-wide tags, tag picker, expression filter with autocomplete, presets, rhyme notes filter | `lib/tagExpr/*`, `lib/tags/*`, `lib/tagFilter/*`, `tagStore`, `tagFilterStore`, `components/tags/*` |
-| [Modals](./frontend/modals.md) | Full-text search dialog, export format dialog | `SearchModal`, `ExportDialog` |
+| [Modals](./frontend/modals.md) | Export format dialog, voice dialogs | `ExportDialog`, `VoiceCaptureModal`, `CheckTranscriptModal`, `VoiceDatasetDialog` |
+| [Web Rests and Search](./features/web_rests_and_search.md) | Rest marks `_` in text, nudge-right rest, in-canvas search filter, search across canvases | `lib/grid/restMarks`, `lib/search/*`, `canvasSearchStore`, `components/search/*` |
 | [Pages & Routing](./frontend/pages-routing.md) | SPA routes, auth pages, canvas list, canvas editor | `App`, `LoginPage`, `RegisterPage`, `CanvasListPage`, `CanvasPage` |
 | [Rhyme Sidebar](./frontend/rhyme-view.md) | Engine-backed rhyme search list with materialize-to-canvas | `rhymeStore`, `RhymeSidebar`, `QueryControls`, `CandidateList`, `CandidateRow`, `lib/rhyme/*` |
 | [State Management](./frontend/state-management.md) | Zustand stores for auth, canvas data, UI state, rhyme sidebar | `authStore`, `canvasStore`, `uiStore`, `rhymeStore` |
@@ -118,7 +119,6 @@ src/
       Toolbar.tsx                   Top control bar
       TagExpressionBar.tsx          Tag expression filter bar
     modals/
-      SearchModal.tsx               Full-text search
       ExportDialog.tsx              Export format selection
     pages/
       LoginPage.tsx                 Login form

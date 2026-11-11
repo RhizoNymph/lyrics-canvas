@@ -1,6 +1,6 @@
 # Modals
 
-Full-screen overlay dialogs for search and export, the voice capture recorder, the check transcript
+Full-screen overlay dialogs for export, the voice capture recorder, the check transcript
 view and the voice dataset dialog.
 
 ## VoiceCaptureModal
@@ -40,59 +40,8 @@ Opened by the canvas list page's "Voice dataset" header button. Shows the stats 
 fetches the export with the bearer token into a blob and saves it under the server's file name. Escape,
 Close or a backdrop press close it and abort pending requests.
 
-## SearchModal
-
-**File:** `src/components/modals/SearchModal.tsx`
-
-Full-screen search dialog using ILIKE-based text search across canvas snippets.
-
-### State
-
-| State | Type | Purpose |
-|-------|------|---------|
-| `query` | string | Search input |
-| `results` | SearchResult[] | Results from API |
-| `loading` | boolean | Search in progress |
-
-### Interactions
-
-- Opened by Ctrl+F (handled in CanvasPage) or Search button in Toolbar
-- Enter key in input triggers search
-- Clicking a result navigates to that snippet and closes the modal
-- Clicking the backdrop closes the modal
-- Input auto-focuses on open via `inputRef`
-
-### Navigation
-
-```typescript
-const s = snippets.get(snippetId);
-setViewport({ x: -s.position_x + 400, y: -s.position_y + 300 });
-selectSnippet(snippetId);
-setSearchModalOpen(false);
-```
-
-### API Call
-
-```
-GET /api/canvases/{canvasId}/search?q=<query>
-Response: SearchResult[]
-```
-
-### Result Display
-
-Each result shows:
-- Left border colored by snippet type
-- Snippet type label (uppercase)
-- First 120 chars of raw_text
-
-### Store Dependencies
-
-| Store | State/Actions Used |
-|-------|-------------------|
-| uiStore | `searchModalOpen`, `setSearchModalOpen` |
-| canvasStore | `canvasId`, `setViewport`, `selectSnippet`, `snippets` |
-
----
+The former `SearchModal` (Ctrl+F, `GET /api/canvases/{id}/search`) is gone: the in-canvas search box replaces
+it ([web_rests_and_search.md](../features/web_rests_and_search.md)). The backend endpoint stays.
 
 ## ExportDialog
 

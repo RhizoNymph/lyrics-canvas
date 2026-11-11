@@ -37,6 +37,14 @@ describe('slotFromSnippet', () => {
     expect(slotFromSnippet(snippet, null)).toEqual({ syllable_count: 3, stress: '010' });
   });
 
+  it('skips trailing lines made only of rests', () => {
+    const withRests = {
+      grid_data: { lines: [line([{ s: 1 }, { s: 0 }]), line([{ rest: true }, { rest: true }])] },
+    } as unknown as Snippet;
+    expect(lastNonEmptyLineIndex(withRests)).toBe(0);
+    expect(slotFromSnippet(withRests, null)).toEqual({ syllable_count: 2, stress: '10' });
+  });
+
   it('returns null with no grid data or an out-of-range line', () => {
     expect(slotFromSnippet({ grid_data: null } as unknown as Snippet, null)).toBeNull();
     expect(slotFromSnippet(snippet, 9)).toBeNull();
