@@ -313,7 +313,8 @@ async def resolve_anchor(anchor: Anchor, user_id: str, repo: SnippetRepository, 
             if not phonetics.lines:
                 raise RhymeQueryError(f"snippet {snippet_id} has no text")
             if line_index is None:
-                line = phonetics.lines[-1]
+                # the last line with words: a trailing line of only rests has nothing to rhyme on
+                line = next((l for l in reversed(phonetics.lines) if l.words), phonetics.lines[-1])
             else:
                 found = next((l for l in phonetics.lines if l.line_index == line_index), None)
                 if found is None:

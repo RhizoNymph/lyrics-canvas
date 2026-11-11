@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from app.models.snippet import SnippetType
 from app.schemas.merge import MergeMode
 from app.schemas.phonetics import PronunciationOverride, SyllableModel
-from app.schemas.rhyme import TextAnchor
+from app.schemas.rhyme import SnippetAnchor, TextAnchor
 from app.services.export_service import export_as_markdown, export_as_pdf, export_as_text
 from app.services.merge_service import merge_snippets, word_count
 from app.services.nlp.rhyme_service import find_rhymes_in_texts
@@ -16,6 +16,7 @@ from app.services.nlp.syllabifier import syllabify_text
 from app.services.phonetics import DEFAULT_DIALECT_MAP
 from app.services.phonetics_service import compute_snippet_phonetics, note_units_from_phonetics
 from app.services.rhyme_suggest_service import resolve_anchor, slice_grid_line
+from tests.fakes import CANVAS_OWNERS, FakeRepository, make_record
 from tests.merge_fixtures import grid, source
 
 REST = {"rest": True}
@@ -131,6 +132,14 @@ async def test_text_anchor_ignores_rest_marks():
     anchor = TextAnchor(kind="text", text="go_now _")
     resolved = await resolve_anchor(anchor, "u1", None, DEFAULT_DIALECT_MAP)  # type: ignore[arg-type]
     assert resolved.unit.text == "go now"
+
+
+async def test_snippet_anchor_without_line_skips_trailing_rest_only_lines():
+    owner = CANVAS_OWNERS["c1"]
+    repo = FakeRepository(snippets={"s1": make_record("s1", "black cat\n_ _")})
+    resolved = await resolve_anchor(SnippetAnchor(kind="snippet", snippet_id="s1"), owner, repo, DEFAULT_DIALECT_MAP)
+    assert resolved.unit.text == "black cat"
+    assert resolved.unit.line_index == 0
 
 
 # ---- merge ----

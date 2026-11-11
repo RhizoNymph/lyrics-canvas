@@ -91,6 +91,7 @@ readers of words ──► word_tokens(line)
 | Rhyme notes source | `phonetics_service.note_unit(s)_from_phonetics` | the phonetics words above (no marks) |
 | Rhyme-suggest grid slice | `app/services/rhyme_suggest_service.py` (`slice_grid_line`) | `word_tokens(raw_text)[offset:end]` for the slice's `raw_text` (cells keep interior rests) |
 | Rhyme-suggest text anchor | `rhyme_suggest_service.resolve_anchor` | `display_text(text)` |
+| Rhyme-suggest snippet anchor without `line_index` | `rhyme_suggest_service.resolve_anchor` | the last phonetics line with words, so a trailing rest-only line (`_ _`) is skipped; the clients' `lastNonEmptyLineIndex` skips rest-only grid lines to match |
 | Legacy snippet rhymes | `app/services/nlp/rhyme_service.py` (`find_rhymes_in_texts`) | `display_text`; the preview is display text |
 | Merge | `app/services/merge_service.py` (`word_count`) | `word_tokens`: horizontal merge re-bases `word_index` by words only; merged `raw_text` keeps the marks |
 | Export | `app/services/export_service.py` | `display_text` / `display_lines` |
