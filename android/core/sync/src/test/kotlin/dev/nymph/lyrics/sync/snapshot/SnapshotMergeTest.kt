@@ -31,7 +31,7 @@ class SnapshotMergeTest {
 
     /** The server: both canvases (c1 renamed), s1 changed on c1 only, s2 gone, the tag and word unchanged, a preset. */
     private val snapshot = SyncSnapshot(
-        serverTime = "2026-11-03T00:00:00Z",
+        serverTime = "2026-11-03 00:00:00.123456+00:00",
         canvases = listOf(Fx.canvas(Fx.c1, "One (server)", version = 2), Fx.canvas(Fx.c2, "Two")),
         placements = listOf(placement(Fx.s1, Fx.c1)),
         snippets = listOf(snippet(Fx.s1, "server text")),
@@ -52,7 +52,7 @@ class SnapshotMergeTest {
         assertNull(merged.placement(Fx.s1, Fx.c2), "the server took it off c2")
         assertNull(merged.snippet(Fx.s2))
         assertEquals(listOf("P"), merged.presets.map { it.name })
-        assertEquals("2026-11-03T00:00:00Z", merged.snapshotAt)
+        assertEquals("2026-11-03 00:00:00.123456+00:00", merged.snapshotAt)
     }
 
     @Test

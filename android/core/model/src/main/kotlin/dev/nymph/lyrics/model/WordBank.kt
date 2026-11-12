@@ -22,8 +22,23 @@ data class BankWord(
 data class WordBankAddRequest(
     val words: List<String>,
     @SerialName("tag_ids") val tagIds: List<TagId> = emptyList(),
-    /** Client-chosen ids, parallel to [words] (offline adds). */
-    val ids: List<BankWordId>? = null,
+)
+
+/** One word of an offline add: its text and the client-chosen id (an identical retry comes back in `created`). */
+@Serializable
+data class NewBankWord(
+    val text: String,
+    val id: BankWordId,
+)
+
+/**
+ * Body of `POST /api/word-bank` from the sync engine: every item carries a client id. A text
+ * already banked under another id comes back in `existing` (not a conflict).
+ */
+@Serializable
+data class WordBankSyncAddRequest(
+    val words: List<NewBankWord>,
+    @SerialName("tag_ids") val tagIds: List<TagId> = emptyList(),
 )
 
 /** Response of `POST /api/word-bank`: new words and ones already banked (stored spelling), both in input order. */

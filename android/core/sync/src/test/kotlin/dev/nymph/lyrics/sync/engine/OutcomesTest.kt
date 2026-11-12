@@ -148,6 +148,15 @@ class OutcomesTest {
     }
 
     @Test
+    fun `id_conflict on a create means it already happened, so it is done and refetched`() {
+        val created = SnippetId("n")
+        val d = Fx.data().withSnippet(Fx.content(created, "x")).queue(SyncOp.CreateSnippet(created, Fx.c1, SnippetCreateRequest(0.0, 0.0)))
+        val a = d.answer(SendOutcome.Refused(ApiError.Server(409, "exists", "id_conflict")))
+        assertTrue(a.data.outbox.isEmpty)
+        assertTrue(a.refresh)
+    }
+
+    @Test
     fun `a merge conflict parks the whole merge on the merged snippet`() {
         val merged = SnippetId("m")
         val d = Fx.data().queue(SyncOp.Merge(Fx.c1, merged, MergeMode.VERTICAL, listOf(SnippetVersion(Fx.s1, 1), SnippetVersion(Fx.s2, 1))))

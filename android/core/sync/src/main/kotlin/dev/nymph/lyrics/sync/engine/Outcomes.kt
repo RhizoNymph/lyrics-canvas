@@ -5,6 +5,7 @@ import dev.nymph.lyrics.model.BankWordId
 import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.model.LyricsJson
 import dev.nymph.lyrics.model.Snippet
+import dev.nymph.lyrics.model.SyncErrorCode
 import dev.nymph.lyrics.model.TagErrorCode
 import dev.nymph.lyrics.model.TagId
 import dev.nymph.lyrics.model.UserTag
@@ -54,7 +55,12 @@ object Outcomes {
         is SendOutcome.Unreadable -> Applied(d.withOutbox(d.outbox.complete(batch.ids)), refresh = true)
         is SendOutcome.VersionConflict -> versionConflict(d, batch, outcome.current)
         is SendOutcome.NotFound -> notFound(d, batch, outcome.code)
-        is SendOutcome.Refused -> park(d, batch.entries.map { it to Conflict.Rejected(entityOf(it.op), outcome.error.message) })
+        is SendOutcome.Refused -> if (batch.first.op.creates != null && SyncErrorCode.parse(outcome.error.code) == SyncErrorCode.ID_CONFLICT) {
+            // The create reached the server before (its answer was lost) and was edited since: done; refetch.
+            Applied(d.withOutbox(d.outbox.complete(batch.ids)), refresh = true)
+        } else {
+            park(d, batch.entries.map { it to Conflict.Rejected(entityOf(it.op), outcome.error.message) })
+        }
     }
 
     /** The entity a parked operation's badge and review go on. */

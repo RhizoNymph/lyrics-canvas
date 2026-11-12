@@ -258,7 +258,8 @@ class HttpSyncTest {
             respond(200, body(WordBankAddResponse.serializer(), WordBankAddResponse(listOf(Fx.serverWord(a, "sun", 1)), listOf(Fx.serverWord(BankWordId("old"), "Star", 4)))))
         }
         val sent = s.requests.single().json()
-        assertEquals(2, (sent["ids"] as kotlinx.serialization.json.JsonArray).size)
+        val words = sent["words"] as kotlinx.serialization.json.JsonArray
+        assertEquals(listOf("a", "b"), words.map { (it.jsonObject["id"] as JsonPrimitive).content })
         assertNull(s.data.word(b))
         assertEquals(4, s.data.word(BankWordId("old"))?.version)
     }

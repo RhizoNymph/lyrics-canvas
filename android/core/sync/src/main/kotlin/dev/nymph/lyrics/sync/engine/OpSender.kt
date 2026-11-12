@@ -23,7 +23,8 @@ import dev.nymph.lyrics.model.TransferRequest
 import dev.nymph.lyrics.model.TransferResponse
 import dev.nymph.lyrics.model.User
 import dev.nymph.lyrics.model.UserTag
-import dev.nymph.lyrics.model.WordBankAddRequest
+import dev.nymph.lyrics.model.NewBankWord
+import dev.nymph.lyrics.model.WordBankSyncAddRequest
 import dev.nymph.lyrics.model.WordBankAddResponse
 import dev.nymph.lyrics.model.WordBankDeleteRequest
 import dev.nymph.lyrics.model.WordBankRenameRequest
@@ -170,8 +171,8 @@ class HttpOpSender(private val api: ApiClient) : OpSender {
                 api.send(
                     HttpMethod.POST,
                     listOf("api", "word-bank"),
-                    WordBankAddRequest(ops.map { it.text }, op.tagIds, ops.map { it.id }),
-                    WordBankAddRequest.serializer(),
+                    WordBankSyncAddRequest(ops.map { NewBankWord(it.text, it.id) }, op.tagIds),
+                    WordBankSyncAddRequest.serializer(),
                     WordBankAddResponse.serializer(),
                 ),
             ) { OpResult.WordsAdded(it) }

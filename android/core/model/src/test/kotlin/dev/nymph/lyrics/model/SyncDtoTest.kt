@@ -40,8 +40,10 @@ class SyncDtoTest {
     fun `bulk word requests carry per-word base versions and add carries ids`() {
         val del = LyricsJson.encodeToJsonElement(WordBankDeleteRequest.serializer(), WordBankDeleteRequest(listOf(BankWordId("w")), mapOf("w" to 3))).jsonObject
         assertEquals(JsonPrimitive(3), del["base_versions"]?.jsonObject?.get("w"))
-        val add = LyricsJson.encodeToJsonElement(WordBankAddRequest.serializer(), WordBankAddRequest(listOf("moon"), ids = listOf(BankWordId("w1")))).jsonObject
-        assertEquals("w1", (add["ids"] as kotlinx.serialization.json.JsonArray)[0].jsonPrimitive.content)
+        val add = LyricsJson.encodeToJsonElement(WordBankSyncAddRequest.serializer(), WordBankSyncAddRequest(listOf(NewBankWord("moon", BankWordId("w1"))))).jsonObject
+        val item = (add["words"] as kotlinx.serialization.json.JsonArray)[0].jsonObject
+        assertEquals("w1", item["id"]?.jsonPrimitive?.content)
+        assertEquals("moon", item["text"]?.jsonPrimitive?.content)
     }
 
     @Test
