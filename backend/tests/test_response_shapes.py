@@ -37,6 +37,8 @@ def legacy_canvas(canvas) -> dict:
         "viewport_state": canvas.viewport_state,
         "created_at": str(canvas.created_at),
         "updated_at": str(canvas.updated_at),
+        # content version (docs/features/sync_versions.md)
+        "version": canvas.version,
     }
 
 
@@ -65,6 +67,8 @@ def legacy_snippet(s) -> dict:
         "created_at": str(s.created_at),
         "updated_at": str(s.updated_at),
         "content_updated_at": str(s.content_updated_at),
+        # content version (docs/features/sync_versions.md)
+        "version": s.version,
         "canvases": [{"id": str(c.id), "title": c.title} for c in s.canvases],
     }
 
@@ -83,8 +87,8 @@ def legacy_group(g) -> dict:
 
 def legacy_tag(t) -> dict:
     # TagResponse lost canvas_id and gained snippet_count and created_at with user-wide tags,
-    # and word_count with the word bank
-    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at)}
+    # and word_count with the word bank, and version with offline sync
+    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at), "version": t.version}
 
 
 def legacy_detail(canvas) -> dict:
@@ -309,7 +313,7 @@ def test_create_update_and_link_tag(client, monkeypatch):
         return TAG_B_SUMMARY
 
     async def fake_link(db, snippet_id, tag_id, owner_id):
-        return None
+        return 3  # the snippet's version after the link
 
     monkeypatch.setattr(tag_service, "create_tag", fake_create)
     monkeypatch.setattr(tag_service, "update_tag", fake_update)
@@ -318,7 +322,7 @@ def test_create_update_and_link_tag(client, monkeypatch):
     assert res.status_code == 201
     assert_same_wire(res, legacy_tag(TAG_A_SUMMARY))
     assert_same_wire(client.put(f"/api/tags/{TAG_B.id}", json={"name": "draft"}), legacy_tag(TAG_B_SUMMARY))
-    assert_same_wire(client.post(f"/api/snippets/{uuid.uuid4()}/tags", params={"tag_id": str(TAG_A.id)}), {"ok": True})
+    assert_same_wire(client.post(f"/api/snippets/{uuid.uuid4()}/tags", params={"tag_id": str(TAG_A.id)}), {"ok": True, "version": 3})
 
 
 # ---- nlp ----

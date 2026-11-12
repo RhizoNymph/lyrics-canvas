@@ -131,7 +131,7 @@ def test_add_and_list(client):
     assert texts(result["created"]) == ["night", "Broken Heart"]
     assert result["existing"] == []
     word = result["created"][0]
-    assert set(word) == {"id", "text", "tags", "created_at"}
+    assert set(word) == {"id", "text", "tags", "created_at", "version"}
     assert word["tags"] == [{"id": love, "name": "love", "color": "#6366f1"}]
     datetime.fromisoformat(word["created_at"])
     again = add(client, "Night", "day")
@@ -244,7 +244,7 @@ def test_tag_response_has_word_count(client):
     love = tag(client, "love")
     add(client, "a", "b", tag_ids=[love])
     (t,) = ok(client.get("/api/tags"))
-    assert list(t) == ["id", "name", "color", "snippet_count", "word_count", "created_at"]
+    assert list(t) == ["id", "name", "color", "snippet_count", "word_count", "created_at", "version"]
     assert t["word_count"] == 2
     renamed = ok(client.put(f"/api/tags/{love}", json={"name": "Love"}))
     assert renamed["word_count"] == 2

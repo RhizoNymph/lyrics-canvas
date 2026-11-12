@@ -80,7 +80,7 @@ def test_rename_rejects_bad_titles_before_the_service(client, monkeypatch, title
 def test_create_and_rename_pass_the_stripped_title(client, monkeypatch):
     seen = []
     canvas = SimpleNamespace(id=CANVAS, owner_id=USER, title="t", is_public=False, share_token=None, viewport_state=None,
-                             created_at="c", updated_at="u")
+                             created_at="c", updated_at="u", version=1)
 
     async def fake_create(db, owner_id, title):
         seen.append(title)

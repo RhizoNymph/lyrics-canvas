@@ -126,6 +126,7 @@ def test_create_snippet_computes_phonetics_and_keeps_derived_from(client: TestCl
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            version=1,
             canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 
@@ -210,6 +211,7 @@ def test_create_snippet_passes_enum_types_to_service(client: TestClient, monkeyp
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            version=1,
             canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 

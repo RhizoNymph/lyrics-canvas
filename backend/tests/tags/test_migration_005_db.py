@@ -119,7 +119,8 @@ def test_links_point_at_the_survivor_without_duplicates():
 
 
 def test_schema_shape():
-    assert columns("tags") == {"id", "user_id", "name", "color", "created_at"}
+    # version: migration 009 (docs/features/sync_versions.md)
+    assert columns("tags") == {"id", "user_id", "name", "color", "created_at", "version"}
     assert columns("tag_presets") == {"id", "user_id", "name", "expression", "created_at", "updated_at"}
     created = one("SELECT bool_and(created_at IS NOT NULL) FROM tags")[0][0]
     assert created is True

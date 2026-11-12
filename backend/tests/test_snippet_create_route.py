@@ -54,6 +54,7 @@ def captured(monkeypatch) -> dict:
             created_at="now",
             updated_at="now",
             content_updated_at="now",
+            version=1,
             canvases=[SimpleNamespace(id=uuid.UUID(canvas_id), title="Song")],
         )
 
