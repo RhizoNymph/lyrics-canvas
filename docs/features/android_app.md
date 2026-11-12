@@ -22,10 +22,15 @@ touch. Lives in `android/` of this repo.
 - Rest marks (`_` in text is a grid rest, both ways), the ▶ nudge inserting a rest at the end of a
   line, the in-canvas search filter and search across canvases from the canvas list:
   [android_rests_and_search.md](./android_rests_and_search.md).
+- Offline copy and sync: screens read a local copy of the account, edits are saved locally and
+  queued, a sync engine sends them when the server is reachable, and conflicts are parked for review
+  (sync status indicator, "Not synced" badges, review screen, "Needs connection" on server-only
+  actions): [android_offline_sync.md](./android_offline_sync.md).
 
 ## Non-scope
 
-- Offline engine (CMU dict / scorer / g2p on device). The backend is required.
+- An on-device NLP engine (CMU dict / scorer / g2p). Rhymes, syllabify, voice and related words
+  need the backend; editing works offline on the local copy ([android_offline_sync.md](./android_offline_sync.md)).
 - Hosting the backend. Dev builds point at the emulator host (`10.0.2.2:8000`) or a LAN IP via
   `-PapiBaseUrl=`.
 - Google sign-in (email/password only in v1), export, t-SNE, similarity, groups UI. (Search:
@@ -39,8 +44,9 @@ touch. Lives in `android/` of this repo.
 |---|---|---|---|
 | `:core:model` | Kotlin JVM + serialization | `@Serializable` DTOs mirroring the API (snake_case field names via `@SerialName`), grid types, rhyme types, typed ids | — |
 | `:core:logic` | Kotlin JVM | Ports of `frontend/src/lib/grid/*`, `lib/rhyme/{anchorRange,slotFit,materializePosition,candidateList,queryFromSelection,geometry}`, plus canvas geometry (world/screen transforms, hit-testing) | model |
-| `:core:data` | Kotlin JVM, OkHttp + kotlinx.serialization | `ApiClient` (bearer auth, typed `ApiError`), repositories, `TokenStore` interface | model |
-| `:app` | Android application, Compose | Screens, ViewModels (`StateFlow`), navigation, DataStore-backed `TokenStore`, Compose canvas rendering | all |
+| `:core:data` | Kotlin JVM, OkHttp + kotlinx.serialization | `ApiClient` (bearer auth, typed `ApiError`), repository interfaces and their HTTP implementations, `TokenStore` interface | model |
+| `:core:sync` | Kotlin JVM + serialization | Local copy (file store), outbox, sync engine, snapshot merge, conflicts, local-first repositories ([android_offline_sync.md](./android_offline_sync.md)) | data, logic |
+| `:app` | Android application, Compose | Screens, ViewModels (`StateFlow`), navigation, DataStore-backed `TokenStore`, Compose canvas rendering; `AppContainer` wires the local-first repositories from `:core:sync` | all |
 
 Logic ported from TypeScript keeps its test cases: every `*.test.ts` in the ported modules becomes a
 JUnit 5 test with the same inputs and expectations. Merge logic is NOT ported; both clients call the
@@ -128,8 +134,9 @@ Screens, ViewModels, gestures, rendering and the rhyme sheet in detail:
 
 ## Invariants
 
-- The canvas only ever shows server-confirmed snippets; nothing from the rhyme sheet is drawn until
-  Materialize succeeds.
+- The canvas shows the local copy (every change saved locally first, then synced;
+  [android_offline_sync.md](./android_offline_sync.md)); nothing from the rhyme sheet is drawn until
+  Materialize created the snippet.
 - Logic in `:core:logic` is pure and has the same results as the TypeScript it ports for the same inputs.
 - `word_index` stays increasing within a line after any edit and counts words only (never rests);
   `raw_text` is always derivable from the grid, rests included as `_`.

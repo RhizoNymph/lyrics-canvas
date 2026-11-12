@@ -6,6 +6,8 @@ backend was down for about two days without anyone noticing. The web client gets
 behaviour on a sibling branch (`feat/web-health-banner`): the same thresholds and timings, the same
 state machine, alert parsing rules and incident keys.
 
+> Offline copy: The health monitor is also the offline copy's reachability source: while it says Down, server-only actions say "Needs connection", and its recovery wakes the sync engine, which now retries and queues saves; see [android_offline_sync.md](./android_offline_sync.md).
+
 ## Scope
 
 - Backend health: polling `GET /api/health` while the activity is visible, plus passive health

@@ -6,6 +6,8 @@ bank of words and short phrases, tagged with the same user-wide tags as snippets
 same tag expressions and presets, ranked by rhyme, searched by meaning, and turned into a new
 snippet on the canvas it was opened from.
 
+> Offline copy: Adding, renaming, deleting and tagging words work offline on the local copy; rhymes, families and related words say "Needs connection" offline; see [android_offline_sync.md](./android_offline_sync.md).
+
 ## Scope
 
 - **Typeless tag evaluation** (`:core:logic`): `TagFilter.matches(type: SnippetType?, names)` treats a

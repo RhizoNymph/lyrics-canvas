@@ -5,6 +5,8 @@ backend: expression language, data model, HTTP API). Tags are user-wide (one lis
 every canvas). On Android this feature adds tag assignment, a canvas filter bar driven by a text
 expression, server-side presets, and the rhyme sheet's "Only my lines matching" restriction.
 
+> Offline copy: Tags and their links are edited on the local copy and synced; presets are read from the copy and saved online only ("Needs connection" offline); see [android_offline_sync.md](./android_offline_sync.md).
+
 ## Scope
 
 - **Expression engine** in `:core:logic` (`dev.nymph.lyrics.logic.tags`): lexer, parser, sealed AST,

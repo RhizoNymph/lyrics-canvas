@@ -8,6 +8,8 @@ adds canvas rename, "Move to canvas…" / "Also show on canvas…", "Remove from
 "Delete everywhere", the "⧉ N" badge and the editor's "Also on: …", and makes every layout save name
 the open canvas.
 
+> Offline copy: Rename, Move to / Also show on, remove and delete everywhere are applied to the local copy and synced (the server's transfer rules are reproduced locally); canvases can also be deleted from the list ⋮ menu; see [android_offline_sync.md](./android_offline_sync.md).
+
 ## Scope
 
 - **Model** (`:core:model`): `Snippet.placementId` (`placement_id`, required) and `Snippet.canvases`

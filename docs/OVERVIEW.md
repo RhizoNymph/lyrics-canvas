@@ -97,6 +97,16 @@ opens a full-screen Check transcript screen (player, tappable timed Whisper word
 the recording only), and the canvas list overflow shows the voice dataset stats (export stays on web). See
 [voice_capture.md](./features/voice_capture.md) and [voice_dataset.md](./features/voice_dataset.md).
 
+### Offline Copy (Android)
+The Android app keeps a local copy of the user's canvases, snippets, tags, presets and word bank and
+works from it, online or not: every edit is saved on the phone first, queued, and synced as soon as the
+server is reachable (versions and `base_version` from [sync_versions.md](./features/sync_versions.md),
+client-chosen ids, `GET /api/sync/snapshot`). A content change the server also changed is parked: a
+snackbar, a "N not synced" indicator and "Not synced" badges point to a review of mine next to the
+server's (Keep server's / Overwrite with mine / Save mine as new). Layout is last-write-wins. Rhymes, voice,
+related words and preset saves say "Needs connection" while the server is down. See
+[android_offline_sync.md](./features/android_offline_sync.md).
+
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
 while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
@@ -115,6 +125,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop, word-bank hints switch), transcribed by the server into a new snippet or appended lines; recordings played back, deleted and checked (Check transcript screen) in the editor; dataset stats in the canvas list |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
+| [Android Offline Sync](./features/android_offline_sync.md) | Local copy of the account (file store), local-first repositories, outbox with coalescing and per-entity ordering, sync engine (versions, `base_version`, client ids, snapshot merge), parked conflicts with a review screen, sync status indicator, "Not synced" badges, "Needs connection" on server-only actions |
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Rests and Search](./features/android_rests_and_search.md) | Android rest marks (`_` in text ↔ grid rests, display text consumers), ▶ nudge inserting a rest at the end of a line, in-canvas search filter, search across canvases with focus on a snippet |
@@ -676,6 +687,15 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (PlacementCanvasPort)
     depends_on: [snippet_placements, android_app, list_mode, merge_blocks]
     doc: docs/features/android_snippet_placements.md
+  android_offline_sync:
+    description: Android offline copy and sync. :core:sync holds the account's local copy (one JSON file, atomic writes; Room 2.8.4/KSP did not resolve offline), LocalEdits applying every offline-capable change as the server would (incl. a merge port) and queueing a typed SyncOp, the Outbox (coalescing, per-entity FIFO, creates first, parked conflicts blocking their entity only, word batches), the SyncEngine (one coroutine on a Channel of wake-ups - edit, foreground, health back, refresh, 30 s tick; backoff 2-60 s; snapshot merge after a drain), Outcomes (rebase from based ops only, 409 park, 404 rules, tag/word id remaps, id_conflict as done), the Resolver (keep server's, overwrite with mine, save mine as new, retry merge) and local-first repositories behind the existing interfaces; server-only calls answer NeedsConnection while the health monitor says down. The app shows a sync status indicator, Not synced badges, an app-wide conflict snackbar, the Not-synced list and review screen, and disables server-only actions with "Needs connection".
+    entry_points:
+      - android/core/sync/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/sync/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/di/AppContainer.kt (sync, repositories)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppNavHost.kt (LocalSyncUi, NotSyncedRoute, ReviewRoute)
+    depends_on: [android_app, sync_versions, android_health_banner, android_snippet_placements, android_tag_expressions, android_word_bank, android_rests_and_search, merge_blocks]
+    doc: docs/features/android_offline_sync.md
   android_rests_and_search:
     description: Android client of rest marks and search. :core:logic tokenizer (`_` is one rest and a word separator; word_index counts words only), display text (strip; rests-only lines dropped), passing every vector of rest_mark_vectors.json (byte-for-byte copy in core/logic test resources). Local estimate emits {"rest": true} cells; rebuildRawText emits `_` per rest; attachWords and rhyme lineWords use word tokens; the editor's arranged check on open compares display text (legacy rows keep their rests, next save writes `_`). nudgeSelection(+1) at the end of a line inserts a rest before the selection (selection shifts right, row arranged); left at 0 stays a no-op. Display text in rhyme chips, card text fallback and word-bank add from editor selections. In-canvas search box above the tag filter bar (canvas and list mode) - NFC + lowercase substring per term on display text, debounced 150 ms, ANDed with the tag filter with the same hiding, "N of M", ×/Escape, per canvas for the process. Canvas list search across canvases - GET /api/search (typed DTOs, SearchError incl. invalid_search_query, limit clamped 1..200, local 200-code-point check), debounced 250 ms, Canvases + Snippets sections, highlighted excerpts, canvas title tap targets, "No matches", Retry. CanvasRoute.focusSnippetId opens a canvas with the snippet selected and centred (list - scrolled to), clearing a hiding in-canvas search and snackbar "Hidden by the tag filter" when the tag filter hides it.
     entry_points:

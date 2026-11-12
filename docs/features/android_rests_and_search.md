@@ -4,6 +4,8 @@ The Android client of the rest-mark and search contract shared with the backend 
 (canonical rules: [rest_marks.md](./rest_marks.md) and [global_search.md](./global_search.md), written
 with the backend). Three user requests:
 
+> Offline copy: Search across canvases now runs on the local copy (same rule, orders and excerpts as `GET /api/search`), online or not; see [android_offline_sync.md](./android_offline_sync.md).
+
 1. `_` in lyric text is a rest: an intentional empty grid cell, written back into the text when the
    grid makes one, so the text always matches the grid.
 2. The editor's ▶ nudge at the end of a line inserts a rest before the selection.
