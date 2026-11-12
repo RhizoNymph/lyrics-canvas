@@ -24,6 +24,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: placements, migration 008, transfer, remove / delete everywhere, canvas titles, typed placement errors | `services/placements/`, `models/placement.py`, `api/placements.py`, `canvas_title.py` |
 | [Voice Capture](./features/voice_capture.md) | Voice takes: upload, STT client, line assembly, append, recordings storage | `api/voice.py`, `services/voice/`, `recording_service.py` |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words: CRUD, bulk tagging, rhymes / families over the bank, related words by embedding | `api/word_bank.py`, `services/word_bank/`, `models/word_bank.py` |
+| [Sync Versions](./features/sync_versions.md) | Offline sync: content `version` (migration 009), `base_version` checks (409 `version_conflict` + `current`), client ids on creates (409 `id_conflict`), `GET /api/sync/snapshot` | `services/sync/`, `api/sync.py`, `api/sync_errors.py`, `models/versioned.py` |
 
 ## Architecture Summary
 
@@ -100,6 +101,7 @@ scripts/
 | Search | 1 (across canvases) | Bearer |
 | Export | 1 | Bearer |
 | Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
+| Sync | 1 (snapshot) | Bearer |
 | Health | 1 | Public |
 
 Every route the clients call declares a pydantic `response_model`; the generated OpenAPI document is
@@ -114,5 +116,6 @@ committed at [docs/api/openapi.json](./api/README.md) and a test fails when it d
 - **Ownership verification**: All CRUD checks Canvas.owner_id
 - **Typed responses**: response models keep the historical wire shape (`tests/test_response_shapes.py`); grids are emitted exactly as stored
 - **Server-side merge**: `POST /api/canvases/{id}/merge` replaces 2+ snippets in one transaction ([merge_blocks.md](./features/merge_blocks.md))
+- **Content versions**: snippets, canvases, tags and words carry `version` (+1 per content change, never layout); mutations take an optional `base_version` (409 `version_conflict` with `current`), creates an optional client `id` (idempotent, 409 `id_conflict`); `GET /api/sync/snapshot` returns all of a user's data ([sync_versions.md](./features/sync_versions.md))
 - **Snippet placements**: a snippet's layout is per canvas; one snippet can be on several canvases, moved or also shown via `POST /api/canvases/{id}/snippets/transfer`; PUT and batch-position require `canvas_id` ([snippet_placements.md](./features/snippet_placements.md))
 - **Voice takes**: `POST /api/canvases/{id}/voice-takes` transcribes via the STT service (`STT_URL`) and creates or appends in one transaction; contract error codes in `detail.error` ([voice_capture.md](./features/voice_capture.md)); word-bank vocabulary hints as Whisper `initial_prompt`, stored STT words / line spans, transcript verification, stats and zip dataset export ([voice_dataset.md](./features/voice_dataset.md))

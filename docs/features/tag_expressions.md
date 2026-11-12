@@ -223,8 +223,12 @@ FastAPI's standard 422 (`detail` is a list).
 
 ```jsonc
 // TagResponse (GET /api/tags, POST /api/tags, PUT /api/tags/{id})
-{"id": "uuid", "name": "late night", "color": "#6366f1", "snippet_count": 3, "word_count": 2, "created_at": "2026-11-03 10:00:00.123456+00:00"}
-// word_count (word bank words carrying the tag) was added by the word bank (word_bank.md)
+{"id": "uuid", "name": "late night", "color": "#6366f1", "snippet_count": 3, "word_count": 2, "created_at": "2026-11-03 10:00:00.123456+00:00", "version": 1}
+// word_count (word bank words carrying the tag) was added by the word bank (word_bank.md);
+// version (+1 per name or color change) by offline sync (sync_versions.md)
+
+// TagLinkResponse (link and unlink): the snippet's version after the change
+{"ok": true, "version": 4}
 
 // SnippetTagResponse: embedded in every SnippetResponse.tags (canvas detail, snippet writes, merge, voice takes)
 {"id": "uuid", "name": "late night", "color": "#6366f1"}
@@ -240,11 +244,17 @@ Datetimes use the API's existing `str(datetime)` form (`YYYY-MM-DD HH:MM:SS[.fff
 | Method | Path | Body | Response | Errors |
 |---|---|---|---|---|
 | GET | `/api/tags` | | `200 TagResponse[]` sorted by `lower(name)`, then id | |
-| POST | `/api/tags` | `{name, color?="#6366f1"}` | `201 TagResponse` | 409 `tag_name_taken`, 422 `invalid_tag_name` / `invalid_color` |
-| PUT | `/api/tags/{tag_id}` | `{name?, color?}` (null or absent = unchanged) | `200 TagResponse` | 404 `tag_not_found`, 409 `tag_name_taken` / `preset_expression_too_long`, 422 `invalid_tag_name` / `invalid_color` |
-| DELETE | `/api/tags/{tag_id}` | | `204` | 404 `tag_not_found` |
-| POST | `/api/snippets/{snippet_id}/tags?tag_id=…` | | `200 {"ok": true}`; linking twice is a no-op | 404 `snippet_not_found` / `tag_not_found` |
-| DELETE | `/api/snippets/{snippet_id}/tags/{tag_id}` | | `204`; unlinking an absent link is a no-op | 404 `snippet_not_found` / `tag_not_found` |
+| POST | `/api/tags` | `{id?, name, color?="#6366f1"}` | `201 TagResponse` | 409 `tag_name_taken` / `id_conflict`, 422 `invalid_tag_name` / `invalid_color` |
+| PUT | `/api/tags/{tag_id}` | `{name?, color?, base_version?}` (null or absent = unchanged) | `200 TagResponse` | 404 `tag_not_found`, 409 `tag_name_taken` / `preset_expression_too_long` / `version_conflict`, 422 `invalid_tag_name` / `invalid_color` |
+| DELETE | `/api/tags/{tag_id}?base_version=` | | `204` | 404 `tag_not_found`, 409 `version_conflict` |
+| POST | `/api/snippets/{snippet_id}/tags?tag_id=…` | optional `{base_version?}` (the snippet's) | `200 {"ok": true, "version": n}`; linking twice is a no-op | 404 `snippet_not_found` / `tag_not_found`, 409 `version_conflict` |
+| DELETE | `/api/snippets/{snippet_id}/tags/{tag_id}?base_version=` | | `200 {"ok": true, "version": n}` (was 204); unlinking an absent link is a no-op | 404 `snippet_not_found` / `tag_not_found`, 409 `version_conflict` |
+
+`id`, `base_version`, `version` and the two 409 codes are the offline-sync contract
+([sync_versions.md](./sync_versions.md)): a tag's `version` goes up on a name or color change; a link
+or unlink that changes a snippet's tags bumps the **snippet's** version, which the link response
+returns (so unlink now answers 200 with that body instead of 204). Deleting or renaming a tag bumps
+no snippet or word.
 
 - A rename (any change of the name string, a case-only change included) rewrites every preset of the
   user through Rename(expr, old, new) in the **same transaction**. If any rewritten preset would

@@ -33,6 +33,10 @@ that because it moves on every write, including drags, resizes and batch reposit
 | Fork (`POST /api/canvases/{id}/fork`) | copied from the source snippet |
 | Migration of existing rows | `COALESCE(updated_at, created_at, now())` |
 
+The content `version` ([sync_versions.md](./sync_versions.md)) moves with `content_updated_at` on PUT
+and voice-take appends, and additionally on a tag link or unlink that changes the snippet's tags (which
+leaves both `content_updated_at` and `updated_at` alone).
+
 Wire format: `str(datetime)`, the same as `created_at`/`updated_at`
 (e.g. `2026-09-30 12:00:00.123456+00:00`). Required in the OpenAPI `SnippetResponse` schema.
 
