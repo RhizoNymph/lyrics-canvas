@@ -4,22 +4,29 @@ import android.content.Context
 import androidx.datastore.preferences.preferencesDataStore
 import dev.nymph.lyrics.app.BuildConfig
 import dev.nymph.lyrics.app.status.StatusMonitors
+import dev.nymph.lyrics.app.sync.SyncGraph
+import dev.nymph.lyrics.sync.SyncCenter
+import dev.nymph.lyrics.sync.repo.CachedTagPresetRepository
+import dev.nymph.lyrics.sync.repo.GatedNlpRepository
+import dev.nymph.lyrics.sync.repo.GatedVoiceRepository
+import dev.nymph.lyrics.sync.repo.LocalCanvasRepository
+import dev.nymph.lyrics.sync.repo.LocalSearchRepository
+import dev.nymph.lyrics.sync.repo.LocalSnippetRepository
+import dev.nymph.lyrics.sync.repo.LocalTagRepository
+import dev.nymph.lyrics.sync.repo.LocalWordBankRepository
+import dev.nymph.lyrics.sync.repo.SyncAuthRepository
 import dev.nymph.lyrics.data.ApiClient
 import dev.nymph.lyrics.data.TokenStore
 import dev.nymph.lyrics.data.repository.AuthRepository
 import dev.nymph.lyrics.data.repository.CanvasRepository
 import dev.nymph.lyrics.data.repository.HttpAuthRepository
-import dev.nymph.lyrics.data.repository.HttpCanvasRepository
 import dev.nymph.lyrics.data.repository.HttpNlpRepository
-import dev.nymph.lyrics.data.repository.HttpSearchRepository
 import dev.nymph.lyrics.data.repository.SearchRepository
 import dev.nymph.lyrics.app.canvas.search.CanvasSearchMemory
-import dev.nymph.lyrics.data.repository.HttpSnippetRepository
 import dev.nymph.lyrics.app.canvaslist.CanvasUpdates
 import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
-import dev.nymph.lyrics.data.repository.HttpTagRepository
 import dev.nymph.lyrics.data.repository.TagPresetRepository
 import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
@@ -81,8 +88,19 @@ class AppContainer(
     /** Every regular call also reports to the health monitor (502/503/504 and IO errors mark it suspect). */
     private val api = ApiClient(apiBase, tokenStore, okHttp, observer = status.health)
 
-    val auth: AuthRepository = HttpAuthRepository(api, tokenStore)
-    val canvases: CanvasRepository = HttpCanvasRepository(api)
+    /**
+     * The offline copy and the sync engine (docs/features/android_offline_sync.md). Every
+     * offline-capable repository below reads and writes the copy; server-only ones go through
+     * its gate (NeedsConnection while the server is down).
+     */
+    val sync: SyncGraph = SyncGraph(appContext.filesDir, api, status.health.state, ProcessScope.scope)
+
+    /** Sync status, "Not synced" badges, the conflict review and alerts. */
+    val syncCenter: SyncCenter get() = sync.center
+
+    /** Sign-in claims the local copy for the account; sign-out deletes it. */
+    val auth: AuthRepository = SyncAuthRepository(HttpAuthRepository(api, tokenStore), sync.store, sync.engine)
+    val canvases: CanvasRepository = LocalCanvasRepository(sync.local, sync.edits)
 
     /** Canvases renamed or created away from the canvas list, for the list on the back stack. */
     val canvasUpdates: CanvasUpdates = CanvasUpdates()
@@ -90,17 +108,19 @@ class AppContainer(
     /** The in-canvas search text per canvas, for this process only. */
     val canvasSearches: CanvasSearchMemory = CanvasSearchMemory()
 
-    /** Search across canvases (`GET /api/search`). */
-    val search: SearchRepository = HttpSearchRepository(api)
-    val snippets: SnippetRepository = HttpSnippetRepository(api)
-    val nlp: NlpRepository = HttpNlpRepository(api)
-    val tags: TagRepository = HttpTagRepository(api)
-    val tagPresets: TagPresetRepository = HttpTagPresetRepository(api)
+    /** Search across canvases, always on the local copy (the server's matching rule). */
+    val search: SearchRepository = LocalSearchRepository(sync.local)
+    val snippets: SnippetRepository = LocalSnippetRepository(sync.local, sync.edits)
+    val nlp: NlpRepository = GatedNlpRepository(HttpNlpRepository(api), sync.gate)
+    val tags: TagRepository = LocalTagRepository(sync.local, sync.edits)
+
+    /** Read from the copy; saved online only. */
+    val tagPresets: TagPresetRepository = CachedTagPresetRepository(sync.local, HttpTagPresetRepository(api), sync.gate)
 
     /** The canvas filter bar's text, per canvas, on this device. */
     val tagFilters: TagFilterStore = DataStoreTagFilterStore(appContext.tagFilterDataStore)
 
-    val wordBank: WordBankRepository = HttpWordBankRepository(api)
+    val wordBank: WordBankRepository = LocalWordBankRepository(sync.local, sync.edits, HttpWordBankRepository(api), sync.gate)
 
     /** The word bank filter bar's text (user-wide on this device; key `word_bank_filter`). */
     val wordBankFilter: FilterTextStore = DataStoreWordBankFilterStore(appContext.tagFilterDataStore)
@@ -114,7 +134,7 @@ class AppContainer(
         .readTimeout(150, TimeUnit.SECONDS)
         .build()
 
-    val voice: VoiceRepository = HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health))
+    val voice: VoiceRepository = GatedVoiceRepository(HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health)), sync.gate, sync.local)
 
     /** Silence auto-stop, "Use word bank as hints" and other per-device voice settings (DataStore `voice`). */
     val voiceSettings: VoiceSettingsStore = DataStoreVoiceSettings(appContext.voiceDataStore)

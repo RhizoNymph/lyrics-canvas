@@ -21,6 +21,14 @@ data class EditorRoute(val canvasId: String, val snippetId: String)
 @Serializable
 data class WordBankRoute(val canvasId: String)
 
+/** Every change that is parked (not synced), from the sync status indicator. */
+@Serializable
+data object NotSyncedRoute
+
+/** One parked change: mine next to the server's, and the choices. [opId] is its outbox entry. */
+@Serializable
+data class ReviewRoute(val opId: Long)
+
 /** Check transcript for one recording of the snippet open in the editor below it. */
 @Serializable
 data class CheckTranscriptRoute(val snippetId: String, val recordingId: String)

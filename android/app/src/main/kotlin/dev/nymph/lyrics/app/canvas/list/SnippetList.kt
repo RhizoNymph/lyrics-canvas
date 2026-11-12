@@ -61,6 +61,8 @@ fun SnippetList(
     listState: LazyListState = rememberLazyListState(),
     /** The tag filter or the search is hiding snippets (changes the empty-list text). */
     filtered: Boolean = false,
+    /** Snippets with a parked change ("Not synced" badge). */
+    notSynced: Set<SnippetId> = emptySet(),
 ) {
     if (rows.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -83,6 +85,7 @@ fun SnippetList(
                 SnippetListRow(
                     snippet = snippet,
                     selected = snippet.id in selected,
+                    notSynced = snippet.id in notSynced,
                     availableDp = availableDp,
                     measurer = measurer,
                     styles = styles,
@@ -113,6 +116,7 @@ private fun rowCard(snippet: Snippet, availableDp: Double, measurer: TextMeasure
 private fun SnippetListRow(
     snippet: Snippet,
     selected: Boolean,
+    notSynced: Boolean,
     availableDp: Double,
     measurer: TextMeasurer,
     styles: CardTextStyles,
@@ -138,6 +142,7 @@ private fun SnippetListRow(
                 selected = selected,
                 measurer = measurer,
                 styles = styles,
+                notSynced = notSynced,
             )
         }
     }

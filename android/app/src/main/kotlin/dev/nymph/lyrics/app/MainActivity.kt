@@ -10,6 +10,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.nymph.lyrics.app.nav.AppRoot
 import dev.nymph.lyrics.app.status.connectivityChanges
 import dev.nymph.lyrics.app.ui.theme.LyricsTheme
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -21,6 +22,17 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 container.status.runInForeground(connectivityChanges(applicationContext))
+            }
+        }
+        // Foreground: send and refresh now; the periodic retry only ticks while visible.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                container.sync.onForeground()
+                try {
+                    awaitCancellation()
+                } finally {
+                    container.sync.onBackground()
+                }
             }
         }
         setContent { LyricsTheme { AppRoot(container) } }

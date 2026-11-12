@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.voice.recordings
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NeedsConnectionNote
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +72,9 @@ fun RecordingsSection(
             )
             Text(if (expanded) "▾" else "▸", color = Palette.Muted)
         }
-        if (expanded) {
+        if (expanded && !LocalSyncUi.current.online) {
+            NeedsConnectionNote("Recordings", Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        } else if (expanded) {
             when (list) {
                 RecordingsList.Loading -> CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                 is RecordingsList.Failed -> Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {

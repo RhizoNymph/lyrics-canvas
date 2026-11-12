@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.tags.ui
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NotSyncedBadge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -102,6 +104,7 @@ fun TagPickerSheet(state: TagsUiState<*>, vm: TagControlsViewModel<*>, pluralNou
                     ) {
                         TriStateCheckbox(state = row.check.toggleable(), onClick = { vm.togglePickerTag(row.tag.id) }, enabled = !pending)
                         TagPill(row.tag.name, row.tag.color, Modifier.weight(1f, fill = false))
+                        if (LocalSyncUi.current.isNotSynced(row.tag.id)) NotSyncedBadge(Modifier.padding(start = 6.dp))
                         Box(Modifier.weight(1f))
                         IconButton(onClick = { vm.startEditTag(row.tag.id) }) { Icon(Icons.Default.Edit, contentDescription = "Edit ${row.tag.name}") }
                     }

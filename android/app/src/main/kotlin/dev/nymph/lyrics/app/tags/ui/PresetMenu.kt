@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.tags.ui
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.ui.NEEDS_CONNECTION
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,8 +45,10 @@ fun PresetMenu(presets: List<TagPreset>, onApply: (TagPreset) -> Unit, actions: 
                 )
             }
             if (actions.isNotEmpty()) HorizontalDivider()
+            // Presets are saved on the server only.
+            val online = LocalSyncUi.current.online
             actions.forEach { action ->
-                DropdownMenuItem(text = { Text(action.label) }, onClick = {
+                DropdownMenuItem(text = { Text(if (online) action.label else "${action.label} ($NEEDS_CONNECTION)") }, enabled = online, onClick = {
                     open = false
                     action.onClick()
                 })

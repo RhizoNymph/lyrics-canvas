@@ -3,7 +3,18 @@ package dev.nymph.lyrics.app.nav
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NotSyncedScreen
+import dev.nymph.lyrics.app.sync.ReviewScreen
+import dev.nymph.lyrics.app.sync.SyncUi
+import dev.nymph.lyrics.sync.outbox.OpId
+import dev.nymph.lyrics.sync.status.SyncStatus
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -66,7 +77,31 @@ fun AppNavHost(container: AppContainer) {
         }
     }
 
+    val center = container.syncCenter
+    val syncStatus by center.status.collectAsStateWithLifecycle(initialValue = SyncStatus.Synced)
+    val notSynced by center.notSynced.collectAsStateWithLifecycle(initialValue = emptySet())
+    val online by center.online.collectAsStateWithLifecycle()
+    val syncUi = SyncUi(syncStatus, notSynced, online, openNotSynced = { nav.navigate(NotSyncedRoute) { launchSingleTop = true } })
+    val alertHost = remember { SnackbarHostState() }
+    // A newly parked change: one snackbar, whose Review opens it.
+    LaunchedEffect(center) {
+        center.alerts.collect { alert ->
+            if (alertHost.showSnackbar(alert.message, actionLabel = "Review", withDismissAction = true) == SnackbarResult.ActionPerformed) {
+                nav.navigate(ReviewRoute(alert.opId.value))
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalSyncUi provides syncUi) {
+    Box(Modifier.fillMaxSize()) {
     NavHost(nav, startDestination = start) {
+        composable<NotSyncedRoute> {
+            NotSyncedScreen(center, onBack = { nav.popBackStack() }, onReview = { nav.navigate(ReviewRoute(it.value)) })
+        }
+        composable<ReviewRoute> { entry ->
+            val route = entry.toRoute<ReviewRoute>()
+            ReviewScreen(center, OpId(route.opId), onClose = { if (nav.currentBackStackEntry?.id == entry.id) nav.popBackStack() })
+        }
         composable<AuthRoute> { AuthScreen(container) }
         composable<CanvasListRoute> {
             CanvasListScreen(
@@ -98,6 +133,9 @@ fun AppNavHost(container: AppContainer) {
                 onClose = { if (nav.currentBackStackEntry?.id == entry.id) nav.popBackStack() },
             )
         }
+    }
+    SnackbarHost(alertHost, Modifier.align(Alignment.BottomCenter))
+    }
     }
 }
 

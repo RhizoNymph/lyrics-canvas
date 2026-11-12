@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.canvas
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -266,6 +267,7 @@ fun CanvasScreen(
                                     hitTest = vm::hitTest,
                                     onAction = onAction,
                                     onViewSize = vm::setViewSize,
+                                    notSynced = LocalSyncUi.current.notSyncedSnippets,
                                 )
                                 is CanvasMode.SnippetList -> SnippetList(
                                     rows = s.listRows,
@@ -274,6 +276,7 @@ fun CanvasScreen(
                                     onLongPress = vm::onListLongPress,
                                     listState = listState,
                                     filtered = s.isFiltered,
+                                    notSynced = LocalSyncUi.current.notSyncedSnippets,
                                 )
                             }
                         }

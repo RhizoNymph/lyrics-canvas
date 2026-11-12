@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.wordbank.ui
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NeedsConnectionNote
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,8 +128,9 @@ fun WordBankScreen(vm: WordBankViewModel, tagsVm: TagControlsViewModel<BankWordI
                 }
                 is Remote.Loaded -> when (state.tab) {
                     WordBankTab.WORDS -> WordsTab(state, vm, tags.tags, Modifier.fillMaxSize())
-                    WordBankTab.RHYMES -> RhymesTab(state, vm, Modifier.fillMaxSize())
-                    WordBankTab.RELATED -> RelatedTab(state, vm, Modifier.fillMaxSize())
+                    // Rhymes, families and related words are computed by the server.
+                    WordBankTab.RHYMES -> if (LocalSyncUi.current.online) RhymesTab(state, vm, Modifier.fillMaxSize()) else NeedsConnectionNote("Rhymes and families", Modifier.padding(24.dp))
+                    WordBankTab.RELATED -> if (LocalSyncUi.current.online) RelatedTab(state, vm, Modifier.fillMaxSize()) else NeedsConnectionNote("Related words", Modifier.padding(24.dp))
                 }
             }
         }

@@ -43,6 +43,7 @@ import dev.nymph.lyrics.logic.tags.withTagDeleted
 import dev.nymph.lyrics.logic.tags.withTagEdited
 import dev.nymph.lyrics.logic.tags.withTagLinked
 import dev.nymph.lyrics.logic.tags.withTagUnlinked
+import dev.nymph.lyrics.model.CanvasDetail
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.CanvasRef
 import dev.nymph.lyrics.model.MergeMode
@@ -78,6 +79,9 @@ import kotlinx.coroutines.launch
 
 /** Quiet period after the last pan / zoom before the viewport is saved. */
 const val VIEWPORT_SAVE_DELAY_MS: Long = 1_000
+
+/** Shown when the open canvas disappears from the local copy (deleted elsewhere). */
+const val CANVAS_GONE: String = "This canvas was deleted."
 
 /** [SavedStateHandle] key of the canvas / list mode ([CanvasModeKind.name]). */
 const val CANVAS_MODE_KEY: String = "canvas_mode"
@@ -167,6 +171,7 @@ class CanvasViewModel(
 
     init {
         reload()
+        viewModelScope.launch { canvases.observe(canvasId).collect(::followCopy) }
         viewModelScope.launch {
             _searchInput
                 .debounce { if (it.isBlank()) 0L else searchDebounceMs }
@@ -196,6 +201,28 @@ class CanvasViewModel(
                 is ApiResult.Failure -> CanvasUiState.Failed(result.error.userMessage())
             }
             applyFocus()
+        }
+    }
+
+    /**
+     * The local copy changed (an edit here or elsewhere, a sync answer, a snapshot): take its
+     * title and snippets, except the position of a card being dragged. The camera stays local.
+     * A canvas gone from the copy (deleted on another device) cannot be shown any more.
+     */
+    private fun followCopy(detail: CanvasDetail?) {
+        if (detail == null) {
+            if (ready() != null) _state.value = CanvasUiState.Failed(CANVAS_GONE)
+            return
+        }
+        updateReady { ready ->
+            val held = ready.byId
+            val snippets = detail.snippets.map { s ->
+                val dragged = held[s.id]?.takeIf { s.id in moveOrigins }
+                if (dragged != null) s.copy(positionX = dragged.positionX, positionY = dragged.positionY) else s
+            }
+            if (snippets == ready.snippets && detail.title == ready.title) return@updateReady ready
+            val ids = snippets.mapTo(HashSet()) { it.id }
+            ready.copy(title = detail.title, snippets = snippets, selection = Selection.of(ready.selection.ids.filterTo(LinkedHashSet()) { it in ids })).pruneHidden()
         }
     }
 

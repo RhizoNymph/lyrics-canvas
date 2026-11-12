@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.wordbank.ui
 
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NotSyncedBadge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -149,6 +151,7 @@ private fun WordRow(word: BankWord, selected: Boolean, rename: RenameSession?, v
         } else {
             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(word.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                if (LocalSyncUi.current.isNotSynced(word.id)) NotSyncedBadge()
                 if (word.tags.isNotEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         word.tags.forEach { TagPill(it.name, it.color) }

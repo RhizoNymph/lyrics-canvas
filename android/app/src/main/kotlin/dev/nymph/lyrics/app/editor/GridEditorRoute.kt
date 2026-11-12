@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.editor
 
+import dev.nymph.lyrics.app.sync.NeedsConnectionButton
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
@@ -126,7 +127,7 @@ fun GridEditorRoute(
             snackbar = snackbar,
             topBarActions = {
                 extraTopBarActions()
-                TextButton(onClick = record, enabled = !flushing && !state.isSaving) { Text("Record") }
+                NeedsConnectionButton("Record", record, enabled = !flushing && !state.isSaving)
             },
             header = { AlsoOnLine(snippet, onOpenCanvas) },
             bottomPanel = {

@@ -10,5 +10,7 @@ class LyricsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // The sync engine runs for the process: an edit made just before leaving still syncs.
+        container.sync.start(container.status.health.state)
     }
 }
