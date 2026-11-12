@@ -38,4 +38,6 @@ fun healthSignalOf(result: ApiResult<*>): HealthSignal = when (val error = resul
     is ApiError.Server ->
         if (error.status in GATEWAY_STATUSES) HealthSignal.Failed(Outage.BackendDown(DownCause.Http(error.status))) else HealthSignal.Up
     is ApiError.Unauthorized, is ApiError.NotFound, is ApiError.Validation, is ApiError.Decoding -> HealthSignal.Up
+    // Produced before sending (never by ApiClient), so it is never observed; no say on health.
+    ApiError.NeedsConnection -> HealthSignal.Up
 }

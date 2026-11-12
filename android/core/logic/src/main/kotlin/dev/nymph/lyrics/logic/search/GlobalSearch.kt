@@ -80,6 +80,7 @@ fun toSearchError(error: ApiError): SearchError {
     if (SearchErrorCode.parse(error.code) == SearchErrorCode.INVALID_SEARCH_QUERY) return SearchError.InvalidQuery(error.message)
     return when (error) {
         is ApiError.Network -> SearchError.Network(error.message)
+        ApiError.NeedsConnection -> SearchError.Network(error.message)
         is ApiError.Decoding -> SearchError.Unexpected(error.message)
         is ApiError.Unauthorized -> if (error.status == 401) SearchError.SessionExpired else SearchError.Http(error.status, error.message)
         is ApiError.NotFound -> SearchError.Http(404, error.message)

@@ -32,5 +32,6 @@ fun toMergeError(error: ApiError): MergeError = when (error) {
     is ApiError.Unauthorized -> MergeError.Server(error.status, error.message)
     is ApiError.Server -> MergeError.Server(error.status, error.message)
     is ApiError.Network -> MergeError.Network(error.message)
+    ApiError.NeedsConnection -> MergeError.Network(error.message)
     is ApiError.Decoding -> MergeError.Unknown(error.message)
 }

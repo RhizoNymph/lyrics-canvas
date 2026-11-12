@@ -26,6 +26,8 @@ data class UserTag(
     @SerialName("created_at") val createdAt: String,
     /** Word bank words carrying the tag. */
     @SerialName("word_count") val wordCount: Int = 0,
+    /** Content version (docs/features/sync_versions.md): +1 per content change, server-side only. */
+    val version: Int = 1,
 ) {
     /** The embedded form a snippet carries. */
     fun toTag(): Tag = Tag(id, name, color)
@@ -36,6 +38,8 @@ data class UserTag(
 data class TagCreateRequest(
     val name: String,
     val color: String? = null,
+    /** Client-chosen id (offline create). */
+    val id: TagId? = null,
 )
 
 /** Body of `PUT /api/tags/{id}`; null fields are omitted and left unchanged. */
@@ -43,12 +47,21 @@ data class TagCreateRequest(
 data class TagUpdateRequest(
     val name: String? = null,
     val color: String? = null,
+    @SerialName("base_version") val baseVersion: Int? = null,
+)
+
+/** Body of `POST /api/snippets/{id}/tags?tag_id=`: the snippet's version the link is based on. */
+@Serializable
+data class TagLinkRequest(
+    @SerialName("base_version") val baseVersion: Int? = null,
 )
 
 /** Response of `POST /api/snippets/{id}/tags?tag_id=`. */
 @Serializable
 data class TagLinkResponse(
     val ok: Boolean = true,
+    /** The snippet's version after the link (links are snippet content). */
+    val version: Int? = null,
 )
 
 /** Server-assigned preset id. */

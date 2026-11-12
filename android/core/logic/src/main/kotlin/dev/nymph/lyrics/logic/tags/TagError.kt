@@ -32,6 +32,7 @@ sealed interface TagError {
 fun toTagError(error: ApiError): TagError {
     val status = when (error) {
         is ApiError.Network -> return TagError.Network(error.message)
+        ApiError.NeedsConnection -> return TagError.Network(error.message)
         is ApiError.Decoding -> return TagError.Unexpected(error.message)
         is ApiError.Unauthorized -> if (error.status == 401) return TagError.SessionExpired else error.status
         is ApiError.NotFound -> 404

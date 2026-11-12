@@ -19,6 +19,8 @@ import dev.nymph.lyrics.model.WordBankTagRequest
 import dev.nymph.lyrics.model.WordBankTagResponse
 import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.error.map
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.builtins.ListSerializer
 
 /** The user's word bank (user-wide; docs/features/word_bank.md). Every call is scoped to the user. */
@@ -46,6 +48,9 @@ interface WordBankRepository {
 
     /** `GET /api/word-bank/related?q=&limit=`. */
     suspend fun related(query: String, limit: Int = DEFAULT_RELATED_LIMIT): ApiResult<RelatedWordsResponse>
+
+    /** The bank as it changes (local copy); a server-only repository emits nothing. */
+    fun observeWords(): Flow<List<BankWord>> = emptyFlow()
 
     companion object {
         const val DEFAULT_RELATED_LIMIT: Int = 30

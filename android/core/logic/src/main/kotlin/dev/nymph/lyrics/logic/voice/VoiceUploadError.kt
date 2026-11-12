@@ -26,11 +26,11 @@ private fun ApiError.status(): Int? = when (this) {
     is ApiError.NotFound -> 404
     is ApiError.Validation -> status
     is ApiError.Server -> status
-    is ApiError.Network, is ApiError.Decoding -> null
+    is ApiError.Network, is ApiError.Decoding, ApiError.NeedsConnection -> null
 }
 
 fun toVoiceUploadError(error: ApiError): VoiceUploadError {
-    if (error is ApiError.Network) return VoiceUploadError.Network(error.message)
+    if (error is ApiError.Network || error is ApiError.NeedsConnection) return VoiceUploadError.Network(error.message)
     if (error is ApiError.Decoding) return VoiceUploadError.Unexpected(error.message)
     if (error is ApiError.Unauthorized && error.status == 401) return VoiceUploadError.SessionExpired
     val status = error.status() ?: 0
