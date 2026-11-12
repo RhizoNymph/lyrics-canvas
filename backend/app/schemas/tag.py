@@ -7,12 +7,14 @@ app/services/tag_values.py so failures carry the contract's error codes instead 
 from pydantic import BaseModel
 
 from app.models.tag import DEFAULT_TAG_COLOR
+from app.schemas.versioning import BaseVersion, ClientId
 
 # Responses always carry every field, so defaulted fields are required in the output schema.
 _RESPONSE_CONFIG = {"from_attributes": True, "json_schema_serialization_defaults_required": True}
 
 
 class TagCreate(BaseModel):
+    id: ClientId | None = None
     name: str
     color: str = DEFAULT_TAG_COLOR
 
@@ -20,6 +22,7 @@ class TagCreate(BaseModel):
 class TagUpdate(BaseModel):
     name: str | None = None
     color: str | None = None
+    base_version: BaseVersion | None = None
 
 
 class TagResponse(BaseModel):
@@ -31,6 +34,7 @@ class TagResponse(BaseModel):
     snippet_count: int
     word_count: int  # word bank words carrying the tag
     created_at: str
+    version: int  # +1 per name or color change
 
     model_config = _RESPONSE_CONFIG
 
@@ -45,8 +49,15 @@ class SnippetTagResponse(BaseModel):
     model_config = _RESPONSE_CONFIG
 
 
+class TagLinkRequest(BaseModel):
+    """Optional body of ``POST /api/snippets/{id}/tags``."""
+
+    base_version: BaseVersion | None = None  # the snippet's
+
+
 class TagLinkResponse(BaseModel):
     ok: bool = True
+    version: int  # the snippet's version after the link or unlink
 
     model_config = {"json_schema_serialization_defaults_required": True}
 
