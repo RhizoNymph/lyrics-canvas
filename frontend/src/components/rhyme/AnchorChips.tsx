@@ -9,6 +9,9 @@ import type { AnchorRange } from '@/types/rhyme';
 import SyllableStrip from './SyllableStrip';
 import { displayText, hasWords } from '@/lib/grid/restMarks';
 import { mutedStyle, monoStyle } from './sidebarStyles';
+import { NO_LINE_PICK, checkPatternRange, clickLineNumber, describeRangeProblem } from '@/lib/rhyme/pattern';
+import type { LinePick } from '@/lib/rhyme/pattern';
+import { useRhymePatternStore } from '@/stores/rhymePatternStore';
 
 const CHIP_TEXT_MAX = 28;
 
@@ -34,7 +37,8 @@ const iconBtnStyle = { background: 'none', border: 'none', color: '#aaa', cursor
  * snippet from the anchors for this query; a removed chip stays visible, dimmed, until it is
  * restored or deselected. ▸ expands the chip to the snippet's lines as syllable strips: click a
  * start word and an end word on one line to anchor on that word range only (the canvas is not
- * touched); click the start word again, or "whole line", to go back to the whole last line.
+ * touched); click the start word again, or "whole line", to go back to the whole last line. Clicking two
+ * line numbers picks a line range: 2+ lines with words switch the sidebar to Pattern mode for this snippet.
  */
 export default function AnchorChips() {
   const selectedIds = useCanvasStore((s) => s.selectedSnippetIds);
@@ -48,6 +52,9 @@ export default function AnchorChips() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   /** Chips whose next click closes a range (first word already picked). */
   const [awaitingEnd, setAwaitingEnd] = useState<Set<string>>(() => new Set());
+  /** Line-number clicks toward a pattern range, on one chip at a time. */
+  const [linePick, setLinePick] = useState<{ snippetId: string; pick: LinePick; problem: string | null } | null>(null);
+  const enterPattern = useRhymePatternStore((s) => s.enter);
 
   const selected = selectedSnippets(selectedIds, snippets).filter((s) => hasWords(s.raw_text));
   if (selected.length === 0) {
@@ -76,6 +83,22 @@ export default function AnchorChips() {
     const next = clickWord(current, lineIndex, wordIndex);
     setAwaiting(id, next.awaitingEnd);
     setAnchorRange(id, next.range);
+  };
+
+  const onLineNumberClick = (s: Snippet, lineIndex: number) => {
+    const pick = linePick !== null && linePick.snippetId === s.id ? linePick.pick : NO_LINE_PICK;
+    const next = clickLineNumber(pick, lineIndex);
+    if (next.range === null) {
+      setLinePick(next.pick.kind === 'none' ? null : { snippetId: s.id, pick: next.pick, problem: null });
+      return;
+    }
+    const check = checkPatternRange(s.grid_data?.lines ?? [], next.range);
+    if (!check.ok) {
+      setLinePick({ snippetId: s.id, pick: NO_LINE_PICK, problem: describeRangeProblem(check.reason) });
+      return;
+    }
+    setLinePick(null);
+    enterPattern(s.id, check.range);
   };
 
   const resetRange = (id: string) => {
@@ -128,7 +151,21 @@ export default function AnchorChips() {
                 {lines.length === 0 && <span style={mutedStyle}>No beat grid for this snippet.</span>}
                 {lines.map((line, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <span style={{ ...mutedStyle, ...monoStyle, flex: '0 0 16px' }}>{i + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => onLineNumberClick(s, i)}
+                      title="Click two line numbers to find rhymes across those lines (pattern)"
+                      style={{
+                        ...iconBtnStyle,
+                        ...monoStyle,
+                        flex: '0 0 16px',
+                        fontSize: 11,
+                        color: linePick?.snippetId === s.id && linePick.pick.kind === 'first' && linePick.pick.line === i ? '#0ea5e9' : '#8a8aaa',
+                        textDecoration: 'underline dotted',
+                      }}
+                    >
+                      {i + 1}
+                    </button>
                     <SyllableStrip
                       line={line}
                       selected={range !== undefined && range.lineIndex === i ? range : null}
@@ -136,10 +173,15 @@ export default function AnchorChips() {
                     />
                   </div>
                 ))}
+                {linePick?.snippetId === s.id && (
+                  <span style={mutedStyle}>
+                    {linePick.problem ?? (linePick.pick.kind === 'first' ? `Now click the last line number (from line ${linePick.pick.line + 1}).` : '')}
+                  </span>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={mutedStyle}>
                     {range === undefined
-                      ? 'Click a start word, then an end word on the same line.'
+                      ? 'Click a start word, then an end word on the same line; or two line numbers for a pattern across lines.'
                       : awaitingEnd.has(s.id)
                         ? 'Now click the end word (or the start word again to clear).'
                         : `Anchored on "${rangeText(s, range) ?? ''}".`}

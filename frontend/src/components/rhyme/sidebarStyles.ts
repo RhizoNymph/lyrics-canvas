@@ -2,6 +2,8 @@
 import type { CSSProperties } from 'react';
 
 export const SIDEBAR_WIDTH = 380;
+/** Pattern mode: room for about three 160 px slot columns side by side. */
+export const PATTERN_SIDEBAR_WIDTH = 540;
 
 export const inputStyle: CSSProperties = {
   background: '#2a2a4a',
