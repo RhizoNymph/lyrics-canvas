@@ -9,8 +9,12 @@ fun ApiError.userMessage(): String = when (this) {
     is ApiError.Validation -> message
     is ApiError.Server -> message
     is ApiError.Network -> "Can't reach the server. Check your connection."
+    ApiError.NeedsConnection -> NEEDS_CONNECTION
     is ApiError.Decoding -> "Unexpected response from the server."
 }
+
+/** Shown on (and instead of) server-only actions while the server is unreachable. */
+const val NEEDS_CONNECTION: String = "Needs connection"
 
 const val SESSION_EXPIRED: String = "Your session has expired. Sign in again."
 

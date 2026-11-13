@@ -24,6 +24,7 @@ sealed interface PlacementError {
 fun toPlacementError(error: ApiError): PlacementError {
     val status = when (error) {
         is ApiError.Network -> return PlacementError.Network(error.message)
+        ApiError.NeedsConnection -> return PlacementError.Network(error.message)
         is ApiError.Decoding -> return PlacementError.Unexpected(error.message)
         is ApiError.Unauthorized -> if (error.status == 401) return PlacementError.SessionExpired else error.status
         is ApiError.NotFound -> 404

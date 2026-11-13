@@ -79,6 +79,8 @@ class WordBankViewModel(
 
     init {
         reload()
+        // The local copy changes with every edit and sync; a loaded list follows it.
+        viewModelScope.launch { repo.observeWords().collect { list -> updateWords { list } } }
     }
 
     private fun message(text: String) {

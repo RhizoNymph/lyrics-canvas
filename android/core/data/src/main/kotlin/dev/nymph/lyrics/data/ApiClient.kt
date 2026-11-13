@@ -91,8 +91,9 @@ class ApiClient(
         return call(method, path, body, query = query) { readJson(it) { text -> json.decodeFromString(response, text) } }
     }
 
-    /** DELETE; the 204 body is ignored. */
-    suspend fun delete(path: List<String>): ApiResult<Unit> = call(HttpMethod.DELETE, path, null) { readJson(it) { } }
+    /** DELETE; the 204 body is ignored. [query] parameters (e.g. `?base_version=`) go on the URL. */
+    suspend fun delete(path: List<String>, query: List<Pair<String, String>> = emptyList()): ApiResult<Unit> =
+        call(HttpMethod.DELETE, path, null, query = query) { readJson(it) { } }
 
     /**
      * GET raw bytes into [target] (written to a sibling `.part` file, then renamed, so [target] is

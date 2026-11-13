@@ -79,6 +79,14 @@ open class TagControlsViewModel<K : TaggedItemId>(
             if (!filterTouched && saved.isNotEmpty()) setFilterBar(FilterBarState.restored(saved), persist = false)
         }
         viewModelScope.launch { for (text in toPersist) filterStore.save(text) }
+        // The local copy changes with every edit and sync (a tag renamed on another device, a preset saved).
+        viewModelScope.launch {
+            tags.observeTags().collect { list ->
+                _state.update { it.copy(tags = list.sortedTags()) }
+                refreshLinks()
+            }
+        }
+        viewModelScope.launch { presets.observePresets().collect { list -> _state.update { it.copy(presets = list.sortedPresets()) } } }
     }
 
     private fun message(text: String) {

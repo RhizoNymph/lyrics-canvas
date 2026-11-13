@@ -36,6 +36,7 @@ class CardTextStyles(density: Density) {
     val rest = cellBase.copy(color = Palette.RestText)
     val count = with(density) { TextStyle(color = Palette.CountText, fontSize = units(CardMetrics.COUNT_FONT), fontFamily = FontFamily.Monospace) }
     val fallback = cellBase.copy(color = Palette.FallbackText)
+    val notSynced = with(density) { TextStyle(color = Palette.Error, fontSize = units(CardMetrics.TAG_FONT), fontWeight = FontWeight.Bold) }
 
     fun forKind(kind: CellTextKind): TextStyle = when (kind) {
         CellTextKind.REST -> rest
@@ -43,6 +44,9 @@ class CardTextStyles(density: Density) {
         CellTextKind.NORMAL -> cell
     }
 }
+
+/** The badge on cards and rows whose change is parked. */
+const val NOT_SYNCED_LABEL: String = "Not synced"
 
 private fun Rect.offset() = Offset(left.toFloat(), top.toFloat())
 
@@ -61,6 +65,8 @@ fun DrawScope.drawCard(
     selected: Boolean,
     measurer: TextMeasurer,
     styles: CardTextStyles,
+    /** A parked change (conflict): red outline and a "Not synced" label under the card. */
+    notSynced: Boolean = false,
 ) {
     val scale = (zoom * pxPerDp).toFloat()
     // One dp expressed in card units.
@@ -96,6 +102,10 @@ fun DrawScope.drawCard(
 
         if (selected) {
             drawRoundRect(Palette.SelectionBorder, size = Size(w, h), cornerRadius = radius, style = Stroke(width = CardMetrics.SELECTION_STROKE.toFloat() * dp))
+        }
+        if (notSynced) {
+            drawRoundRect(Palette.Error, size = Size(w, h), cornerRadius = radius, style = Stroke(width = CardMetrics.SELECTION_STROKE.toFloat() * dp))
+            drawText(measurer, NOT_SYNCED_LABEL, Offset(0f, h + 2f), styles.notSynced, maxLines = 1)
         }
 
         for (pill in layout.tags) {

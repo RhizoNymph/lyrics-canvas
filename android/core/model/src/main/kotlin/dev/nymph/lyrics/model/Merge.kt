@@ -20,7 +20,15 @@ enum class MergeMode {
 data class MergeRequest private constructor(
     @SerialName("snippet_ids") val snippetIds: List<SnippetId>,
     val mode: MergeMode,
+    /** Client-chosen id of the merged snippet (offline merge). */
+    @SerialName("merged_id") val mergedId: SnippetId? = null,
+    /** Original id to the version the merge is based on; any mismatch is 409 and nothing changes. */
+    @SerialName("base_versions") val baseVersions: Map<String, Int>? = null,
 ) {
+    /** The same merge, sent with a client id and the originals' base versions. */
+    fun forSync(mergedId: SnippetId, baseVersions: Map<SnippetId, Int>): MergeRequest =
+        MergeRequest(snippetIds, mode, mergedId, baseVersions.mapKeys { it.key.value })
+
     companion object {
         /** De-duplicated ids in first-seen order, or null when fewer than two distinct ids remain. */
         fun of(snippetIds: Collection<SnippetId>, mode: MergeMode): MergeRequest? {

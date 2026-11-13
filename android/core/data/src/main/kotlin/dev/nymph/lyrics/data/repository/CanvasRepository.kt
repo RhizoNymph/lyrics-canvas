@@ -8,7 +8,10 @@ import dev.nymph.lyrics.model.CanvasDetail
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.CanvasUpdateRequest
 import dev.nymph.lyrics.model.ViewportState
+import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.builtins.ListSerializer
 
 interface CanvasRepository {
@@ -26,6 +29,15 @@ interface CanvasRepository {
 
     /** Rename (`PUT /api/canvases/{id}` with only `title`); a bad title is 422 `invalid_canvas_title`. */
     suspend fun rename(id: CanvasId, title: String): ApiResult<Canvas> = update(id, CanvasUpdateRequest(title = title))
+
+    /** `DELETE /api/canvases/{id}`: the canvas and the snippets only on it. Unsupported unless overridden. */
+    suspend fun delete(id: CanvasId): ApiResult<Unit> = ApiResult.Failure(ApiError.Validation(405, "Deleting canvases is not supported here"))
+
+    /** The list as it changes (local copy: every edit and sync); a server-only repository emits nothing. */
+    fun observeList(): Flow<List<Canvas>> = emptyFlow()
+
+    /** One canvas as it changes; null once it is gone. */
+    fun observe(id: CanvasId): Flow<CanvasDetail?> = emptyFlow()
 }
 
 class HttpCanvasRepository(private val api: ApiClient) : CanvasRepository {
@@ -38,4 +50,6 @@ class HttpCanvasRepository(private val api: ApiClient) : CanvasRepository {
 
     override suspend fun update(id: CanvasId, update: CanvasUpdateRequest): ApiResult<Canvas> =
         api.send(HttpMethod.PUT, listOf("api", "canvases", id.value), update, CanvasUpdateRequest.serializer(), Canvas.serializer())
+
+    override suspend fun delete(id: CanvasId): ApiResult<Unit> = api.delete(listOf("api", "canvases", id.value))
 }

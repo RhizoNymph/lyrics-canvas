@@ -57,6 +57,8 @@ sealed interface ApiError {
         val detail: String?,
         override val code: String? = null,
         val retryAfterSeconds: Int? = null,
+        /** `detail.current` of a 409 (`version_conflict`): the server's current copy, decoded by the caller. */
+        val current: JsonElement? = null,
     ) : ApiError {
         override val message: String get() = detail ?: "Server error ($status)"
     }
@@ -64,6 +66,14 @@ sealed interface ApiError {
     /** No response: offline, DNS, timeout, connection reset, cancelled call. */
     data class Network(val cause: Throwable) : ApiError {
         override val message: String get() = cause.message ?: "Network error"
+    }
+
+    /**
+     * Not sent: the server is unreachable (the health monitor says it is down) and the feature
+     * needs it (rhymes, voice, presets saves...). Offline-capable edits never fail with this.
+     */
+    data object NeedsConnection : ApiError {
+        override val message: String get() = "Needs connection"
     }
 
     /** A 2xx response whose body did not match the expected shape. */
@@ -83,12 +93,15 @@ sealed interface ApiError {
                 401, 403 -> Unauthorized(status, detail)
                 404 -> NotFound(detail, code)
                 400, 422 -> Validation(status, detail ?: "Invalid request ($status)", code, expressionErrorFromBody(body), indexFromBody(body))
-                else -> Server(status, detail, code, retryAfterSeconds(retryAfter))
+                else -> Server(status, detail, code, retryAfterSeconds(retryAfter), currentFromBody(body))
             }
         }
 
         /** `Retry-After` as delta seconds (>= 0); an HTTP date or garbage is null. */
         fun retryAfterSeconds(header: String?): Int? = header?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
+
+        /** `detail.current` of a structured body (a 409 `version_conflict`), else null. */
+        fun currentFromBody(body: String?): JsonElement? = (detailElement(body) as? JsonObject)?.get("current")
 
         /** The integer `detail.index` of a structured body, else null. */
         fun indexFromBody(body: String?): Int? =

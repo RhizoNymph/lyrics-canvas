@@ -59,6 +59,10 @@ class CanvasListViewModel(
     init {
         refresh()
         viewModelScope.launch { updates.updates.collect(::upsert) }
+        // The local copy changes with every edit and sync; once the first load answered, follow it.
+        viewModelScope.launch {
+            canvases.observeList().collect { list -> _state.update { if (it is CanvasListUiState.Loading) it else CanvasListUiState.Ready(list) } }
+        }
     }
 
     fun refresh() {
@@ -99,6 +103,16 @@ class CanvasListViewModel(
                     _events.trySend(CanvasListEvent.Open(result.value.id))
                 }
                 is ApiResult.Failure -> _events.trySend(CanvasListEvent.Message(toPlacementError(result.error).userMessage()))
+            }
+        }
+    }
+
+    /** The row's ⋮ → Delete (after the UI confirmed): the canvas and the snippets only on it. */
+    fun delete(canvas: Canvas) {
+        viewModelScope.launch {
+            when (val result = canvases.delete(canvas.id)) {
+                is ApiResult.Success -> _state.update { s -> if (s is CanvasListUiState.Ready) s.copy(canvases = s.canvases.filter { it.id != canvas.id }) else s }
+                is ApiResult.Failure -> _events.trySend(CanvasListEvent.Message(result.error.userMessage()))
             }
         }
     }

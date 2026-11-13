@@ -10,6 +10,8 @@ import dev.nymph.lyrics.model.TagUpdateRequest
 import dev.nymph.lyrics.model.UserTag
 import dev.nymph.lyrics.model.error.ApiResult
 import dev.nymph.lyrics.model.error.map
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.builtins.ListSerializer
 
 /** The user's tags (user-wide, shared by every canvas) and their links to snippets. */
@@ -30,6 +32,9 @@ interface TagRepository {
 
     /** `DELETE /api/snippets/{snippet}/tags/{tag}`. */
     suspend fun unlink(snippet: SnippetId, tag: TagId): ApiResult<Unit>
+
+    /** The tags as they change (local copy); a server-only repository emits nothing. */
+    fun observeTags(): Flow<List<UserTag>> = emptyFlow()
 }
 
 class HttpTagRepository(private val api: ApiClient) : TagRepository {

@@ -13,12 +13,31 @@ data class BankWord(
     val text: String,
     val tags: List<Tag> = emptyList(),
     @SerialName("created_at") val createdAt: String,
+    /** Content version (docs/features/sync_versions.md): +1 per content change, server-side only. */
+    val version: Int = 1,
 )
 
 /** Body of `POST /api/word-bank`: 1–200 words, 0–20 tags linked to every created and existing word. */
 @Serializable
 data class WordBankAddRequest(
     val words: List<String>,
+    @SerialName("tag_ids") val tagIds: List<TagId> = emptyList(),
+)
+
+/** One word of an offline add: its text and the client-chosen id (an identical retry comes back in `created`). */
+@Serializable
+data class NewBankWord(
+    val text: String,
+    val id: BankWordId,
+)
+
+/**
+ * Body of `POST /api/word-bank` from the sync engine: every item carries a client id. A text
+ * already banked under another id comes back in `existing` (not a conflict).
+ */
+@Serializable
+data class WordBankSyncAddRequest(
+    val words: List<NewBankWord>,
     @SerialName("tag_ids") val tagIds: List<TagId> = emptyList(),
 )
 
@@ -33,12 +52,15 @@ data class WordBankAddResponse(
 @Serializable
 data class WordBankRenameRequest(
     val text: String,
+    @SerialName("base_version") val baseVersion: Int? = null,
 )
 
 /** Body of `POST /api/word-bank/delete` (1–500 ids; foreign ids are ignored). */
 @Serializable
 data class WordBankDeleteRequest(
     val ids: List<BankWordId>,
+    /** Word id to the version each delete is based on; any mismatch is 409 and nothing changes. */
+    @SerialName("base_versions") val baseVersions: Map<String, Int>? = null,
 )
 
 /** Whether `POST /api/word-bank/tags` adds or removes the tag. */
@@ -54,6 +76,7 @@ data class WordBankTagRequest(
     @SerialName("word_ids") val wordIds: List<BankWordId>,
     @SerialName("tag_id") val tagId: TagId,
     val op: TagLinkOp,
+    @SerialName("base_versions") val baseVersions: Map<String, Int>? = null,
 )
 
 /** Response of `POST /api/word-bank/tags`: the updated words. */

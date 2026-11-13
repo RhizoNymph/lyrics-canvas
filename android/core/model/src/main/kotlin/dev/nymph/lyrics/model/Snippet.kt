@@ -72,6 +72,8 @@ data class Snippet(
     @SerialName("content_updated_at") val contentUpdatedAt: String,
     /** Every canvas holding this snippet, the current one included; sorted by lowercase title, then id. */
     val canvases: List<CanvasRef>,
+    /** Content version (docs/features/sync_versions.md): +1 per content change, server-side only. */
+    val version: Int = 1,
 )
 
 /**
@@ -90,6 +92,10 @@ data class SnippetCreateRequest(
     @SerialName("group_id") val groupId: GroupId? = null,
     /** Set only by rhyme-view materialization. */
     @SerialName("derived_from") val derivedFrom: DerivedFrom? = null,
+    /** Client-chosen id (offline create); creates are idempotent by id. */
+    val id: SnippetId? = null,
+    val width: Double? = null,
+    val height: Double? = null,
 )
 
 /**
@@ -110,6 +116,8 @@ data class SnippetUpdateRequest(
     val height: Double? = null,
     @SerialName("z_index") val zIndex: Int? = null,
     @SerialName("group_id") val groupId: GroupId? = null,
+    /** Checked only when a content field is present: 409 `version_conflict` when the snippet changed since. */
+    @SerialName("base_version") val baseVersion: Int? = null,
 )
 
 /** One entry of a batch position update. */

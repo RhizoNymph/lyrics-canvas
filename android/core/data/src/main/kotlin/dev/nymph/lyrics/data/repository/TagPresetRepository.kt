@@ -7,6 +7,8 @@ import dev.nymph.lyrics.model.TagPresetCreateRequest
 import dev.nymph.lyrics.model.TagPresetId
 import dev.nymph.lyrics.model.TagPresetUpdateRequest
 import dev.nymph.lyrics.model.error.ApiResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.builtins.ListSerializer
 
 /** The user's saved filter expressions (server-side, synced across devices). */
@@ -19,6 +21,9 @@ interface TagPresetRepository {
     suspend fun update(id: TagPresetId, body: TagPresetUpdateRequest): ApiResult<TagPreset>
 
     suspend fun delete(id: TagPresetId): ApiResult<Unit>
+
+    /** The presets as they change (local copy); a server-only repository emits nothing. */
+    fun observePresets(): Flow<List<TagPreset>> = emptyFlow()
 }
 
 class HttpTagPresetRepository(private val api: ApiClient) : TagPresetRepository {

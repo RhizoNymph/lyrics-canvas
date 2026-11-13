@@ -25,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import dev.nymph.lyrics.app.sync.NeedsConnectionButton
+import dev.nymph.lyrics.app.sync.SyncStatusChip
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.model.MergeMode
 
@@ -59,9 +61,11 @@ fun CanvasTopBar(
                 CanvasModeKind.LIST -> TextButton(onClick = { onSetMode(CanvasModeKind.CANVAS) }) { Text("Canvas") }
                 null -> Unit
             }
-            if (onRecord != null) TextButton(onClick = onRecord) { Text("Record") }
+            SyncStatusChip()
+            // Voice takes and rhyme suggestions need the server: offline they say "Needs connection".
+            if (onRecord != null) NeedsConnectionButton("Record", onRecord)
             if (onWordBank != null) TextButton(onClick = onWordBank) { Text("Words") }
-            TextButton(onClick = onToggleRhymes) { Text(if (rhymesOpen) "Hide rhymes" else "Rhymes") }
+            if (rhymesOpen) TextButton(onClick = onToggleRhymes) { Text("Hide rhymes") } else NeedsConnectionButton("Rhymes", onToggleRhymes)
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Sidebar),
     )
@@ -111,7 +115,7 @@ fun SelectionTopBar(
             IconButton(onClick = onDelete, enabled = !busy) {
                 Icon(Icons.Default.Delete, contentDescription = placements?.deleteLabel ?: "Delete")
             }
-            TextButton(onClick = onRhymes) { Text("Rhymes") }
+            NeedsConnectionButton("Rhymes", onRhymes)
             if (placements != null) {
                 Box {
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More actions") }

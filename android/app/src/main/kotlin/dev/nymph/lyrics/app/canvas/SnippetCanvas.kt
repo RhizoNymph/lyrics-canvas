@@ -37,6 +37,8 @@ fun SnippetCanvas(
     onAction: (CanvasGestureAction) -> Unit,
     onViewSize: (ViewSize) -> Unit,
     modifier: Modifier = Modifier,
+    /** Snippets with a parked change ("Not synced" badge). */
+    notSynced: Set<SnippetId> = emptySet(),
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = TEXT_CACHE_SIZE)
@@ -74,6 +76,7 @@ fun SnippetCanvas(
                 selected = snippet.id in selected,
                 measurer = measurer,
                 styles = styles,
+                notSynced = snippet.id in notSynced,
             )
         }
     }

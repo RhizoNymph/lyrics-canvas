@@ -31,6 +31,7 @@ data class RhymeError(
 
 fun toRhymeError(error: ApiError, operation: RhymeOperation): RhymeError = when (error) {
     is ApiError.Network -> RhymeError(RhymeErrorKind.NETWORK, operation, error.message, null)
+    ApiError.NeedsConnection -> RhymeError(RhymeErrorKind.NETWORK, operation, error.message, null)
     is ApiError.NotFound -> RhymeError(RhymeErrorKind.NOT_FOUND, operation, error.message, 404)
     is ApiError.Validation -> RhymeError(RhymeErrorKind.INVALID_REQUEST, operation, error.message, error.status)
     is ApiError.Unauthorized -> RhymeError(RhymeErrorKind.SERVER, operation, error.message, error.status)

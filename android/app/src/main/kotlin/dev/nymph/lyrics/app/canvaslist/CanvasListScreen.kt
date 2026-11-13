@@ -47,6 +47,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.canvas.rename.RenameCanvasDialog
 import dev.nymph.lyrics.app.di.AppContainer
+import dev.nymph.lyrics.app.sync.LocalSyncUi
+import dev.nymph.lyrics.app.sync.NotSyncedBadge
+import dev.nymph.lyrics.app.sync.SyncStatusChip
+import dev.nymph.lyrics.app.ui.NEEDS_CONNECTION
 import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.app.voice.dataset.VoiceDatasetDialog
@@ -79,6 +83,10 @@ fun CanvasListScreen(
     var menuOpen by remember { mutableStateOf(false) }
     val dataset: VoiceDatasetViewModel = viewModel { VoiceDatasetViewModel(container.voice) }
     val datasetState by dataset.state.collectAsStateWithLifecycle()
+    val syncUi = LocalSyncUi.current
+    val unconfirmed by container.syncCenter.unconfirmed.collectAsStateWithLifecycle(initialValue = 0)
+    var confirmSignOut by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<Canvas?>(null) }
 
     LaunchedEffect(vm) {
         vm.events.collect { event ->
@@ -95,13 +103,19 @@ fun CanvasListScreen(
             TopAppBar(
                 title = { Text("Canvases") },
                 actions = {
-                    IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
-                    TextButton(onClick = onSignOut) { Text("Sign out") }
+                    SyncStatusChip()
+                    IconButton(onClick = {
+                        container.syncCenter.syncNow()
+                        vm.refresh()
+                    }) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
+                    // Signing out deletes the local copy: say so when it holds unsynced changes.
+                    TextButton(onClick = { if (unconfirmed > 0) confirmSignOut = true else onSignOut() }) { Text("Sign out") }
                     Box {
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text("Voice dataset") },
+                                text = { Text(if (syncUi.online) "Voice dataset" else "Voice dataset ($NEEDS_CONNECTION)") },
+                                enabled = syncUi.online,
                                 onClick = {
                                     menuOpen = false
                                     dataset.open()
@@ -126,13 +140,43 @@ fun CanvasListScreen(
             if (search.results != GlobalSearchResults.Off) {
                 GlobalSearchResultsView(search.results, onOpenCanvas = onOpen, onOpenSnippet = onOpenSnippet, onRetry = searchVm::retry)
             } else {
-                CanvasListBody(state, vm, onOpen)
+                CanvasListBody(state, vm, onOpen, onDelete = { deleting = it })
             }
         }
     }
 
     VoiceDatasetDialog(datasetState, onRetry = dataset::open, onDismiss = dataset::close)
     RenameCanvasDialog(rename, onSubmit = vm::submitRename, onDismiss = vm::dismissRename)
+
+    deleting?.let { canvas ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete \"${canvas.title}\"?") },
+            text = { Text("The canvas and the snippets that are only on it are deleted. Snippets also on other canvases stay there.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    vm.delete(canvas)
+                }) { Text("Delete", color = Palette.Error) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmSignOut) {
+        AlertDialog(
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out?") },
+            text = { Text("$unconfirmed ${if (unconfirmed == 1) "change has" else "changes have"} not reached the server yet. Signing out deletes them from this phone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSignOut = false
+                    onSignOut()
+                }) { Text("Sign out anyway", color = Palette.Error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
+        )
+    }
 
     if (creating) {
         var title by rememberSaveable { mutableStateOf("") }
@@ -151,13 +195,15 @@ fun CanvasListScreen(
     }
 }
 
-/** One canvas: tap opens it; long-press or ⋮ → Rename. */
+/** One canvas: tap opens it; long-press or ⋮ → Rename; ⋮ → Delete. A parked title shows "Not synced". */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit) {
+private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
+    val notSynced = LocalSyncUi.current.isNotSynced(canvas.id)
     ListItem(
         headlineContent = { Text(canvas.title) },
+        overlineContent = if (notSynced) ({ NotSyncedBadge() }) else null,
         supportingContent = { Text("Updated ${canvas.updatedAt.take(10)}", color = Palette.Muted) },
         trailingContent = {
             Box {
@@ -170,6 +216,13 @@ private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit) 
                             onRename()
                         },
                     )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
                 }
             }
         },
@@ -180,7 +233,7 @@ private fun CanvasRow(canvas: Canvas, onOpen: () -> Unit, onRename: () -> Unit) 
 
 /** The canvas list itself (no search query). */
 @Composable
-private fun CanvasListBody(state: CanvasListUiState, vm: CanvasListViewModel, onOpen: (CanvasId) -> Unit) {
+private fun CanvasListBody(state: CanvasListUiState, vm: CanvasListViewModel, onOpen: (CanvasId) -> Unit, onDelete: (Canvas) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         when (val s = state) {
             CanvasListUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -197,7 +250,7 @@ private fun CanvasListBody(state: CanvasListUiState, vm: CanvasListViewModel, on
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(s.canvases, key = { it.id.value }) { canvas ->
-                        CanvasRow(canvas, onOpen = { onOpen(canvas.id) }, onRename = { vm.startRename(canvas) })
+                        CanvasRow(canvas, onOpen = { onOpen(canvas.id) }, onRename = { vm.startRename(canvas) }, onDelete = { onDelete(canvas) })
                         HorizontalDivider(color = Palette.Border)
                     }
                 }
