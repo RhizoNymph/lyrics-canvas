@@ -28,3 +28,16 @@ export function alignmentColor(total: number): string {
   const hue = Math.round(t * 120);
   return `hsl(${hue}, 65%, 42%)`;
 }
+
+/** Pattern slot colours, by slot order (A, B, ...); at most 8 slots. */
+export const SLOT_COLORS: readonly string[] = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6', '#818cf8', '#fb7185', '#2dd4bf', '#facc15'];
+
+export function slotColor(index: number): string {
+  return SLOT_COLORS[index % SLOT_COLORS.length];
+}
+
+/** Opacity of a slot's highlight: full slots solid, partial ones lighter, off ones faint. */
+export function slotAlpha(on: boolean, full: boolean): number {
+  if (!on) return 0.3;
+  return full ? 1 : 0.65;
+}

@@ -5,6 +5,8 @@ import { RHYME_K_VALUES } from '@/types/rhyme';
 import type { RhymeK } from '@/types/rhyme';
 import AnchorChips from './AnchorChips';
 import NotesTagFilter from './NotesTagFilter';
+import SourceToggles from './SourceToggles';
+import PatternShortcut from './pattern/PatternShortcut';
 import { inputStyle, labelStyle, mutedStyle, errorStyle, monoStyle } from './sidebarStyles';
 
 /** Search box, anchor chips, k / min score / slot / sources / include-rare / notes tag filter. Changes re-query via useRhymeQuery. */
@@ -21,10 +23,6 @@ export default function QueryControls() {
   const slotMode = useRhymeStore((s) => s.slotMode);
   const setSlot = useRhymeStore((s) => s.setSlot);
   const setSlotMode = useRhymeStore((s) => s.setSlotMode);
-  const sources = useRhymeStore((s) => s.sources);
-  const toggleSource = useRhymeStore((s) => s.toggleSource);
-  const includeRare = useRhymeStore((s) => s.includeRare);
-  const setIncludeRare = useRhymeStore((s) => s.setIncludeRare);
 
   const [manualCount, setManualCount] = useState(slot ? String(slot.syllable_count) : '');
   const [manualStress, setManualStress] = useState(slot ? slot.stress : '');
@@ -70,6 +68,7 @@ export default function QueryControls() {
       <div>
         <label style={labelStyle}>Anchors from selection</label>
         <AnchorChips />
+        <PatternShortcut />
       </div>
 
       <div style={{ display: 'flex', gap: 10 }}>
@@ -129,17 +128,7 @@ export default function QueryControls() {
         {manualError && <div style={{ ...errorStyle, marginTop: 2 }}>{manualError}</div>}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, fontSize: 12, flexWrap: 'wrap' }}>
-        <label style={{ cursor: 'pointer' }}>
-          <input type="checkbox" checked={sources.notes} onChange={() => toggleSource('notes')} /> notes
-        </label>
-        <label style={{ cursor: 'pointer' }}>
-          <input type="checkbox" checked={sources.dictionary} onChange={() => toggleSource('dictionary')} /> dictionary
-        </label>
-        <label style={{ cursor: 'pointer' }} title="Include words below Zipf frequency 3">
-          <input type="checkbox" checked={includeRare} onChange={(e) => setIncludeRare(e.target.checked)} /> rare words
-        </label>
-      </div>
+      <SourceToggles />
 
       <NotesTagFilter />
     </div>
