@@ -5,7 +5,9 @@ HTTP status; app/api/sync_errors.py turns them into
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar
+from typing import ClassVar, Generic, TypeVar
+
+T = TypeVar("T")
 
 
 class SyncErrorCode(StrEnum):
@@ -22,7 +24,7 @@ class SyncError(Exception):
         self.message = message
 
 
-class VersionConflictError[T](SyncError):
+class VersionConflictError(SyncError, Generic[T]):
     """A ``base_version`` that is not the entity's current version; nothing changed.
 
     ``current`` is the server's entity as the service holds it (a ``PlacedSnippet``, ``Canvas``,
