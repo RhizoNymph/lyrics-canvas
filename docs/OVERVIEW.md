@@ -56,6 +56,7 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
+- **Rhyme patterns**: select 2..16 consecutive lines of a snippet; `POST /api/nlp/rhyme-pattern/detect` finds the ordered slots where the lines rhyme with each other (order-preserving progressive alignment of word spans), and `POST /api/nlp/rhyme-pattern/suggest` lists, per slot, dictionary words and spans of the user's own lines that rhyme with every member, plus whole lines that already hit 2+ slots in order (see [rhyme_patterns.md](./features/rhyme_patterns.md))
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
 - **Search**: `GET /api/search` finds the caller's canvases by title and snippets by display text across all their canvases (all whitespace-separated terms, NFC, case-insensitive substrings; typed `invalid_search_query`); `GET /api/canvases/{id}/search` applies the same rule within one canvas (see [global_search.md](./features/global_search.md; in a canvas, web and Android filter live on the client, see [web_rests_and_search.md](./features/web_rests_and_search.md) and [android_rests_and_search.md](./features/android_rests_and_search.md))
@@ -359,6 +360,16 @@ Features Index:
       - frontend/src/hooks/useRhymeQuery.ts
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
+  rhyme_patterns:
+    description: Rhyme patterns across 2..16 consecutive lines of one snippet. Detect finds ordered slots (at most one span of 1..2 words per line; every member pair scores >= min_score, default 0.75, at min(k_a, k_b); same slot order as word order on every line; coverage >= 2; at most 8) by progressive alignment (pairwise Needleman-Wunsch, seed with the best line pair, fold in the rest, open new slots), with k, cohesion, rhyme-tail shape, full and default_on. Suggest takes client-edited slots and returns per-slot candidates that score >= min_score against every member (score = min(member_scores), best_anchor_id pattern:<sid>:<line>:<start>-<end>) from the shared dictionary index and a per-request index over spans of the user's other lines (tag_filter), paged per slot by offsets, plus note lines hitting 2+ slots in order. Typed 422 pattern_range_invalid / pattern_span_invalid / pattern_slot_order.
+    entry_points:
+      - backend/app/api/nlp.py (POST /api/nlp/rhyme-pattern/detect, POST /api/nlp/rhyme-pattern/suggest)
+      - backend/app/services/rhyme_pattern_service.py
+      - backend/app/services/rhyme_pattern/
+      - backend/app/services/phonetics/pattern/
+      - backend/app/schemas/rhyme_pattern.py
+    depends_on: [rhyme_view, tag_expressions, snippet_placements, rest_marks]
+    doc: docs/features/rhyme_patterns.md
   merge_blocks:
     description: Select two or more snippets and merge them vertically (stacked) or horizontally (joined line by line) into one snippet at the first block's position, in canvas-position order, keeping rests and stress; the server builds the merged snippet and its placement and takes the originals off the canvas in one transaction (an original also on other canvases stays there with its recordings; one only here is deleted and its recordings move to the merged snippet) (POST /api/canvases/{id}/merge), shared by the web and Android clients.
     entry_points:
