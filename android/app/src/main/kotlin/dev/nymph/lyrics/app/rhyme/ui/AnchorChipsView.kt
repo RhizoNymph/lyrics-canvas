@@ -25,25 +25,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.AnchorChip
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.rhyme.pattern.ui.LastLinesShortcut
+import dev.nymph.lyrics.app.rhyme.pattern.ui.LineNumber
+import dev.nymph.lyrics.app.rhyme.pattern.ui.LinesToggle
+import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.ui.theme.Palette
 
 /**
  * One chip per selected non-blank snippet (AnchorChips.tsx): ▸ expands it to the snippet's lines
  * as syllable strips (tap a start word, then an end word), × excludes it from this query, + restores.
+ * With [pattern], the expansion's "Lines" toggle picks a line range for pattern mode (tap the first
+ * and the last line number), and a single chip offers "Pattern (last N lines)".
  */
 @Composable
-fun AnchorChipsView(chips: List<AnchorChip>, vm: RhymeViewModel) {
+fun AnchorChipsView(chips: List<AnchorChip>, vm: RhymeViewModel, pattern: PatternEntry? = null) {
     if (chips.isEmpty()) {
         Text("No snippet selected. Select one on the canvas or type a phrase.", color = Palette.Muted, fontSize = 12.sp)
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        chips.forEach { chip -> Chip(chip, vm) }
+        chips.forEach { chip -> Chip(chip, vm, pattern) }
+        if (pattern != null && chips.size == 1) LastLinesShortcut(pattern, chips[0].snippetId, chips[0].lines.size)
     }
 }
 
 @Composable
-private fun Chip(chip: AnchorChip, vm: RhymeViewModel) {
+private fun Chip(chip: AnchorChip, vm: RhymeViewModel, pattern: PatternEntry?) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             Modifier
@@ -70,12 +77,22 @@ private fun Chip(chip: AnchorChip, vm: RhymeViewModel) {
                 if (chip.lines.isEmpty()) Text("No beat grid for this snippet.", color = Palette.Muted, fontSize = 11.sp)
                 chip.lines.forEachIndexed { index, line ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${index + 1}", color = Palette.Muted, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.width(20.dp))
+                        if (pattern != null) {
+                            LineNumber(pattern, chip.snippetId, index)
+                        } else {
+                            Text("${index + 1}", color = Palette.Muted, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.width(20.dp))
+                        }
                         SyllableStrip(
                             line,
                             selected = chip.range?.takeIf { it.lineIndex == index },
                             onWordTap = { word -> vm.onWordTap(chip.snippetId, index, word) },
                         )
+                    }
+                }
+                if (pattern != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LinesToggle(pattern, chip.snippetId)
+                        pattern.hint(chip.snippetId)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f, fill = false)) }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

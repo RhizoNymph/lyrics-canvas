@@ -50,8 +50,9 @@ fun patternRange(snippet: Snippet, first: Int, last: Int): RangeCheck {
 }
 
 /** The "Pattern (last N lines)" stepper's default: min(4, line count), at least 2. */
-fun defaultPatternLineCount(snippet: Snippet): Int =
-    minOf(4, snippetLineCount(snippet)).coerceIn(PatternLimits.MIN_LINES, PatternLimits.MAX_LINES)
+fun defaultPatternLineCount(snippet: Snippet): Int = defaultPatternLineCount(snippetLineCount(snippet))
+
+fun defaultPatternLineCount(lineCount: Int): Int = minOf(4, lineCount).coerceIn(PatternLimits.MIN_LINES, PatternLimits.MAX_LINES)
 
 /**
  * The last [count] lines (clamped to 2..16) ending at the snippet's last non-empty line; fewer when

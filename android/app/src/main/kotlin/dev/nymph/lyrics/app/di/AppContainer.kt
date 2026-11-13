@@ -25,6 +25,9 @@ import dev.nymph.lyrics.data.repository.SearchRepository
 import dev.nymph.lyrics.app.canvas.search.CanvasSearchMemory
 import dev.nymph.lyrics.app.canvaslist.CanvasUpdates
 import dev.nymph.lyrics.data.repository.NlpRepository
+import dev.nymph.lyrics.data.repository.HttpRhymePatternRepository
+import dev.nymph.lyrics.data.repository.RhymePatternRepository
+import dev.nymph.lyrics.sync.repo.GatedRhymePatternRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
 import dev.nymph.lyrics.data.repository.TagPresetRepository
@@ -112,6 +115,9 @@ class AppContainer(
     val search: SearchRepository = LocalSearchRepository(sync.local)
     val snippets: SnippetRepository = LocalSnippetRepository(sync.local, sync.edits)
     val nlp: NlpRepository = GatedNlpRepository(HttpNlpRepository(api), sync.gate)
+
+    /** Rhyme patterns across lines; server-only like rhyme-suggest. */
+    val rhymePatterns: RhymePatternRepository = GatedRhymePatternRepository(HttpRhymePatternRepository(api), sync.gate)
     val tags: TagRepository = LocalTagRepository(sync.local, sync.edits)
 
     /** Read from the copy; saved online only. */
