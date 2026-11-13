@@ -169,7 +169,7 @@ snippet's stored `phonetics` (overrides applied; computed on the fly when NULL),
    deepest onset stripped); spans with equal signatures score alike, and results are cached per tail pair.
    Pairs whose last `j = min_skeleton_depth(k, min_score)` nuclei are not vowel neighbours are skipped, as
    `RhymeIndex.query` skips them, so detection and suggestion agree on what can rhyme. Cross-line pairs
-   are found through last-nucleus buckets. Two spans with the same words (`detect.same_words_key`:
+   are found through last-nucleus buckets. Two spans ending in the same word (`detect.last_word_key`:
    lowercased, punctuation removed, apostrophes kept) never pair.
 3. **Pairwise alignment** (`detect._Detector.align_pair`): for every two lines, Needleman-Wunsch over word
    positions with gap cost 0. A match consumes a span on each line; matches are in order and do not overlap.
@@ -270,7 +270,7 @@ pattern_lines min_score slots coverage elapsed_ms`.
   detected slots, and the server checks it for client slots.
 - Detection: every pair of members in a slot scores `>= min_score` at `min(k_a, k_b)`, and every slot
   has coverage >= 2. There are at most 8 slots. The same input gives the same slots. No detected slot
-  holds the same words twice.
+  has two members ending in the same word.
 - A span with a single function word is never a detected member, except a stressed function word ending
   its line.
 - Every candidate scores `>= min_score` against every member at the slot's `k`, and
@@ -308,9 +308,9 @@ pattern_lines min_score slots coverage elapsed_ms`.
    (`snippet_on_canvas`). `full` and `default_on` count only the range's lines that have words.
 7. **A repeated word is not a rhyme (2026-11-13).** On the production copy, repeated openings ("I'm" /
    "I'm" / "I'm", "don't" / "don't", "like" / "like") scored 1.0 and became slots that only suggest
-   rhymes for a word the user is repeating on purpose. Detection never pairs two spans with the same
-   words, so such slots no longer form and repeats no longer take alignment positions from real
-   rhymes. A user can still make one by hand (client slots are not checked for this).
+   rhymes for a word the user is repeating on purpose. Detection never pairs two spans ending in the
+   same word ("not" / "it's not" included, since the rhyme lives in the last word), so such slots no
+   longer form and repeats no longer take alignment positions from real rhymes. A user can still make one by hand (client slots are not checked for this).
 
 Dictionary candidates come from querying the index once per member and intersecting the results, as
 the contract suggests. A unit ranked below the 5000-hit cap for one member is missed. `total` counts

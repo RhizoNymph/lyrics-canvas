@@ -39,6 +39,12 @@ VERSE = "\n".join((*EXAMPLE, "I hold my letter in the rain"))
 NOTES = "\n".join(("heavy is the feather song", "long ago so steady", "she was petty so I measure strong"))
 
 
+_LONG_A = ("steady", "ready", "heavy", "petty", "jetty", "already", "betty", "eddie", "teddy", "freddie",
+           "deadly", "levee", "plenty", "twenty", "sweaty", "spaghetti", "confetti")
+_LONG_B = ("weather", "feather", "leather", "better", "letter", "tether", "pressure", "measure", "treasure",
+           "lesser", "dresser", "fresher", "never", "ever", "clever", "sever", "endeavor")
+
+
 def _record(snippet_id: str, text: str, canvas_id: str = "c1", tags: tuple[str, ...] = (), names: tuple[str, ...] = ()):
     return replace(make_record(snippet_id, text, tags=tags, canvas_id=canvas_id), tag_names=names)
 
@@ -51,7 +57,8 @@ def pattern_repo() -> FakePatternRepository:
         (_record("s-draft", "a treasure gone along", canvas_id="c2", tags=("t-draft",), names=("draft",)), {"c2"}),
         (_record("s-punct", "Keep it Steady!\nnow READY"), {"c1"}),
         (_record("s-short", "steady\n_"), {"c1"}),
-        (_record("s-long", "\n".join(["steady weather"] * 17)), {"c1"}),
+        # 17 lines that rhyme without repeating a word (a repeat is not a rhyme)
+        (_record("s-long", "\n".join(f"{a} {b}" for a, b in zip(_LONG_A, _LONG_B))), {"c1"}),
         (_record("s-digits", "steady 42\nready 7"), {"c1"}),
         (_record("s-elsewhere", "steady\nready", canvas_id="c2"), {"c2"}),
         (_record("s-foreign", "steady\nready", canvas_id="c-other"), {"c-other"}),

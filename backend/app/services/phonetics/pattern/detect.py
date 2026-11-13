@@ -2,7 +2,7 @@
 
 1. Spans of every line (``spans.line_spans``) and every passing cross-line pair score
    (``PairScorer.pair``: at ``min(k_a, k_b)``, at least ``min_score``), found through
-   last-nucleus buckets. Two spans of the same words (ignoring case and punctuation) never
+   last-nucleus buckets. Two spans ending in the same word (ignoring case and punctuation) never
    pair: a repeated word scores 1.0 but is not a rhyme to write to.
 2. Pairwise alignment of every two lines: the best chain of span matches that is in order and
    non-overlapping on both lines (Needleman-Wunsch over word positions, gap cost 0). A chain's value is
@@ -97,7 +97,7 @@ class _Detector:
 
     def _score_pairs(self) -> None:
         signatures = [self.scorer.signature(span) for span in self.all]
-        words = [same_words_key(span) for span in self.all]
+        words = [last_word_key(span) for span in self.all]
         # per line: last nucleus -> signature -> span ids (only vowel-neighbour buckets can rhyme)
         buckets: dict[int, dict[str, dict[TailSignature, list[int]]]] = {}
         for line in self.lines:
@@ -266,10 +266,11 @@ class _Detector:
         return [[self.all[slot[line]] for line in sorted(slot)] for slot in profile]
 
 
-def same_words_key(span: PatternSpan) -> tuple[str, ...]:
-    """The span's words, lowercased, without punctuation (apostrophes kept): equal keys are a
-    repeat, not a rhyme."""
-    return tuple(w for w in (_NOT_LETTERS.sub("", word).strip("'") for word in span.unit.text.lower().split()) if w)
+def last_word_key(span: PatternSpan) -> str:
+    """The span's last word, lowercased, without punctuation (apostrophes kept). The rhyme lives in
+    the last word, so spans with equal keys ("not" / "it's not") repeat it rather than rhyme."""
+    words = [w for w in (_NOT_LETTERS.sub("", word).strip("'") for word in span.unit.text.lower().split()) if w]
+    return words[-1] if words else ""
 
 
 def _group(ids: Sequence[int], signatures: Sequence[TailSignature]) -> dict[TailSignature, list[int]]:

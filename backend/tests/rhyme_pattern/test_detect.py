@@ -162,3 +162,10 @@ def test_no_slot_holds_the_same_word_twice():
     for slot in _detect(lines):
         words = [t.lower() for t in texts(slot)]
         assert len(set(words)) == len(words), words
+
+
+def test_two_word_spans_ending_in_the_same_word_are_not_a_rhyme():
+    lines = ("tell them I'm not", "you know it's not", "they got a lot", "in the mirror like", "they all like")
+    for slot in _detect(lines):
+        last = [t.lower().split()[-1].strip(".,!?") for t in texts(slot)]
+        assert len(set(last)) == len(last), texts(slot)
