@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel
@@ -13,11 +13,14 @@ from pydantic import BaseModel
 from app.services.sync.errors import IdConflictError, VersionConflictError
 
 
+T = TypeVar("T")
+
+
 class Dumpable(Protocol):
     def model_dump(self, *, mode: str) -> object: ...
 
 
-def version_conflict_http_error[T](exc: VersionConflictError[T] | VersionConflictError[list[T]], render: Callable[[T], Dumpable]) -> HTTPException:
+def version_conflict_http_error(exc: VersionConflictError[T] | VersionConflictError[list[T]], render: Callable[[T], Dumpable]) -> HTTPException:
     """``current`` is ``render(entity)``, or a list of them when the conflict carries a list."""
     current = exc.current
     body = [render(c).model_dump(mode="json") for c in current] if isinstance(current, list) else render(current).model_dump(mode="json")
