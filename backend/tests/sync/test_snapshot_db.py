@@ -105,6 +105,6 @@ async def test_snapshot_query_count_does_not_grow_with_the_data(users, statement
         t = await new_tag(me, f"t{i}")
         s = await new_snippet(me, d["id"], f"line {i}")
         ok(await me.post(f"/api/snippets/{s['id']}/tags", params={"tag_id": t["id"]}))
-        await new_words(me, f"word{"abcd"[i]}", tag_ids=[t["id"]])
+        await new_words(me, f"word{'abcd'[i]}", tag_ids=[t["id"]])
     assert await count() == small
     assert small <= 12

@@ -56,6 +56,8 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
+- **Rhyme patterns**: select 2..16 consecutive lines of a snippet; `POST /api/nlp/rhyme-pattern/detect` finds the ordered slots where the lines rhyme with each other (order-preserving progressive alignment of word spans), and `POST /api/nlp/rhyme-pattern/suggest` lists, per slot, dictionary words and spans of the user's own lines that rhyme with every member, plus whole lines that already hit 2+ slots in order (see [rhyme_patterns.md](./features/rhyme_patterns.md))
+- **Rhyme patterns across lines (web)**: picking a range of 2+ lines of one snippet in the rhyme sidebar (two line numbers on the anchor chip, or "Pattern (last N lines)") switches it to Pattern mode: the places where those lines rhyme with each other become editable slots, each on slot gets its own scrollable list of words and lines rhyming with every member, picks build a tuple that can become a snippet or go to the word bank, and the user's own lines that already hit 2+ slots are listed; see [web_rhyme_patterns.md](./features/web_rhyme_patterns.md)
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
 - **Search**: `GET /api/search` finds the caller's canvases by title and snippets by display text across all their canvases (all whitespace-separated terms, NFC, case-insensitive substrings; typed `invalid_search_query`); `GET /api/canvases/{id}/search` applies the same rule within one canvas (see [global_search.md](./features/global_search.md; in a canvas, web and Android filter live on the client, see [web_rests_and_search.md](./features/web_rests_and_search.md) and [android_rests_and_search.md](./features/android_rests_and_search.md))
@@ -169,6 +171,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
 | [Web Snippet Placements](./features/web_snippet_placements.md) | Web canvas rename (list card pencil, header title) and snippet placements: typed placement API with `canvas_id` on every layout save, Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and canvases popover, editor "Also on", undo/redo rule for non-undoable cross-canvas operations |
+| [Web Rhyme Patterns](./features/web_rhyme_patterns.md) | Rhyme sidebar Pattern mode: line-range picking, typed detect/suggest API, slot-edit reducer with order invariants, per-slot columns with paging, tuple tray (make snippet, word bank), whole-line matches |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Sync Versions](./features/sync_versions.md) | Offline sync backend: content versions (migration 009), `base_version` checks and 409 `version_conflict` with `current`, client-chosen ids on creates and 409 `id_conflict`, `GET /api/sync/snapshot` |
@@ -370,6 +373,16 @@ Features Index:
       - frontend/src/hooks/useRhymeQuery.ts
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
+  rhyme_patterns:
+    description: Rhyme patterns across 2..16 consecutive lines of one snippet. Detect finds ordered slots (at most one span of 1..2 words per line; every member pair scores >= min_score, default 0.75, at min(k_a, k_b); same slot order as word order on every line; coverage >= 2; at most 8) by progressive alignment (pairwise Needleman-Wunsch, seed with the best line pair, fold in the rest, open new slots), with k, cohesion, rhyme-tail shape, full and default_on. Suggest takes client-edited slots and returns per-slot candidates that score >= min_score against every member (score = min(member_scores), best_anchor_id pattern:<sid>:<line>:<start>-<end>) from the shared dictionary index and a per-request index over spans of the user's other lines (tag_filter), paged per slot by offsets, plus note lines hitting 2+ slots in order. Typed 422 pattern_range_invalid / pattern_span_invalid / pattern_slot_order.
+    entry_points:
+      - backend/app/api/nlp.py (POST /api/nlp/rhyme-pattern/detect, POST /api/nlp/rhyme-pattern/suggest)
+      - backend/app/services/rhyme_pattern_service.py
+      - backend/app/services/rhyme_pattern/
+      - backend/app/services/phonetics/pattern/
+      - backend/app/schemas/rhyme_pattern.py
+    depends_on: [rhyme_view, tag_expressions, snippet_placements, rest_marks]
+    doc: docs/features/rhyme_patterns.md
   merge_blocks:
     description: Select two or more snippets and merge them vertically (stacked) or horizontally (joined line by line) into one snippet at the first block's position, in canvas-position order, keeping rests and stress; the server builds the merged snippet and its placement and takes the originals off the canvas in one transaction (an original also on other canvases stays there with its recordings; one only here is deleted and its recordings move to the merged snippet) (POST /api/canvases/{id}/merge), shared by the web and Android clients.
     entry_points:
@@ -760,3 +773,16 @@ Features Index:
       - backend/app/services/snippet_service.py, canvas_service.py, tag_service.py, recording_service.py, word_bank/service.py (bumps)
     depends_on: [snippet_placements, tag_expressions, word_bank, merge_blocks, voice_capture, snippet_content_timestamp]
     doc: docs/features/sync_versions.md
+  web_rhyme_patterns:
+    description: Web client of rhyme patterns across lines. A line range of one snippet (two line-number clicks on the anchor chip, or "Pattern (last N lines)" with a 2..16 stepper) switches the rhyme sidebar to Pattern mode (wider, 540px). Typed wire models and api/rhymePattern.ts (POST /api/nlp/rhyme-pattern/detect and /suggest) rejecting only with PatternError (range_invalid, span_invalid, slot_order, invalid_tag_filter, not_found, invalid_request, network, server, unknown). rhymePatternStore holds one session as a discriminated view (off / detecting / detect_failed / ready with lines, editable slots, results, picks); a pure slot-edit reducer (add, extend, move, remove, new slot placed in order, drop, toggle) keeps at most one member per line, no overlaps and the same slot order on every line, refusing other edits with a message; ids s0.. from detection and u0.. for new slots, never reused. Suggest sends only on slots, re-queried 150 ms after edits or shared-control changes; one independently scrollable column per on slot with per-slot paging (offsets), a tuple tray (one pick per slot, Make snippet next to the anchor with derived_from omitted, Add picks to word bank, Clear) and whole-line matches with hits in slot colours, Materialize and paging. Min score, sources, rare words and the notes tag filter are shared with the normal mode; dismissals are per session.
+    entry_points:
+      - frontend/src/components/rhyme/pattern/
+      - frontend/src/stores/rhymePatternStore.ts
+      - frontend/src/hooks/useRhymePatternQuery.ts
+      - frontend/src/lib/rhyme/pattern/
+      - frontend/src/api/rhymePattern.ts
+      - frontend/src/types/rhymePattern.ts
+      - frontend/src/components/rhyme/AnchorChips.tsx (line-number range picking)
+      - frontend/src/components/sidebar/RhymeSidebar.tsx (mode switch)
+    depends_on: [rhyme_patterns, rhyme_view, web_tag_expressions, web_word_bank, web_rests_and_search]
+    doc: docs/features/web_rhyme_patterns.md

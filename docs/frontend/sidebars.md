@@ -13,9 +13,9 @@ canvas only when a row is materialized. Full description in [rhyme-view.md](./rh
 ### State
 
 All state lives in `rhymeStore` (session, params, results, dismissed, exclusions, materialize counts,
-loading/error). The sidebar owns only the expanded row. `uiStore.rightPanel === 'rhymes'` controls
+loading/error); Pattern mode's state lives in `rhymePatternStore`. The sidebar owns only the expanded row. `uiStore.rightPanel === 'rhymes'` controls
 mounting (the word bank shares the slot; only one is open); `CanvasPage` renders the sidebar while it holds and the sidebar calls `rhymeStore.enter()` on mount and
-`exit()` on unmount.
+`exit()` (and `rhymePatternStore.exit()`) on unmount.
 
 ### Interactions
 
@@ -32,10 +32,41 @@ mounting (the word bank shares the slot; only one is open); `CanvasPage` renders
   sent while invalid (the list shows "Not searched: ..." instead). See
   [web_tag_expressions.md](../features/web_tag_expressions.md)
 
+- Click two line numbers in a chip's expansion (in either order) to pick a line range; 2+ lines with words
+  switch the sidebar to **Pattern mode** for that snippet (fewer, or more than 16 lines, says why inline).
+  With exactly one snippet selected, "Pattern (last N lines)" (N defaults to min(4, lines with words),
+  stepper 2..16) does the same for the snippet's last lines
+
 ### Layout
 
-Width: 380px fixed, full height of the canvas area. Header, query controls (search, chips, k, min score,
-slot, sources, rare words, notes tag filter), status line with More, scrollable result rows.
+Width: 380px fixed, full height of the canvas area. Header, query controls (search, chips, the pattern
+shortcut, k, min score, slot, sources, rare words, notes tag filter), status line with More, scrollable
+result rows.
+
+### Pattern mode
+
+**Files:** `src/components/rhyme/pattern/` (`PatternPanel`), state in `src/stores/rhymePatternStore.ts`. Full
+description in [web_rhyme_patterns.md](../features/web_rhyme_patterns.md).
+
+While `rhymePatternStore.view.kind !== 'off'` the sidebar is 540px wide, its title reads "Rhymes · Pattern"
+and the body is `PatternPanel` instead of the query controls and candidate list (the normal query is paused
+and re-runs on leaving). Top to bottom:
+
+- Header: "Lines a–b of <snippet>", a note when other selected snippets are ignored, Reset (re-detect,
+  discarding slot edits) and Back to single
+- The pattern lines, every word a button; slot members in the slot's colour with its letter (partial slots
+  lighter, off slots faint). Tapping a word opens a picker under its line: Add to / Extend / Move to each
+  slot, New slot, Remove from; edits the reducer would refuse are disabled with the reason
+- Slot legend: `A  EH D IY  3/3` chips that toggle the slot on / off, × drops it; the last refusal message
+- Empty states (no slots: the detection threshold slider; every slot off; no source)
+- One column per on slot side by side (min 160px, horizontal scroll), each scrolling on its own: text, score,
+  "fits", source (my line / dict), "+ bank", ×; tap picks the row for its slot; More pages that slot only
+- Tuple tray: `steady · ___ · strong`, Make snippet (one line, next to the anchor), Add picks to word bank, Clear
+- Whole-line matches: the user's lines hitting 2+ slots, hits coloured by slot, "N of M slots", Materialize, ×, More
+- "Search options": min score, sources, rare words, notes tag filter (shared with the normal mode) and the
+  detection threshold
+
+Closing the sidebar exits both modes.
 
 ---
 

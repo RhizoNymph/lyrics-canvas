@@ -12,6 +12,13 @@ from app.models.canvas import Canvas
 from app.models.placement import SnippetPlacement
 from app.schemas.nlp import SyllabifyRequest, SyllabifyResponse, TSNERequest
 from app.schemas.rhyme import RhymeSuggestRequest, RhymeSuggestResponse
+from app.schemas.rhyme_pattern import (
+    PatternDetectRequest,
+    PatternDetectResponse,
+    PatternErrorBody,
+    PatternSuggestRequest,
+    PatternSuggestResponse,
+)
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.nlp.similarity_service import compute_tfidf_similarity
 from app.services.nlp.tsne_service import compute_tsne
@@ -19,7 +26,8 @@ from app.services.nlp.rhyme_service import find_rhymes, find_rhymes_in_texts
 from app.services.nlp.search_service import search_snippets
 from app.services.nlp.embedding_service import compute_embedding
 from app.services.rest_marks import display_text
-from app.services import recording_service, rhyme_suggest_service, snippet_service
+from app.services import recording_service, rhyme_pattern_service, rhyme_suggest_service, snippet_service
+from app.services.rhyme_pattern.errors import PatternError
 from app.services.placements.errors import PlacementNotFoundError
 from app.services.phonetics.errors import DialectRuleError, PronunciationError, RhymeQueryError
 from app.services.rhyme_suggest_service import CanvasNotFoundError, SnippetNotFoundError
@@ -170,5 +178,48 @@ async def rhyme_suggest(
     except TagExpressionError as exc:
         # {"error": "invalid_tag_expression", "message", "expression_error": {code, position, message}}
         raise expression_http_error(exc) from exc
+    except (RhymeQueryError, DialectRuleError, PronunciationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def pattern_http_error(exc: PatternError) -> HTTPException:
+    """``detail = {"error": "pattern_range_invalid" | "pattern_span_invalid" | "pattern_slot_order", "message"}``."""
+    return HTTPException(status_code=exc.status, detail=PatternErrorBody(error=exc.code.value, message=exc.message).model_dump())
+
+
+@router.post("/api/nlp/rhyme-pattern/detect", response_model=PatternDetectResponse)
+async def rhyme_pattern_detect(
+    req: PatternDetectRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The rhyme slots shared by a range of 2..16 lines of one snippet (docs/features/rhyme_patterns.md)."""
+    repo = rhyme_pattern_service.DbPatternRepository(db)
+    try:
+        return await rhyme_pattern_service.detect(req, str(user.id), repo)
+    except (CanvasNotFoundError, SnippetNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PatternError as exc:
+        raise pattern_http_error(exc) from exc
+    except (RhymeQueryError, DialectRuleError, PronunciationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/api/nlp/rhyme-pattern/suggest", response_model=PatternSuggestResponse)
+async def rhyme_pattern_suggest(
+    req: PatternSuggestRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-slot candidates that rhyme with every slot member, and note lines that already hit 2+ slots."""
+    repo = rhyme_pattern_service.DbPatternRepository(db)
+    try:
+        return await rhyme_pattern_service.suggest(req, str(user.id), repo)
+    except (CanvasNotFoundError, SnippetNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TagExpressionError as exc:
+        raise expression_http_error(exc) from exc
+    except PatternError as exc:
+        raise pattern_http_error(exc) from exc
     except (RhymeQueryError, DialectRuleError, PronunciationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

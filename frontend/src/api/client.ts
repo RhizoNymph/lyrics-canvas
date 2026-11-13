@@ -7,6 +7,7 @@ import { createPlacementApi } from './placements';
 import { createVoiceApi } from './voice';
 import { createWordBankApi } from './wordBank';
 import { createSearchApi } from './search';
+import { createRhymePatternApi } from './rhymePattern';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -141,6 +142,9 @@ export const nlpApi = {
   rhymeSuggest: (req: RhymeSuggestRequest) =>
     api.post<RhymeSuggestResponse>('/api/nlp/rhyme-suggest', req),
 };
+
+// ---- Rhyme patterns across lines (see api/rhymePattern.ts) ----
+export const rhymePatternApi = createRhymePatternApi(api);
 
 // ---- Export ----
 export const exportApi = {

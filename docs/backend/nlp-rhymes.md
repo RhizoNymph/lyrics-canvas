@@ -1,9 +1,13 @@
 # NLP: Rhymes
 
-Two routes, both backed by the [phonetic engine](./nlp-phonetics.md):
+Four routes, all backed by the [phonetic engine](./nlp-phonetics.md):
 
 - `POST /api/nlp/rhyme-suggest`: ranked, slot-checked candidates for the Rhyme View
   (`app/services/rhyme_suggest_service.py`, `app/schemas/rhyme.py`).
+- `POST /api/nlp/rhyme-pattern/detect` and `POST /api/nlp/rhyme-pattern/suggest`: rhyme slots across
+  2..16 lines of one snippet and candidates that rhyme with every slot member
+  (`app/services/rhyme_pattern_service.py`, `app/services/rhyme_pattern/`,
+  `app/services/phonetics/pattern/`, `app/schemas/rhyme_pattern.py`); see below.
 - `GET /api/nlp/rhymes?word=`: the older sidebar lookup, kept with its original response shape
   (`app/services/nlp/rhyme_service.py`).
 
@@ -72,6 +76,28 @@ production; `tests/fakes.py` in tests), so the service is tested without Postgre
 | bad line index, empty snippet, word range outside the line or without a pronounceable word, unpronounceable text anchor | `RhymeQueryError` | 422 |
 | malformed dialect rule | `DialectRuleError` | 422 |
 | `tag_filter` does not parse | `TagExpressionError` | 422, `detail = {"error": "invalid_tag_expression", "message", "expression_error": {code, position, message}}` (other 422s keep a string detail) |
+
+## Rhyme patterns
+
+Canonical doc: [docs/features/rhyme_patterns.md](../features/rhyme_patterns.md) (models, errors,
+algorithm, decisions). In short:
+
+```
+detect:  canvas / snippet / placement (404) -> dialect, weights -> resolve_range (pattern_range_invalid)
+         -> phonetics.pattern.detect: spans (1..2 words, function-word rule) -> cached pair scores at
+            min(k_a, k_b) with index-equivalent pruning -> pairwise Needleman-Wunsch -> seed + fold
+            (join only when >= min_score against every member) + open new slots -> summarize, order, cap 8
+suggest: tag_filter -> load -> resolve_range -> resolve_slots (pattern_span_invalid, pattern_slot_order)
+         -> summarize -> note span index (worker thread; anchor pattern lines skipped)
+         -> per slot: query each member at slot k, intersect, drop member repeats, one span per note
+            line, rank, page by offsets[slot id] -> line matches (best_hits DP, >= 2 slots in order)
+```
+
+`resolve_dialect` / `resolve_weights` take any `PhoneticsOptions` (an object with `dialect` and
+`weights`), so both services share them; rhyme-suggest is unchanged. `DbPatternRepository` extends
+`DbSnippetRepository` with `snippet_on_canvas`. The pattern errors map to
+`detail = {"error": "pattern_range_invalid" | "pattern_span_invalid" | "pattern_slot_order", "message"}`
+(`app/api/nlp.py::pattern_http_error`).
 
 ## Legacy lookup
 
