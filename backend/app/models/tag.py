@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_uuid
+from app.models.versioned import starts_at_initial_version, version_check, version_column
 
 DEFAULT_TAG_COLOR = "#6366f1"
 
@@ -17,10 +18,12 @@ snippet_tags = Table(
 )
 
 
+@starts_at_initial_version
 class Tag(Base):
     """A user-wide label (one list per user, shared by all canvases); names unique ignoring case."""
 
     __tablename__ = "tags"
+    __table_args__ = (version_check("tags"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -28,6 +31,8 @@ class Tag(Base):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     color: Mapped[str] = mapped_column(String(7), default=DEFAULT_TAG_COLOR)
+    # +1 per name or color change (docs/features/sync_versions.md#versions)
+    version: Mapped[int] = version_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     snippets = relationship("Snippet", secondary=snippet_tags, back_populates="tags")

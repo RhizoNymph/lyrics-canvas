@@ -98,21 +98,24 @@ unknown `op` and a rhymes request without exactly one of `word_id` / `text` are 
 ```jsonc
 // BankWordResponse (tags sorted by lower(name), then id)
 {"id": "f506d16d-…", "text": "night", "tags": [{"id": "a5b1df14-…", "name": "dark", "color": "#112233"}],
- "created_at": "2026-11-04T17:25:01.686045Z"}
+ "created_at": "2026-11-04T17:25:01.686045Z", "version": 1}
 ```
 
+`version` goes up by 1 per text change and per tag link or unlink that changes the word's tags
+(offline sync, [sync_versions.md](./sync_versions.md)).
+
 `TagResponse` gains `word_count` (bank words linked), after `snippet_count`:
-`{"id", "name", "color", "snippet_count", "word_count", "created_at"}`.
+`{"id", "name", "color", "snippet_count", "word_count", "created_at", "version"}`.
 
 ### Routes
 
 | Method | Path | Body / query | Response |
 |---|---|---|---|
 | GET | `/api/word-bank` | | 200 `BankWordResponse[]`, newest first (`created_at desc, id`) |
-| POST | `/api/word-bank` | `{words: str[] (1..200), tag_ids: str[] (0..20) = []}` | 201 `{created: BankWordResponse[], existing: BankWordResponse[]}` |
-| PUT | `/api/word-bank/{id}` | `{text}` | 200 `BankWordResponse`; 404 / 409 / 422 |
-| POST | `/api/word-bank/delete` | `{ids: str[] (1..500)}` | 204; ids not the user's are ignored |
-| POST | `/api/word-bank/tags` | `{word_ids: str[] (1..500), tag_id, op: "link"\|"unlink"}` | 200 `{words: BankWordResponse[]}` (request order, duplicates once) |
+| POST | `/api/word-bank` | `{words: (str \| {text, id?})[] (1..200), tag_ids: str[] (0..20) = []}` | 201 `{created: BankWordResponse[], existing: BankWordResponse[]}`; 409 `id_conflict` |
+| PUT | `/api/word-bank/{id}` | `{text, base_version?}` | 200 `BankWordResponse`; 404 / 409 (`word_exists`, `version_conflict`) / 422 |
+| POST | `/api/word-bank/delete` | `{ids: str[] (1..500), base_versions?: {id: version}}` | 204; ids not the user's are ignored; 409 `version_conflict` (`current` = list) |
+| POST | `/api/word-bank/tags` | `{word_ids: str[] (1..500), tag_id, op: "link"\|"unlink", base_versions?: {id: version}}` | 200 `{words: BankWordResponse[]}` (request order, duplicates once); 409 `version_conflict` (`current` = list) |
 | POST | `/api/word-bank/rhymes` | `{word_id? \| text?, tag_filter?, min_score = 0.5 (0..1), k = 2 (1..4), limit = 100 (1..200)}` | 200 `{anchor, matches}` |
 | POST | `/api/word-bank/families` | `{tag_filter?, min_score = 0.8 (0..1), k = 2 (1..4)}` | 200 `{families, unmatched}` |
 | GET | `/api/word-bank/related` | `?q=<text>&limit=30 (1..100)` | 200 `{query, results}` |
@@ -122,6 +125,13 @@ unknown `op` and a rhymes request without exactly one of `word_id` / `text` are 
 already has goes to `existing` with its stored spelling (not an error). `tag_ids` are linked to every
 created and existing word (idempotent). Both lists keep the input order. Words of one batch share
 `created_at` (the transaction time), so in `GET` they follow `id`.
+
+**Offline sync.** A word given as `{text, id}` is created with that client id; retrying the
+identical add returns it in `created` again; an id that names another user's word or a word with
+another text, or one id given for two different words, is 409 `id_conflict` and nothing is added.
+`base_version` / `base_versions` that differ from a word's version are 409 `version_conflict`
+with the current word (rename) or the list of stale words (bulk), and nothing changes. See
+[sync_versions.md](./sync_versions.md).
 
 **Rename.** A change of case only (`night` → `Night`) is allowed. A collision is checked with a
 lookup and, for races, by the unique index (`IntegrityError` → `word_exists`).

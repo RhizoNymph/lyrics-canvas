@@ -20,6 +20,7 @@ from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
 from app.api.search import router as search_router
 from app.api.voice import router as voice_router
+from app.api.sync import router as sync_router
 from app.api.word_bank import related_words
 from app.api.word_bank import router as word_bank_router
 from app.services.phonetics import ResourceError, ensure_resources
@@ -69,6 +70,7 @@ app.include_router(export_router)
 app.include_router(search_router)
 app.include_router(voice_router)
 app.include_router(word_bank_router)
+app.include_router(sync_router)
 
 
 @app.get("/api/health")

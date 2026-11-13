@@ -6,10 +6,13 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_uuid
+from app.models.versioned import starts_at_initial_version, version_check, version_column
 
 
+@starts_at_initial_version
 class Canvas(Base):
     __tablename__ = "canvases"
+    __table_args__ = (version_check("canvases"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -17,6 +20,8 @@ class Canvas(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     share_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     viewport_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=lambda: {"x": 0, "y": 0, "zoom": 1})
+    # +1 per title change; viewport and sharing leave it alone (docs/features/sync_versions.md#versions)
+    version: Mapped[int] = version_column()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

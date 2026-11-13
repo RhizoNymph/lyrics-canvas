@@ -94,6 +94,19 @@ async def placed_snippet(
     return found[0] if found else None
 
 
+async def first_placed(db: AsyncSession, snippet_id: uuid.UUID) -> PlacedSnippet | None:
+    """The snippet in the context of its oldest placement (created_at, then id): how a snippet is
+    shown where no canvas is named (a version conflict on delete everywhere or a tag link)."""
+    result = await db.execute(
+        _placed_query()
+        .where(SnippetPlacement.snippet_id == snippet_id)
+        .order_by(SnippetPlacement.created_at, SnippetPlacement.id)
+        .limit(1)
+    )
+    row = result.first()
+    return (await _with_refs(db, [tuple(row)]))[0] if row is not None else None
+
+
 async def placed_by_placement_id(db: AsyncSession, placement_id: uuid.UUID) -> PlacedSnippet:
     """Reload one placement with its snippet (after a commit); it must exist."""
     result = await db.execute(_placed_query().where(SnippetPlacement.id == placement_id))

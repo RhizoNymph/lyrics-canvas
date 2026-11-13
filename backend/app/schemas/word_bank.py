@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.tag import SnippetTagResponse, TagErrorBody
+from app.schemas.versioning import BaseVersion, BaseVersions, ClientId
 
 _RESPONSE_CONFIG = {"from_attributes": True, "json_schema_serialization_defaults_required": True}
 
@@ -27,12 +28,22 @@ class BankWordResponse(BaseModel):
     text: str
     tags: list[SnippetTagResponse]  # sorted by lower(name)
     created_at: datetime
+    version: int  # +1 per text change and per tag link or unlink
 
     model_config = _RESPONSE_CONFIG
 
 
+class BankWordNew(BaseModel):
+    """A word to add with a client-chosen id."""
+
+    text: str
+    id: ClientId | None = None
+
+
 class BankWordsCreate(BaseModel):
-    words: list[str] = Field(min_length=1, description=f"1..{MAX_ADD_WORDS} words; more is too_many_words")
+    words: list[str | BankWordNew] = Field(
+        min_length=1, description=f"1..{MAX_ADD_WORDS} words (plain text, or {{text, id}}); more is too_many_words"
+    )
     tag_ids: list[str] = Field(default_factory=list, description=f"0..{MAX_ADD_TAGS} tag ids; more is too_many_words")
 
 
@@ -45,16 +56,19 @@ class BankWordsCreateResponse(BaseModel):
 
 class BankWordUpdate(BaseModel):
     text: str
+    base_version: BaseVersion | None = None
 
 
 class BankWordsDelete(BaseModel):
     ids: list[str] = Field(min_length=1, description=f"1..{MAX_IDS} ids; more is too_many_words")
+    base_versions: BaseVersions | None = None
 
 
 class BankWordTagsUpdate(BaseModel):
     word_ids: list[str] = Field(min_length=1, description=f"1..{MAX_IDS} ids; more is too_many_words")
     tag_id: str
     op: Literal["link", "unlink"]
+    base_versions: BaseVersions | None = None
 
 
 class BankWordsResponse(BaseModel):

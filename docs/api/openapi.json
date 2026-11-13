@@ -219,6 +219,33 @@
         "title": "BankRhymesResponse",
         "type": "object"
       },
+      "BankWordNew": {
+        "description": "A word to add with a client-chosen id.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "description": "client-chosen id; retrying the identical create is safe",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BankWordNew",
+        "type": "object"
+      },
       "BankWordResponse": {
         "properties": {
           "created_at": {
@@ -240,19 +267,43 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
           "id",
           "text",
           "tags",
-          "created_at"
+          "created_at",
+          "version"
         ],
         "title": "BankWordResponse",
         "type": "object"
       },
       "BankWordTagsUpdate": {
         "properties": {
+          "base_versions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "description": "the entity version this change is based on",
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Versions"
+          },
           "op": {
             "enum": [
               "link",
@@ -285,6 +336,19 @@
       },
       "BankWordUpdate": {
         "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "description": "the entity version this change is based on",
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -307,9 +371,16 @@
             "type": "array"
           },
           "words": {
-            "description": "1..200 words; more is too_many_words",
+            "description": "1..200 words (plain text, or {text, id}); more is too_many_words",
             "items": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/BankWordNew"
+                }
+              ]
             },
             "minItems": 1,
             "title": "Words",
@@ -348,6 +419,25 @@
       },
       "BankWordsDelete": {
         "properties": {
+          "base_versions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "description": "the entity version this change is based on",
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Versions"
+          },
           "ids": {
             "description": "1..500 ids; more is too_many_words",
             "items": {
@@ -481,6 +571,19 @@
       },
       "CanvasCreate": {
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "description": "client-chosen id; retrying the identical create is safe",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "title": {
             "default": "Untitled Canvas",
             "title": "Title",
@@ -543,6 +646,10 @@
             "title": "Updated At",
             "type": "string"
           },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
           "viewport_state": {
             "anyOf": [
               {
@@ -565,6 +672,7 @@
           "viewport_state",
           "created_at",
           "updated_at",
+          "version",
           "snippets",
           "groups"
         ],
@@ -608,6 +716,10 @@
             "title": "Updated At",
             "type": "string"
           },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
           "viewport_state": {
             "anyOf": [
               {
@@ -629,13 +741,27 @@
           "share_token",
           "viewport_state",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "version"
         ],
         "title": "CanvasResponse",
         "type": "object"
       },
       "CanvasUpdate": {
         "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "description": "the entity version this change is based on",
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          },
           "is_public": {
             "anyOf": [
               {
@@ -672,6 +798,41 @@
           }
         },
         "title": "CanvasUpdate",
+        "type": "object"
+      },
+      "CanvasVersionConflictBody": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/CanvasResponse"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "CanvasVersionConflictBody",
+        "type": "object"
+      },
+      "CanvasVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/CanvasVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "CanvasVersionConflictResponse",
         "type": "object"
       },
       "DerivedFromModel": {
@@ -1044,6 +1205,37 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IdConflictBody": {
+        "properties": {
+          "error": {
+            "const": "id_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "IdConflictBody",
+        "type": "object"
+      },
+      "IdConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/IdConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "IdConflictResponse",
+        "type": "object"
+      },
       "LinePhonetics": {
         "properties": {
           "line_index": {
@@ -1120,6 +1312,38 @@
       "MergeRequest": {
         "description": "``snippet_ids`` are de-duplicated (first occurrence kept); at least two must remain.",
         "properties": {
+          "base_versions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "description": "the entity version this change is based on",
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Versions"
+          },
+          "merged_id": {
+            "anyOf": [
+              {
+                "description": "client-chosen id; retrying the identical create is safe",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Id"
+          },
           "mode": {
             "$ref": "#/components/schemas/MergeMode"
           },
@@ -2341,6 +2565,19 @@
             "title": "Height",
             "type": "number"
           },
+          "id": {
+            "anyOf": [
+              {
+                "description": "client-chosen id; retrying the identical create is safe",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "position_x": {
             "default": 0.0,
             "title": "Position X",
@@ -2513,6 +2750,10 @@
             "title": "Updated At",
             "type": "string"
           },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
           "width": {
             "title": "Width",
             "type": "number"
@@ -2543,6 +2784,7 @@
           "created_at",
           "updated_at",
           "content_updated_at",
+          "version",
           "canvases"
         ],
         "title": "SnippetResponse",
@@ -2585,6 +2827,19 @@
       },
       "SnippetUpdate": {
         "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "description": "the entity version this change is based on",
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          },
           "beats_per_line": {
             "anyOf": [
               {
@@ -2705,6 +2960,80 @@
           }
         },
         "title": "SnippetUpdate",
+        "type": "object"
+      },
+      "SnippetVersionConflictBody": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/SnippetResponse"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "SnippetVersionConflictBody",
+        "type": "object"
+      },
+      "SnippetVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SnippetVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SnippetVersionConflictResponse",
+        "type": "object"
+      },
+      "SnippetsVersionConflictBody": {
+        "properties": {
+          "current": {
+            "items": {
+              "$ref": "#/components/schemas/SnippetResponse"
+            },
+            "title": "Current",
+            "type": "array"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "SnippetsVersionConflictBody",
+        "type": "object"
+      },
+      "SnippetsVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SnippetsVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SnippetsVersionConflictResponse",
         "type": "object"
       },
       "SplitMode": {
@@ -2835,6 +3164,228 @@
         "title": "SyllableModel",
         "type": "object"
       },
+      "SyncPlacement": {
+        "description": "One snippet's layout on one canvas (the per-canvas fields of ``SnippetResponse``).",
+        "properties": {
+          "canvas_id": {
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "placement_id": {
+            "title": "Placement Id",
+            "type": "string"
+          },
+          "position_x": {
+            "title": "Position X",
+            "type": "number"
+          },
+          "position_y": {
+            "title": "Position Y",
+            "type": "number"
+          },
+          "snippet_id": {
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "z_index": {
+            "title": "Z Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snippet_id",
+          "canvas_id",
+          "placement_id",
+          "position_x",
+          "position_y",
+          "width",
+          "height",
+          "z_index",
+          "group_id"
+        ],
+        "title": "SyncPlacement",
+        "type": "object"
+      },
+      "SyncSnapshotResponse": {
+        "properties": {
+          "canvases": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasResponse"
+            },
+            "title": "Canvases",
+            "type": "array"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/SyncPlacement"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "server_time": {
+            "title": "Server Time",
+            "type": "string"
+          },
+          "snippets": {
+            "items": {
+              "$ref": "#/components/schemas/SyncSnippet"
+            },
+            "title": "Snippets",
+            "type": "array"
+          },
+          "tag_presets": {
+            "items": {
+              "$ref": "#/components/schemas/TagPresetResponse"
+            },
+            "title": "Tag Presets",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "word_bank": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Word Bank",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server_time",
+          "canvases",
+          "placements",
+          "snippets",
+          "tags",
+          "tag_presets",
+          "word_bank"
+        ],
+        "title": "SyncSnapshotResponse",
+        "type": "object"
+      },
+      "SyncSnippet": {
+        "description": "A snippet's shared content: ``SnippetResponse`` without the per-canvas fields\n(``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,\ncanvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``.",
+        "properties": {
+          "beats_per_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beats Per Line"
+          },
+          "content_updated_at": {
+            "title": "Content Updated At",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DerivedFromModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GridDataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grid_mode": {
+            "$ref": "#/components/schemas/GridMode"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "phonetics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnippetPhonetics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "snippet_type": {
+            "$ref": "#/components/schemas/SnippetType"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "snippet_type",
+          "grid_mode",
+          "beats_per_line",
+          "grid_data",
+          "raw_text",
+          "phonetics",
+          "derived_from",
+          "created_at",
+          "updated_at",
+          "content_updated_at",
+          "version",
+          "tag_ids"
+        ],
+        "title": "SyncSnippet",
+        "type": "object"
+      },
       "TSNERequest": {
         "properties": {
           "n_components": {
@@ -2857,6 +3408,19 @@
             "default": "#6366f1",
             "title": "Color",
             "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "description": "client-chosen id; retrying the identical create is safe",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
           },
           "name": {
             "title": "Name",
@@ -2909,16 +3473,41 @@
         "title": "TagErrorResponse",
         "type": "object"
       },
+      "TagLinkRequest": {
+        "description": "Optional body of ``POST /api/snippets/{id}/tags``.",
+        "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "description": "the entity version this change is based on",
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          }
+        },
+        "title": "TagLinkRequest",
+        "type": "object"
+      },
       "TagLinkResponse": {
         "properties": {
           "ok": {
             "default": true,
             "title": "Ok",
             "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
-          "ok"
+          "ok",
+          "version"
         ],
         "title": "TagLinkResponse",
         "type": "object"
@@ -3025,6 +3614,10 @@
             "title": "Snippet Count",
             "type": "integer"
           },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
           "word_count": {
             "title": "Word Count",
             "type": "integer"
@@ -3036,13 +3629,27 @@
           "color",
           "snippet_count",
           "word_count",
-          "created_at"
+          "created_at",
+          "version"
         ],
         "title": "TagResponse",
         "type": "object"
       },
       "TagUpdate": {
         "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "description": "the entity version this change is based on",
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          },
           "color": {
             "anyOf": [
               {
@@ -3067,6 +3674,41 @@
           }
         },
         "title": "TagUpdate",
+        "type": "object"
+      },
+      "TagVersionConflictBody": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/TagResponse"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "TagVersionConflictBody",
+        "type": "object"
+      },
+      "TagVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TagVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TagVersionConflictResponse",
         "type": "object"
       },
       "TextAnchor": {
@@ -3453,6 +4095,80 @@
         ],
         "title": "WordPhonetics",
         "type": "object"
+      },
+      "WordVersionConflictBody": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/BankWordResponse"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "WordVersionConflictBody",
+        "type": "object"
+      },
+      "WordVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/WordVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "WordVersionConflictResponse",
+        "type": "object"
+      },
+      "WordsVersionConflictBody": {
+        "properties": {
+          "current": {
+            "items": {
+              "$ref": "#/components/schemas/BankWordResponse"
+            },
+            "title": "Current",
+            "type": "array"
+          },
+          "error": {
+            "const": "version_conflict",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "current"
+        ],
+        "title": "WordsVersionConflictBody",
+        "type": "object"
+      },
+      "WordsVersionConflictResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/WordsVersionConflictBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "WordsVersionConflictResponse",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -3647,6 +4363,7 @@
         ]
       },
       "post": {
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same canvas;\nan id used by a different canvas is 409 ``id_conflict``.",
         "operationId": "create_canvas_api_canvases_post",
         "requestBody": {
           "content": {
@@ -3668,6 +4385,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -3735,6 +4462,7 @@
     },
     "/api/canvases/{canvas_id}": {
       "delete": {
+        "description": "A ``base_version`` that is not the canvas's version is 409 ``version_conflict``.",
         "operationId": "delete_canvas_api_canvases__canvas_id__delete",
         "parameters": [
           {
@@ -3745,11 +4473,40 @@
               "title": "Canvas Id",
               "type": "string"
             }
+          },
+          {
+            "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+            "in": "query",
+            "name": "base_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+              "title": "Base Version"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -3818,6 +4575,7 @@
         ]
       },
       "put": {
+        "description": "``base_version`` is checked only when ``title`` is set; a mismatch is 409 ``version_conflict``.",
         "operationId": "update_canvas_api_canvases__canvas_id__put",
         "parameters": [
           {
@@ -3850,6 +4608,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -4034,7 +4802,7 @@
     },
     "/api/canvases/{canvas_id}/merge": {
       "post": {
-        "description": "Replace two or more snippets on this canvas with one merged snippet (see\ndocs/features/merge_blocks.md). ``deleted_ids`` are the originals taken off this canvas; one\nalso placed on other canvases stays there unchanged with its recordings.",
+        "description": "Replace two or more snippets on this canvas with one merged snippet (see\ndocs/features/merge_blocks.md). ``deleted_ids`` are the originals taken off this canvas; one\nalso placed on other canvases stays there unchanged with its recordings.\n\n``merged_id`` (client-chosen) names the merged snippet; retrying the identical merge returns it\nagain, and an id used by any other snippet is 409 ``id_conflict``. ``base_versions``\n({original id: version}) with any stale original is 409 ``version_conflict`` (``current``\nlists the stale originals on this canvas); nothing changes.",
         "operationId": "merge_snippets_api_canvases__canvas_id__merge_post",
         "parameters": [
           {
@@ -4068,6 +4836,24 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SnippetsVersionConflictResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdConflictResponse"
+                    }
+                  ],
+                  "title": "Response 409 Merge Snippets Api Canvases  Canvas Id  Merge Post"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -4195,6 +4981,7 @@
     },
     "/api/canvases/{canvas_id}/snippets": {
       "post": {
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``.",
         "operationId": "create_snippet_api_canvases__canvas_id__snippets_post",
         "parameters": [
           {
@@ -4237,6 +5024,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -4331,7 +5128,7 @@
     },
     "/api/canvases/{canvas_id}/snippets/{snippet_id}": {
       "delete": {
-        "description": "Take the snippet off this canvas; when that was its last canvas it is deleted for good.",
+        "description": "Take the snippet off this canvas; when that was its last canvas it is deleted for good.\n``base_version`` is checked only then (409 ``version_conflict``); off one of several canvases\nit is layout and ignored.",
         "operationId": "remove_snippet_from_canvas_api_canvases__canvas_id__snippets__snippet_id__delete",
         "parameters": [
           {
@@ -4352,6 +5149,25 @@
               "format": "uuid",
               "title": "Snippet Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+            "in": "query",
+            "name": "base_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+              "title": "Base Version"
             }
           }
         ],
@@ -4375,6 +5191,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -5290,7 +6116,7 @@
     },
     "/api/snippets/{snippet_id}": {
       "delete": {
-        "description": "Delete everywhere: the snippet, all its placements and its recordings.",
+        "description": "Delete everywhere: the snippet, all its placements and its recordings. A ``base_version``\nthat is not the snippet's is 409 ``version_conflict`` (``current`` in its oldest placement's\ncanvas).",
         "operationId": "delete_snippet_api_snippets__snippet_id__delete",
         "parameters": [
           {
@@ -5302,11 +6128,40 @@
               "title": "Snippet Id",
               "type": "string"
             }
+          },
+          {
+            "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+            "in": "query",
+            "name": "base_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+              "title": "Base Version"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -5330,7 +6185,7 @@
         ]
       },
       "put": {
-        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id) update the placement on ``canvas_id``.",
+        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id) update the placement on ``canvas_id``. ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
         "operationId": "update_snippet_api_snippets__snippet_id__put",
         "parameters": [
           {
@@ -5385,6 +6240,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -5560,6 +6425,7 @@
     },
     "/api/snippets/{snippet_id}/tags": {
       "post": {
+        "description": "Link; ``version`` is the snippet's afterwards. A ``base_version`` (the snippet's) that is not\ncurrent is 409 ``version_conflict`` with the snippet.",
         "operationId": "add_tag_api_snippets__snippet_id__tags_post",
         "parameters": [
           {
@@ -5583,6 +6449,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TagLinkRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -5603,6 +6486,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -5628,6 +6521,7 @@
     },
     "/api/snippets/{snippet_id}/tags/{tag_id}": {
       "delete": {
+        "description": "Unlink; ``version`` is the snippet's afterwards (200 with a body, so the client learns it).\nA stale ``base_version`` is 409 ``version_conflict`` with the snippet.",
         "operationId": "remove_tag_api_snippets__snippet_id__tags__tag_id__delete",
         "parameters": [
           {
@@ -5649,10 +6543,36 @@
               "title": "Tag Id",
               "type": "string"
             }
+          },
+          {
+            "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+            "in": "query",
+            "name": "base_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+              "title": "Base Version"
+            }
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagLinkResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "404": {
@@ -5664,6 +6584,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnippetVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -5684,6 +6614,33 @@
         "summary": "Remove Tag",
         "tags": [
           "tags"
+        ]
+      }
+    },
+    "/api/sync/snapshot": {
+      "get": {
+        "description": "Everything of the caller's the offline client keeps, as of ``server_time``: canvases, each\nsnippet once (content, version, tag ids), the placements that put snippets on canvases, tags,\ntag presets and the word bank.",
+        "operationId": "snapshot_api_sync_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Snapshot",
+        "tags": [
+          "sync"
         ]
       }
     },
@@ -5931,6 +6888,7 @@
         ]
       },
       "post": {
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same tag; an id used by\na different tag is 409 ``id_conflict``. A taken name stays 409 ``tag_name_taken``.",
         "operationId": "create_tag_api_tags_post",
         "requestBody": {
           "content": {
@@ -5957,7 +6915,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TagErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdConflictResponse"
+                    }
+                  ],
+                  "title": "Response 409 Create Tag Api Tags Post"
                 }
               }
             },
@@ -5998,6 +6964,25 @@
               "title": "Tag Id",
               "type": "string"
             }
+          },
+          {
+            "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+            "in": "query",
+            "name": "base_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the entity version this change is based on; a mismatch is 409 version_conflict",
+              "title": "Base Version"
+            }
           }
         ],
         "responses": {
@@ -6013,6 +6998,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -6036,7 +7031,7 @@
         ]
       },
       "put": {
-        "description": "Rename and/or recolor. A rename rewrites the user's presets that name the tag.",
+        "description": "Rename and/or recolor. A rename rewrites the user's presets that name the tag. A\n``base_version`` that is not the tag's is 409 ``version_conflict``.",
         "operationId": "update_tag_api_tags__tag_id__put",
         "parameters": [
           {
@@ -6085,7 +7080,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TagErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TagVersionConflictResponse"
+                    }
+                  ],
+                  "title": "Response 409 Update Tag Api Tags  Tag Id  Put"
                 }
               }
             },
@@ -6144,7 +7147,7 @@
         ]
       },
       "post": {
-        "description": "Add a batch. One invalid word rejects it (``invalid_word`` + ``index``); words already in the\nbank (ignoring case) come back in ``existing``; ``tag_ids`` are linked to all of them.",
+        "description": "Add a batch. One invalid word rejects it (``invalid_word`` + ``index``); words already in the\nbank (ignoring case) come back in ``existing``; ``tag_ids`` are linked to all of them. A word\ngiven as ``{text, id}`` is created with that client id; retrying the identical add returns it\nin ``created`` again, and an id used by a different word is 409 ``id_conflict`` (nothing added).",
         "operationId": "add_words_api_word_bank_post",
         "requestBody": {
           "content": {
@@ -6177,6 +7180,16 @@
             },
             "description": "Not Found"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6201,7 +7214,7 @@
     },
     "/api/word-bank/delete": {
       "post": {
-        "description": "Ids that are not the user's (or not ids at all) are ignored.",
+        "description": "Ids that are not the user's (or not ids at all) are ignored. Any word of ``base_versions``\nwhose version differs is 409 ``version_conflict`` (``current`` lists those words) and nothing\nis deleted.",
         "operationId": "delete_words_api_word_bank_delete_post",
         "requestBody": {
           "content": {
@@ -6216,6 +7229,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordsVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -6415,7 +7438,7 @@
     },
     "/api/word-bank/tags": {
       "post": {
-        "description": "Link or unlink one tag on many words; idempotent. Any word that is not the user's is a 404\nand nothing changes.",
+        "description": "Link or unlink one tag on many words; idempotent. Any word that is not the user's is a 404\nand nothing changes; so is a stale ``base_versions`` entry (409 ``version_conflict``, ``current``\nlists those words).",
         "operationId": "set_tag_api_word_bank_tags_post",
         "requestBody": {
           "content": {
@@ -6448,6 +7471,16 @@
             },
             "description": "Not Found"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordsVersionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6472,6 +7505,7 @@
     },
     "/api/word-bank/{word_id}": {
       "put": {
+        "description": "A ``base_version`` that is not the word's is 409 ``version_conflict`` with the word.",
         "operationId": "rename_word_api_word_bank__word_id__put",
         "parameters": [
           {
@@ -6520,7 +7554,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WordBankErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WordBankErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WordVersionConflictResponse"
+                    }
+                  ],
+                  "title": "Response 409 Rename Word Api Word Bank  Word Id  Put"
                 }
               }
             },

@@ -12,12 +12,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.sync_errors import conflict_responses, id_conflict_http_error, version_conflict_http_error
 from app.api.tag_errors import expression_http_error, owner_id
 from app.api.word_bank_errors import word_bank_errors, word_bank_http_error
 from app.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.models.word_bank import BankWord
+from app.schemas.sync_errors import IdConflictResponse, WordsVersionConflictResponse, WordVersionConflictResponse
 from app.schemas.tag import SnippetTagResponse
 from app.schemas.word_bank import (
     MAX_ADD_TAGS,
@@ -30,6 +32,7 @@ from app.schemas.word_bank import (
     BankRhymeMatch,
     BankRhymesRequest,
     BankRhymesResponse,
+    BankWordNew,
     BankWordResponse,
     BankWordsCreate,
     BankWordsCreateResponse,
@@ -39,8 +42,11 @@ from app.schemas.word_bank import (
     BankWordUpdate,
     RelatedWordResult,
     RelatedWordsResponse,
+    WordBankErrorResponse,
 )
 from app.services.phonetics import DEFAULT_DIALECT_MAP, PronunciationError, unit_from_text
+from app.services.sync import versions
+from app.services.sync.errors import IdConflictError, VersionConflictError
 from app.services.tag_errors import TagNotFoundError, TagServiceError
 from app.services.tag_expr import Expr, TagExpressionError, parse
 from app.services.word_bank import service
@@ -49,7 +55,7 @@ from app.services.word_bank.families import FamiliesResult, rhyme_families
 from app.services.word_bank.phonetic import PairScorer, PhoneticWord, phonetic_words
 from app.services.word_bank.related import RelatedWords, default_builder
 from app.services.word_bank.rhymes import RhymeMatch, rank_rhymes
-from app.services.word_bank.service import TagOp
+from app.services.word_bank.service import NewWord, TagOp
 from app.services.word_bank.text import related_query, word_text, word_texts
 
 logger = logging.getLogger(__name__)
@@ -114,7 +120,14 @@ def word_response(word: BankWord) -> BankWordResponse:
         text=word.text,
         tags=[SnippetTagResponse(id=str(t.id), name=t.name, color=t.color) for t in tags],
         created_at=word.created_at,
+        version=word.version,
     )
+
+
+def _new_words(items: Sequence[str | BankWordNew]) -> list[NewWord]:
+    """Validated words with their client ids; the first bad text raises InvalidWordError + index."""
+    texts = word_texts([item if isinstance(item, str) else item.text for item in items])
+    return [NewWord(text, None if isinstance(item, str) else item.id) for text, item in zip(texts, items)]
 
 
 def _plain(words: Sequence[BankWord]) -> list[tuple[str, str]]:
@@ -130,54 +143,85 @@ async def list_words(user: User = Depends(get_current_user), db: AsyncSession = 
     return [word_response(w) for w in await service.list_words(db, owner_id(user))]
 
 
-@router.post("", response_model=BankWordsCreateResponse, status_code=201, responses=word_bank_errors(404, 422))
+@router.post(
+    "", response_model=BankWordsCreateResponse, status_code=201,
+    responses={**word_bank_errors(404, 422), **conflict_responses(IdConflictResponse)},
+)
 async def add_words(req: BankWordsCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Add a batch. One invalid word rejects it (``invalid_word`` + ``index``); words already in the
-    bank (ignoring case) come back in ``existing``; ``tag_ids`` are linked to all of them."""
+    bank (ignoring case) come back in ``existing``; ``tag_ids`` are linked to all of them. A word
+    given as ``{text, id}`` is created with that client id; retrying the identical add returns it
+    in ``created`` again, and an id used by a different word is 409 ``id_conflict`` (nothing added)."""
     try:
         _at_most(len(req.words), MAX_ADD_WORDS, "words")
         _at_most(len(req.tag_ids), MAX_ADD_TAGS, "tags")
-        texts = word_texts(req.words)
-        result = await service.add_words(db, owner_id(user), texts, _tag_ids(req.tag_ids))
+        words = _new_words(req.words)
+        result = await service.add_words(db, owner_id(user), words, _tag_ids(req.tag_ids))
     except TagServiceError as exc:
         raise word_bank_http_error(exc) from exc
+    except IdConflictError as exc:
+        raise id_conflict_http_error(exc) from exc
     return BankWordsCreateResponse(
         created=[word_response(w) for w in result.created], existing=[word_response(w) for w in result.existing]
     )
 
 
-@router.put("/{word_id}", response_model=BankWordResponse, responses=word_bank_errors(404, 409, 422))
+@router.put(
+    "/{word_id}", response_model=BankWordResponse,
+    responses={**word_bank_errors(404, 422), **conflict_responses(WordBankErrorResponse, WordVersionConflictResponse)},
+)
 async def rename_word(
     word_id: uuid.UUID, req: BankWordUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
+    """A ``base_version`` that is not the word's is 409 ``version_conflict`` with the word."""
     try:
-        word = await service.rename_word(db, owner_id(user), word_id, word_text(req.text))
+        text = word_text(req.text)
+        await versions.check_word(db, word_id, owner_id(user), req.base_version)
+        word = await service.rename_word(db, owner_id(user), word_id, text)
     except TagServiceError as exc:
         raise word_bank_http_error(exc) from exc
+    except VersionConflictError as exc:
+        raise version_conflict_http_error(exc, word_response) from exc
     return word_response(word)
 
 
-@router.post("/delete", status_code=204, responses=word_bank_errors(422))
+@router.post(
+    "/delete", status_code=204,
+    responses={**word_bank_errors(422), **conflict_responses(WordsVersionConflictResponse)},
+)
 async def delete_words(req: BankWordsDelete, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Ids that are not the user's (or not ids at all) are ignored."""
+    """Ids that are not the user's (or not ids at all) are ignored. Any word of ``base_versions``
+    whose version differs is 409 ``version_conflict`` (``current`` lists those words) and nothing
+    is deleted."""
     try:
         _at_most(len(req.ids), MAX_IDS, "ids")
+        await versions.check_words(db, owner_id(user), req.base_versions)
     except TagServiceError as exc:
         raise word_bank_http_error(exc) from exc
+    except VersionConflictError as exc:
+        raise version_conflict_http_error(exc, word_response) from exc
     ids = [i for i in (_uuid(v) for v in req.ids) if i is not None]
     await service.delete_words(db, owner_id(user), ids)
 
 
-@router.post("/tags", response_model=BankWordsResponse, responses=word_bank_errors(404, 422))
+@router.post(
+    "/tags", response_model=BankWordsResponse,
+    responses={**word_bank_errors(404, 422), **conflict_responses(WordsVersionConflictResponse)},
+)
 async def set_tag(req: BankWordTagsUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Link or unlink one tag on many words; idempotent. Any word that is not the user's is a 404
-    and nothing changes."""
+    and nothing changes; so is a stale ``base_versions`` entry (409 ``version_conflict``, ``current``
+    lists those words)."""
     try:
         _at_most(len(req.word_ids), MAX_IDS, "ids")
         (tag_id,) = _tag_ids([req.tag_id])
-        words = await service.set_tag(db, owner_id(user), _word_ids(req.word_ids), tag_id, TagOp(req.op))
+        word_ids = _word_ids(req.word_ids)
+        await versions.check_words(db, owner_id(user), req.base_versions)
+        words = await service.set_tag(db, owner_id(user), word_ids, tag_id, TagOp(req.op))
     except TagServiceError as exc:
         raise word_bank_http_error(exc) from exc
+    except VersionConflictError as exc:
+        raise version_conflict_http_error(exc, word_response) from exc
     return BankWordsResponse(words=[word_response(w) for w in words])
 
 

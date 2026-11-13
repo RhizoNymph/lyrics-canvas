@@ -64,9 +64,9 @@ canvas, so the owner's other canvas titles are not exposed through the link.
 
 | Schema | Fields |
 |--------|--------|
-| `CanvasCreate` | title (default: "Untitled Canvas"; stripped, empty → default, > 255 → 422 `invalid_canvas_title`) |
-| `CanvasUpdate` | title? (stripped, 1-255 code points else 422 `invalid_canvas_title`), is_public?, viewport_state? |
-| `CanvasResponse` | id, owner_id, title, is_public, share_token, viewport_state, timestamps |
+| `CanvasCreate` | id? (client-chosen UUID), title (default: "Untitled Canvas"; stripped, empty → default, > 255 → 422 `invalid_canvas_title`) |
+| `CanvasUpdate` | title? (stripped, 1-255 code points else 422 `invalid_canvas_title`), is_public?, viewport_state?, base_version? (checked only with title) |
+| `CanvasResponse` | id, owner_id, title, is_public, share_token, viewport_state, timestamps, version (+1 per title change) |
 | `CanvasDetailResponse` | extends CanvasResponse + `snippets: list[SnippetResponse]`, `groups: list[GroupResponse]` (no `tags` list since tags became user-wide) |
 | `ShareResponse` | share_token |
 
@@ -78,11 +78,11 @@ canvas, so the owner's other canvas titles are not exposed through the link.
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
 | GET | `/` | Bearer | List user's canvases | 200 |
-| POST | `/` | Bearer | Create canvas (title validated) | 201/422 |
+| POST | `/` | Bearer | Create canvas (title validated; optional client `id`, idempotent) | 201/409/422 |
 | GET | `/shared/{token}` | - | Get public canvas by share token (`CanvasDetailResponse`) | 200/404 |
 | GET | `/{id}` | Bearer | Get canvas with all children (`CanvasDetailResponse`) | 200/404 |
-| PUT | `/{id}` | Bearer | Update canvas metadata / rename (title validated) | 200/404/422 |
-| DELETE | `/{id}` | Bearer | Delete canvas: placements and groups, then snippets left with no placement | 204/404 |
+| PUT | `/{id}` | Bearer | Update canvas metadata / rename (title validated; `base_version` with a title) | 200/404/409/422 |
+| DELETE | `/{id}?base_version=` | Bearer | Delete canvas: placements and groups, then snippets left with no placement | 204/404/409 |
 | POST | `/{id}/share` | Bearer | Generate share token (`ShareResponse`) | 200/404 |
 | POST | `/{id}/fork` | Bearer | Fork public canvas | 201/404 |
 
@@ -167,15 +167,17 @@ height = lines * 22 + 52              (min: 80)
 
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
-| POST | `/api/canvases/{id}/snippets` | Bearer | Create snippet + placement (syllabifies unless `grid_data` is given; auto-sizes) | 201/404/422 |
-| PUT | `/api/snippets/{id}?canvas_id={cid}` | Bearer | Update: content on the snippet, layout on the `cid` placement (re-syllabifies if text changes; bumps `content_updated_at` only for a real content edit); `canvas_id` required | 200/404/422 |
-| DELETE | `/api/snippets/{id}` | Bearer | Delete everywhere (all placements, recordings) | 204/404 |
-| DELETE | `/api/canvases/{cid}/snippets/{sid}` | Bearer | Remove from this canvas (`{"snippet_deleted": bool}`) | 200/404 |
+| POST | `/api/canvases/{id}/snippets` | Bearer | Create snippet + placement (syllabifies unless `grid_data` is given; auto-sizes; optional client `id`, idempotent) | 201/404/409/422 |
+| PUT | `/api/snippets/{id}?canvas_id={cid}` | Bearer | Update: content on the snippet, layout on the `cid` placement (re-syllabifies if text changes; bumps `content_updated_at` and `version` only for a real content edit; `base_version` checked only with a content field); `canvas_id` required | 200/404/409/422 |
+| DELETE | `/api/snippets/{id}?base_version=` | Bearer | Delete everywhere (all placements, recordings) | 204/404/409 |
+| DELETE | `/api/canvases/{cid}/snippets/{sid}?base_version=` | Bearer | Remove from this canvas (`{"snippet_deleted": bool}`; `base_version` checked only for the last placement) | 200/404/409 |
 | PATCH | `/api/snippets/batch-position` | Bearer | Batch update positions on `canvas_id` (required) (`BatchPositionResult`) | 200/422 |
 | POST | `/api/canvases/{cid}/snippets/transfer` | Bearer | Move / also show snippets on another canvas (`TransferResponse`) | 200/404/422 |
-| POST | `/api/canvases/{id}/merge` | Bearer | Replace 2+ snippets on this canvas with one merged snippet (`MergeResponse`) | 200/404/422/500 |
+| POST | `/api/canvases/{id}/merge` | Bearer | Replace 2+ snippets on this canvas with one merged snippet (`MergeResponse`; optional `merged_id`, `base_versions`) | 200/404/409/422/500 |
 
-Create and PUT return `SnippetResponse`. Placement errors use the typed
+Create and PUT return `SnippetResponse`, which carries `version` (the content version). The
+`version`, `base_version`, client `id` rules and the 409 `version_conflict` / `id_conflict` bodies
+are in [sync_versions.md](../features/sync_versions.md). Placement errors use the typed
 `{"detail": {"error", "message"}}` body (`placement_not_found`, `canvas_not_found`, `same_canvas`,
 `group_not_found`, `invalid_canvas_title`).
 

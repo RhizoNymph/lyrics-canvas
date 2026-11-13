@@ -35,7 +35,8 @@ the other parts have their own feature docs:
   half, a late tap) or after it (second half); without taps an automatic split by
   pause length, syllable balance and end rhyme (phonetic engine), or a single line.
 - Append keeps the existing (possibly hand-arranged) grid lines verbatim, syllabifies only the new
-  lines, reuses a blank trailing line, recomputes phonetics and size, bumps `content_updated_at`.
+  lines, reuses a blank trailing line, recomputes phonetics and size, bumps `content_updated_at`
+  and the snippet's content `version` ([sync_versions.md](./sync_versions.md)).
   The target must be placed on the take's canvas; the content is shared by every canvas holding the
   snippet, the new size goes to the take canvas's placement only
   ([snippet_placements.md](./snippet_placements.md#voice-takes)). A new take is placed on the take's

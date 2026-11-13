@@ -39,7 +39,9 @@ one implementation; the client only sends the selected ids and the mode and swap
 
 ```jsonc
 // POST /api/canvases/{canvas_id}/merge   (Bearer)
-{ "snippet_ids": ["uuid", "uuid"], "mode": "vertical" | "horizontal" }
+{ "snippet_ids": ["uuid", "uuid"], "mode": "vertical" | "horizontal",
+  "merged_id": "uuid",                     // optional: client-chosen id of the merged snippet
+  "base_versions": { "uuid": 3, ... } }    // optional: {original id: version}
 // 200
 { "snippet": SnippetResponse, "deleted_ids": ["uuid", ...] }
 ```
@@ -48,10 +50,17 @@ one implementation; the client only sends the selected ids and the mode and swap
 |---|---|
 | 200 | merged; `deleted_ids` = the originals in merge order, all removed from this canvas (deleted, or still on their other canvases) |
 | 404 `Snippet not found` | any id is not a snippet placed on this canvas (or the canvas is not the caller's) |
+| 409 `version_conflict` | an original in `base_versions` is at another version; `current` lists the stale originals (`SnippetResponse` on this canvas, request order); nothing changed |
+| 409 `id_conflict` | `merged_id` names a snippet that is not the result of this merge (another user's, not on this canvas, or the originals are still here) |
 | 422 | fewer than two distinct ids, an id that is not a UUID, a missing or unknown `mode` |
 | 500 `could not store the merge; nothing changed` | the transaction failed and was rolled back |
 
 Repeated ids are de-duplicated (first occurrence kept) before the two-id minimum is checked.
+
+The merged snippet starts at `version` 1; originals kept on other canvases keep their version (they
+only lose a placement). Retrying an identical merge with the same `merged_id` returns the merged
+snippet with `deleted_ids` = the requested ids in request order. See
+[sync_versions.md](./sync_versions.md).
 
 ## Position order
 
@@ -194,6 +203,8 @@ transaction a merge either fully happens or does not happen.
 
 ## Invariants and constraints
 
+- A version conflict (`base_versions`) or id conflict (`merged_id`) is decided before anything is
+  written.
 - All or nothing: the merged snippet and its placement, its tag links, the move of the deleted
   originals' recordings and the removal of every original from this canvas commit together in one
   transaction; any failure (missing id, validation, database error) leaves the canvas unchanged.

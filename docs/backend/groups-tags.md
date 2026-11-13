@@ -125,9 +125,9 @@ the tag and the word belong to the same user. Words are typeless subjects of tag
 |--------|--------|
 | `TagCreate` | name, color (default `"#6366f1"`) |
 | `TagUpdate` | name?, color? |
-| `TagResponse` | id, name, color, snippet_count, word_count, created_at |
+| `TagResponse` | id, name, color, snippet_count, word_count, created_at, version (+1 per name or color change) |
 | `SnippetTagResponse` | id, name, color (embedded in `SnippetResponse.tags`) |
-| `TagLinkResponse` | ok |
+| `TagLinkResponse` | ok, version (the snippet's version after the link or unlink) |
 | `TagPresetCreate` / `TagPresetUpdate` | name, expression / name?, expression? |
 | `TagPresetResponse` | id, name, expression (normalized), created_at, updated_at |
 | `TagErrorResponse` | `detail: {error, message, expression_error?: {code, position, message}}` |
@@ -139,15 +139,17 @@ the tag and the word belong to the same user. Words are typeless subjects of tag
 | Method | Path | Auth | Purpose | Status |
 |--------|------|------|---------|--------|
 | GET | `/api/tags` | Bearer | The user's tags (`TagResponse[]`) | 200 |
-| POST | `/api/tags` | Bearer | Create tag (`TagResponse`) | 201/409/422 |
-| PUT | `/api/tags/{id}` | Bearer | Rename/recolor (`TagResponse`); rename rewrites presets | 200/404/409/422 |
-| DELETE | `/api/tags/{id}` | Bearer | Delete tag and its snippet and word bank links | 204/404 |
-| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Link (`TagLinkResponse` `{"ok": true}`) | 200/404 |
-| DELETE | `/api/snippets/{id}/tags/{tag_id}` | Bearer | Unlink | 204/404 |
+| POST | `/api/tags` | Bearer | Create tag (`TagResponse`; optional client `id`, idempotent) | 201/409/422 |
+| PUT | `/api/tags/{id}` | Bearer | Rename/recolor (`TagResponse`); rename rewrites presets; optional `base_version` | 200/404/409/422 |
+| DELETE | `/api/tags/{id}?base_version=` | Bearer | Delete tag and its snippet and word bank links (no snippet or word version bump) | 204/404/409 |
+| POST | `/api/snippets/{id}/tags?tag_id=` | Bearer | Link (`TagLinkResponse` `{"ok": true, "version": n}`); optional body `{base_version}` (the snippet's) | 200/404/409 |
+| DELETE | `/api/snippets/{id}/tags/{tag_id}?base_version=` | Bearer | Unlink (`TagLinkResponse`, was 204) | 200/404/409 |
 | GET | `/api/tag-presets` | Bearer | The user's presets (`TagPresetResponse[]`) | 200 |
 | POST | `/api/tag-presets` | Bearer | Create preset | 201/409/422 |
 | PUT | `/api/tag-presets/{id}` | Bearer | Update preset | 200/404/409/422 |
 | DELETE | `/api/tag-presets/{id}` | Bearer | Delete preset | 204/404 |
 
 `POST /api/canvases/{id}/tags` was removed, and so was the `tags` list on the canvas detail response.
-`add_tag` still takes `tag_id` as a query parameter.
+`add_tag` still takes `tag_id` as a query parameter. A link or unlink that changes a snippet's tags
+bumps that snippet's `version`; `version`, `base_version`, client ids and the 409 bodies are in
+[sync_versions.md](../features/sync_versions.md).

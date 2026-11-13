@@ -35,7 +35,7 @@ def preset(name: str = "Dark", expression: str = "night & !love"):
 
 
 def tag_json(t: TagSummary) -> dict:
-    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at)}
+    return {"id": str(t.id), "name": t.name, "color": t.color, "snippet_count": t.snippet_count, "word_count": t.word_count, "created_at": str(t.created_at), "version": t.version}
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def test_list_tags(client, monkeypatch):
     res = client.get("/api/tags")
     assert res.status_code == 200
     assert res.json() == [tag_json(LOVE), tag_json(NIGHT)]
-    assert list(res.json()[0]) == ["id", "name", "color", "snippet_count", "word_count", "created_at"]
+    assert list(res.json()[0]) == ["id", "name", "color", "snippet_count", "word_count", "created_at", "version"]
     assert seen == [(USER_ID,)]
 
 
@@ -150,11 +150,13 @@ def test_delete_tag(client, monkeypatch):
 def test_link_and_unlink(client, monkeypatch):
     snippet = uuid.uuid4()
     seen: list = []
-    fake(monkeypatch, tag_service, "add_tag_to_snippet", None, seen=seen)
-    fake(monkeypatch, tag_service, "remove_tag_from_snippet", None, seen=seen)
+    # the services return the snippet's version after the change (docs/features/sync_versions.md)
+    fake(monkeypatch, tag_service, "add_tag_to_snippet", 2, seen=seen)
+    fake(monkeypatch, tag_service, "remove_tag_from_snippet", 3, seen=seen)
     res = client.post(f"/api/snippets/{snippet}/tags", params={"tag_id": str(LOVE.id)})
-    assert res.status_code == 200 and res.json() == {"ok": True}
-    assert client.delete(f"/api/snippets/{snippet}/tags/{LOVE.id}").status_code == 204
+    assert res.status_code == 200 and res.json() == {"ok": True, "version": 2}
+    res = client.delete(f"/api/snippets/{snippet}/tags/{LOVE.id}")
+    assert res.status_code == 200 and res.json() == {"ok": True, "version": 3}
     assert seen == [(snippet, LOVE.id, USER_ID), (snippet, LOVE.id, USER_ID)]
 
 

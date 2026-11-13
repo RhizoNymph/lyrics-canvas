@@ -27,3 +27,7 @@ then commit `docs/api/openapi.json` with the change.
 - Datetimes are strings in Python `str(datetime)` form (`2026-09-30 12:00:00.123456+00:00`), not ISO `T`.
 - `RhymeGridCellModel` / `RhymeGridLineModel` are the rhyme-suggest variants: they always emit every
   field, unset ones as null.
+- Offline sync ([sync_versions.md](../features/sync_versions.md)): `version` is required on the
+  snippet, canvas, tag, word and tag-link responses; a route whose 409 can be more than one body
+  (e.g. `tag_name_taken` or `version_conflict`) declares them as `anyOf`; `*VersionConflictResponse`
+  models type `current` per entity (a list for the bulk word endpoints and merge).

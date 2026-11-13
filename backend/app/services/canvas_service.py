@@ -23,6 +23,7 @@ from app.services.canvas_title import CanvasTitle, fork_title
 from app.services.placements.queries import placed_on_canvas
 from app.services.placements.removal import delete_orphans, lock_snippets
 from app.services.placements.view import CanvasRef, PlacedSnippet
+from app.services.sync.bump import bump
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,16 @@ class CanvasDetail:
     def updated_at(self) -> datetime:
         return self.canvas.updated_at
 
+    @property
+    def version(self) -> int:
+        return self.canvas.version
 
-async def create_canvas(db: AsyncSession, owner_id: str, title: CanvasTitle) -> Canvas:
-    canvas = Canvas(owner_id=uuid.UUID(owner_id), title=title)
+
+async def create_canvas(
+    db: AsyncSession, owner_id: str, title: CanvasTitle, *, canvas_id: uuid.UUID | None = None
+) -> Canvas:
+    """A new canvas; ``canvas_id`` is a client-chosen id (app/services/sync/client_ids.py resolves retries)."""
+    canvas = Canvas(id=canvas_id or uuid.uuid4(), owner_id=uuid.UUID(owner_id), title=title)
     db.add(canvas)
     await db.commit()
     await db.refresh(canvas)
@@ -105,13 +113,17 @@ async def get_canvas(db: AsyncSession, canvas_id: str, owner_id: str | None = No
 
 
 async def update_canvas(db: AsyncSession, canvas_id: str, owner_id: str, **kwargs) -> Canvas | None:
-    """Set the given non-None fields; a ``title`` must already be validated (canvas_title)."""
+    """Set the given non-None fields; a ``title`` must already be validated (canvas_title). A new
+    title bumps the version (docs/features/sync_versions.md#versions); viewport and sharing do not."""
     canvas = await _canvas(db, uuid.UUID(canvas_id), uuid.UUID(owner_id))
     if not canvas:
         return None
+    retitled = kwargs.get("title") is not None and kwargs["title"] != canvas.title
     for key, value in kwargs.items():
         if value is not None:
             setattr(canvas, key, value)
+    if retitled:
+        bump(canvas)
     await db.commit()
     await db.refresh(canvas)
     return canvas

@@ -59,6 +59,7 @@ User 1──N TagPreset  (saved tag expressions, ON DELETE CASCADE)
 | `id` | UUID | uuid4 | PK |
 | `owner_id` | UUID | - | FK -> users.id, NOT NULL |
 | `title` | String(255) | "Untitled Canvas" | |
+| `version` | Integer, NOT NULL, ≥ 1 | 1 | Content version: +1 per title change ([sync_versions](../features/sync_versions.md)) |
 | `is_public` | Boolean | False | |
 | `share_token` | String(64) | null | UNIQUE |
 | `viewport_state` | JSONB | `{x:0, y:0, zoom:1}` | |
@@ -87,6 +88,7 @@ explicitly, then the snippets left with no placement.
 | `created_at` | DateTime(tz) | now() | |
 | `updated_at` | DateTime(tz) | now() | Auto-updates on every write to the row (layout is on the placement and does not move it) |
 | `content_updated_at` | DateTime(tz), NOT NULL | now() | Last content edit (text, type, grid); bumped by `snippet_service.update_snippet` (content edits) and `recording_service.append_with_recording` (voice-take append), never by layout or tags. See [snippet_content_timestamp](../features/snippet_content_timestamp.md) |
+| `version` | Integer, NOT NULL, ≥ 1 | 1 | Content version: +1 per change of text, type, grid mode, beats, grid or tag links; never layout or phonetics alone ([sync_versions](../features/sync_versions.md)) |
 
 Relationships: `placements` (1:N, passive deletes, `lazy="raise"`), `tags` (N:M via snippet_tags),
 `embedding` (1:1, cascade)
@@ -143,6 +145,7 @@ Relationships: `canvas`, `placements` (1:N via `snippet_placements.group_id`; th
 | `name` | String(100) | - | unique per user ignoring case |
 | `color` | String(7) | #6366f1 | `#rrggbb` |
 | `created_at` | DateTime(tz) | now() | |
+| `version` | Integer, NOT NULL, ≥ 1 | 1 | +1 per name or color change ([sync_versions](../features/sync_versions.md)) |
 
 Index: `uq_tags_user_lower_name` UNIQUE `(user_id, lower(name))`
 
@@ -173,6 +176,7 @@ Relationships: `snippets` (N:M via snippet_tags)
 | `user_id` | UUID | - | FK -> users.id, ON DELETE CASCADE; index `ix_bank_words_user_id` |
 | `text` | String(64) | - | normalized word or phrase, case kept; unique per user ignoring case (`uq_bank_words_user_lower_text`) |
 | `created_at` | DateTime(tz) | now() | |
+| `version` | Integer, NOT NULL, ≥ 1 | 1 | +1 per text change and per tag link or unlink ([sync_versions](../features/sync_versions.md)) |
 
 **Junction table:** `bank_word_tags(bank_word_id, tag_id)` with CASCADE deletes on both FKs.
 
@@ -297,6 +301,12 @@ another canvas is dropped), adds `snippets.owner_id` from the canvas owner, then
 the columns from each snippet's oldest placement and turns every other placement into a duplicated
 snippet row (content and tag links copied, recordings not), then drops `owner_id` and the table. Details:
 [snippet_placements.md](../features/snippet_placements.md#migration-008).
+
+**File:** `alembic/versions/009_content_versions.py`
+
+Adds `version INTEGER NOT NULL DEFAULT 1` with `ck_<table>_version_positive CHECK (version >= 1)` to
+`snippets`, `canvases`, `tags` and `bank_words` (existing rows get 1). The downgrade drops the
+constraints and columns. Details: [sync_versions.md](../features/sync_versions.md#migration-009).
 
 ### Running Migrations
 

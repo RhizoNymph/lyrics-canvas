@@ -97,6 +97,19 @@ opens a full-screen Check transcript screen (player, tappable timed Whisper word
 the recording only), and the canvas list overflow shows the voice dataset stats (export stays on web). See
 [voice_capture.md](./features/voice_capture.md) and [voice_dataset.md](./features/voice_dataset.md).
 
+### Offline Sync (backend)
+Snippets, canvases, tags and word bank words carry a content **`version`** (migration 009): it starts
+at 1 and goes up by exactly 1 with each content change (a snippet's text, type, grid mode, beats,
+grid or tag links; a canvas title; a tag's name or color; a word's text or tags), never with layout,
+viewport, placements or recomputed phonetics. Content mutations take an optional **`base_version`**
+(per-entity `base_versions` on the bulk word endpoints and merge); a stale one is 409
+`version_conflict` with the server's `current` entity (a list for the bulk endpoints) and nothing
+changes. Creates take an optional client-chosen **`id`** (`merged_id` for merge; `{text, id}` word
+items), so retries are idempotent; an id used by something else is 409 `id_conflict`.
+`GET /api/sync/snapshot` returns all of a user's canvases, placements, snippets (once each, with
+`tag_ids`), tags, presets and words in one consistent read. Without the new fields every route
+behaves as before, so the web client is unchanged. See [sync_versions.md](./features/sync_versions.md).
+
 ### Offline Copy (Android)
 The Android app keeps a local copy of the user's canvases, snippets, tags, presets and word bank and
 works from it, online or not: every edit is saved on the phone first, queued, and synced as soon as the
@@ -147,6 +160,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Web Snippet Placements](./features/web_snippet_placements.md) | Web canvas rename (list card pencil, header title) and snippet placements: typed placement API with `canvas_id` on every layout save, Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and canvases popover, editor "Also on", undo/redo rule for non-undoable cross-canvas operations |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
+| [Sync Versions](./features/sync_versions.md) | Offline sync backend: content versions (migration 009), `base_version` checks and 409 `version_conflict` with `current`, client-chosen ids on creates and 409 `id_conflict`, `GET /api/sync/snapshot` |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
@@ -217,6 +231,8 @@ User 1──N Canvas 1──N SnippetPlacement N──1 Snippet N──M Tag N�
 
 User 1──N TagPreset (named, normalized tag expressions)
 User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
+
+Snippet, Canvas, Tag, BankWord: version (content version, +1 per content change; migration 009)
 ```
 
 ## API Surface
@@ -234,8 +250,9 @@ User 1──N BankWord N──M Tag (bank_word_tags; same user-wide tags)
 | Export | 1 (text/md/pdf) | Bearer |
 | Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
+| Sync | 1 (snapshot) | Bearer |
 | Health | 1 | Public |
-| **Total** | **57 endpoints** | |
+| **Total** | **58 endpoints** | |
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -708,3 +725,16 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/Routes.kt (CanvasRoute.focusSnippetId)
     depends_on: [rest_marks, global_search, android_app, android_tag_expressions, grid_rearrange, list_mode]
     doc: docs/features/android_rests_and_search.md
+  sync_versions:
+    description: Backend of the Android offline copy. Migration 009 adds version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1) to snippets, canvases, tags and bank_words (downgrade drops them). A version starts at 1 (also on freshly constructed ORM objects) and is bumped by exactly 1, as a SQL expression, in the transaction of each content change - snippet raw_text / snippet_type / grid_mode / beats_per_line / grid_data (PUT, once per PUT, only when the stored value changes), voice-take append, tag link or unlink that changes its tags (updated_at kept); canvas title; tag name or color; word text, tag link or unlink (bulk tags, or tag_ids on an add linking an existing word). Never on layout, batch-position, transfer, placements, viewport, sharing, phonetics-only recomputes, or deleting / renaming a tag. version is on SnippetResponse (canvas detail, merge, voice takes), CanvasResponse, TagResponse, BankWordResponse and TagLinkResponse (the snippet's; unlink now answers 200 {ok, version} instead of 204). Optional base_version on PUT snippet (body; only with a content field), DELETE snippet everywhere and remove from canvas (query; remove checks only the last placement), PUT / DELETE canvas (PUT only with title), tag link (optional body) / unlink (query, both against the snippet), PUT / DELETE tag, PUT word; base_versions {id: version} on word bulk delete / bulk tags and merge. A mismatch is 409 {detail:{error:"version_conflict", message, current}} - current is the entity's response object (SnippetResponse on the canvas in context, else its oldest placement's canvas; CanvasResponse; TagResponse; BankWordResponse) or a list for the bulk endpoints and merge - with nothing changed; the check takes the row lock in the route's session before the guarded service call. Optional client ids on POST canvases / snippets / tags, word bank add items {text, id}, merge merged_id - an identical retry returns the existing row with the normal status, another user's row or a different payload is 409 id_conflict, a malformed id 422; tag_name_taken and word-bank existing unchanged. GET /api/sync/snapshot - server_time, canvases, placements, snippets (content fields + version + tag_ids, once each), tags, tag_presets, word_bank - in one REPEATABLE READ READ ONLY transaction, one query per table. The web client needs no change.
+    entry_points:
+      - backend/alembic/versions/009_content_versions.py
+      - backend/app/models/versioned.py
+      - backend/app/services/sync/ (errors, bump, versions, client_ids, snapshot)
+      - backend/app/api/sync.py (GET /api/sync/snapshot)
+      - backend/app/api/sync_errors.py
+      - backend/app/schemas/sync.py, sync_errors.py, versioning.py
+      - backend/app/api/canvases.py, snippets.py, placements.py, tags.py, word_bank.py, merge.py (base_version, client ids)
+      - backend/app/services/snippet_service.py, canvas_service.py, tag_service.py, recording_service.py, word_bank/service.py (bumps)
+    depends_on: [snippet_placements, tag_expressions, word_bank, merge_blocks, voice_capture, snippet_content_timestamp]
+    doc: docs/features/sync_versions.md

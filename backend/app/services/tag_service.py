@@ -2,6 +2,10 @@
 
 Every operation is scoped to ``owner_id``: a tag, snippet or preset of another user is reported as
 not found. Failures are the typed errors of app/services/tag_errors.py.
+
+Content versions (docs/features/sync_versions.md#versions): a name or color change bumps the tag;
+a link or unlink that changes a snippet's tags bumps the snippet. Deleting or renaming a tag bumps
+no snippet or word.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +31,7 @@ from app.services.tag_errors import (
     TagNotFoundError,
 )
 from app.services.tag_expr import MAX_LENGTH, TagExpressionError, rename_tag
+from app.services.sync.bump import bump
 from app.services.tag_values import TagColor, TagName
 
 logger = logging.getLogger(__name__)
@@ -42,6 +47,7 @@ class TagSummary:
     snippet_count: int
     created_at: datetime
     word_count: int = 0
+    version: int = 1
 
 
 def _counted():
@@ -52,11 +58,12 @@ def _counted():
 
 
 def _to_summary(tag: Tag, snippet_count: int, word_count: int) -> TagSummary:
-    return TagSummary(tag.id, tag.name, tag.color, snippet_count, tag.created_at, word_count)
+    return TagSummary(tag.id, tag.name, tag.color, snippet_count, tag.created_at, word_count, tag.version)
 
 
-async def _summary(db: AsyncSession, tag_id: uuid.UUID) -> TagSummary:
-    result = await db.execute(_counted().where(Tag.id == tag_id))
+async def summary(db: AsyncSession, tag_id: uuid.UUID) -> TagSummary:
+    """The tag with its counts, read fresh (the tag must exist)."""
+    result = await db.execute(_counted().where(Tag.id == tag_id).execution_options(populate_existing=True))
     return _to_summary(*result.one())
 
 
@@ -68,12 +75,33 @@ async def _owned_tag(db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID) -
     return tag
 
 
-async def _owned_snippet_exists(db: AsyncSession, snippet_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+async def _locked_snippet_version(db: AsyncSession, snippet_id: uuid.UUID, owner_id: uuid.UUID) -> int:
+    """The snippet's version, its row locked until commit so concurrent links serialize; raises
+    SnippetNotFoundError when it is not the user's."""
     result = await db.execute(
-        select(Snippet.id).where(Snippet.id == snippet_id, Snippet.owner_id == owner_id)
+        select(Snippet.version).where(Snippet.id == snippet_id, Snippet.owner_id == owner_id).with_for_update()
     )
-    if result.scalar_one_or_none() is None:
+    version = result.scalar_one_or_none()
+    if version is None:
         raise SnippetNotFoundError(f"snippet {snippet_id} not found")
+    return version
+
+
+def _link_exists(snippet_id: uuid.UUID, tag_id: uuid.UUID):
+    return exists().where(snippet_tags.c.snippet_id == snippet_id, snippet_tags.c.tag_id == tag_id)
+
+
+async def _bump_if(db: AsyncSession, snippet_id: uuid.UUID, condition) -> int | None:
+    """``version + 1`` when ``condition`` holds (the link is about to change); the new version, or
+    None when nothing changed. ``updated_at`` is kept: tag links never touched it."""
+    result = await db.execute(
+        update(Snippet)
+        .where(Snippet.id == snippet_id, condition)
+        .values(version=Snippet.version + 1, updated_at=Snippet.updated_at)
+        .returning(Snippet.version)
+        .execution_options(synchronize_session=False)
+    )
+    return result.scalar_one_or_none()
 
 
 async def _name_taken(db: AsyncSession, owner_id: uuid.UUID, name: str, except_id: uuid.UUID | None = None) -> bool:
@@ -97,34 +125,45 @@ async def list_tags(db: AsyncSession, owner_id: uuid.UUID) -> list[TagSummary]:
     return [_to_summary(*row) for row in result.all()]
 
 
-async def create_tag(db: AsyncSession, owner_id: uuid.UUID, name: TagName, color: TagColor) -> TagSummary:
+async def create_tag(
+    db: AsyncSession, owner_id: uuid.UUID, name: TagName, color: TagColor, *, tag_id: uuid.UUID | None = None
+) -> TagSummary:
+    """A new tag; ``tag_id`` is a client-chosen id (app/services/sync/client_ids.py resolves retries)."""
     if await _name_taken(db, owner_id, name):
         raise TagNameTakenError(f"a tag named {name!r} already exists")
-    tag = Tag(user_id=owner_id, name=name, color=color)
+    tag = Tag(id=tag_id or uuid.uuid4(), user_id=owner_id, name=name, color=color)
     db.add(tag)
     await _commit_or_name_taken(db, name)
     logger.info("tag.created user_id=%s tag_id=%s", owner_id, tag.id)
-    return await _summary(db, tag.id)
+    return await summary(db, tag.id)
 
 
 async def update_tag(
     db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID, name: TagName | None, color: TagColor | None
 ) -> TagSummary:
     """Change name and/or color. A rename rewrites every preset of the user that names the tag,
-    in the same transaction; if any rewritten preset would exceed the length limit, nothing changes."""
+    in the same transaction; if any rewritten preset would exceed the length limit, nothing changes.
+    A change of name or color bumps the tag's version once."""
     tag = await _owned_tag(db, tag_id, owner_id)
     rewritten = 0
     renamed = name is not None and name != tag.name
+    recolored = color is not None and color != tag.color
     if name is not None and renamed:
         if await _name_taken(db, owner_id, name, except_id=tag.id):
             raise TagNameTakenError(f"a tag named {name!r} already exists")
         rewritten = await _rewrite_presets(db, owner_id, tag.name, name)
         tag.name = name
-    if color is not None:
+    if color is not None and recolored:
         tag.color = color
-    await _commit_or_name_taken(db, tag.name)
-    logger.info("tag.updated user_id=%s tag_id=%s renamed=%s presets_rewritten=%d", owner_id, tag_id, renamed, rewritten)
-    return await _summary(db, tag_id)
+    stored_name = tag.name
+    if renamed or recolored:
+        bump(tag)
+    await _commit_or_name_taken(db, stored_name)
+    logger.info(
+        "tag.updated user_id=%s tag_id=%s renamed=%s recolored=%s presets_rewritten=%d",
+        owner_id, tag_id, renamed, recolored, rewritten,
+    )
+    return await summary(db, tag_id)
 
 
 async def _rewrite_presets(db: AsyncSession, owner_id: uuid.UUID, old: str, new: str) -> int:
@@ -157,19 +196,27 @@ async def delete_tag(db: AsyncSession, tag_id: uuid.UUID, owner_id: uuid.UUID) -
     logger.info("tag.deleted user_id=%s tag_id=%s", owner_id, tag_id)
 
 
-async def add_tag_to_snippet(db: AsyncSession, snippet_id: uuid.UUID, tag_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    """Link a tag to a snippet; both must belong to the user. Linking twice is a no-op."""
-    await _owned_snippet_exists(db, snippet_id, owner_id)
+async def add_tag_to_snippet(db: AsyncSession, snippet_id: uuid.UUID, tag_id: uuid.UUID, owner_id: uuid.UUID) -> int:
+    """Link a tag to a snippet; both must belong to the user. Linking twice is a no-op. A new link
+    bumps the snippet's version; returns the snippet's version after the commit."""
+    current = await _locked_snippet_version(db, snippet_id, owner_id)
     await _owned_tag(db, tag_id, owner_id)
+    bumped = await _bump_if(db, snippet_id, ~_link_exists(snippet_id, tag_id))
     await db.execute(insert(snippet_tags).values(snippet_id=snippet_id, tag_id=tag_id).on_conflict_do_nothing())
     await db.commit()
+    logger.debug("tag.linked snippet_id=%s tag_id=%s changed=%s", snippet_id, tag_id, bumped is not None)
+    return current if bumped is None else bumped
 
 
-async def remove_tag_from_snippet(db: AsyncSession, snippet_id: uuid.UUID, tag_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    """Unlink; both must belong to the user. Unlinking a tag the snippet does not carry is a no-op."""
-    await _owned_snippet_exists(db, snippet_id, owner_id)
+async def remove_tag_from_snippet(db: AsyncSession, snippet_id: uuid.UUID, tag_id: uuid.UUID, owner_id: uuid.UUID) -> int:
+    """Unlink; both must belong to the user. Unlinking a tag the snippet does not carry is a no-op.
+    A removed link bumps the snippet's version; returns the snippet's version after the commit."""
+    current = await _locked_snippet_version(db, snippet_id, owner_id)
     await _owned_tag(db, tag_id, owner_id)
+    bumped = await _bump_if(db, snippet_id, _link_exists(snippet_id, tag_id))
     await db.execute(
         snippet_tags.delete().where(snippet_tags.c.snippet_id == snippet_id, snippet_tags.c.tag_id == tag_id)
     )
     await db.commit()
+    logger.debug("tag.unlinked snippet_id=%s tag_id=%s changed=%s", snippet_id, tag_id, bumped is not None)
+    return current if bumped is None else bumped

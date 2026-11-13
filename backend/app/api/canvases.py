@@ -10,9 +10,14 @@ from app.schemas.snippet import GridDataModel, SnippetCanvasRef, SnippetResponse
 from app.schemas.group import GroupResponse
 from app.schemas.tag import SnippetTagResponse
 from app.api.placement_errors import placement_errors, placement_http_error
+from app.api.sync_errors import base_version_query, conflict_responses, id_conflict_http_error, version_conflict_http_error
+from app.api.tag_errors import owner_id
+from app.schemas.sync_errors import CanvasVersionConflictResponse, IdConflictResponse
 from app.services import canvas_service
 from app.services.canvas_title import new_canvas_title, rename_title
 from app.services.placements.errors import InvalidCanvasTitleError
+from app.services.sync import client_ids, versions
+from app.services.sync.errors import IdConflictError, VersionConflictError
 
 router = APIRouter(prefix="/api/canvases", tags=["canvases"])
 
@@ -27,6 +32,7 @@ def _canvas_response(canvas) -> CanvasResponse:
         viewport_state=canvas.viewport_state,
         created_at=str(canvas.created_at),
         updated_at=str(canvas.updated_at),
+        version=canvas.version,
     )
 
 
@@ -60,6 +66,7 @@ def _snippet_response(s) -> SnippetResponse:
         created_at=str(s.created_at),
         updated_at=str(s.updated_at),
         content_updated_at=str(s.content_updated_at),
+        version=s.version,
         canvases=[SnippetCanvasRef(id=str(c.id), title=c.title) for c in s.canvases],
     )
 
@@ -91,13 +98,25 @@ async def list_canvases(user: User = Depends(get_current_user), db: AsyncSession
     return [_canvas_response(c) for c in canvases]
 
 
-@router.post("", response_model=CanvasResponse, status_code=201, responses=placement_errors(422))
+@router.post(
+    "", response_model=CanvasResponse, status_code=201,
+    responses={**placement_errors(422), **conflict_responses(IdConflictResponse)},
+)
 async def create_canvas(req: CanvasCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """With ``id`` (client-chosen), retrying the identical create returns the same canvas;
+    an id used by a different canvas is 409 ``id_conflict``."""
     try:
         title = new_canvas_title(req.title)
     except InvalidCanvasTitleError as exc:
         raise placement_http_error(exc) from exc
-    canvas = await canvas_service.create_canvas(db, str(user.id), title)
+    try:
+        match req.id:
+            case None:
+                canvas = await canvas_service.create_canvas(db, str(user.id), title)
+            case client_id:
+                canvas = await client_ids.create_canvas(db, str(user.id), title, client_id)
+    except IdConflictError as exc:
+        raise id_conflict_http_error(exc) from exc
     return _canvas_response(canvas)
 
 
@@ -117,22 +136,41 @@ async def get_canvas(canvas_id: str, user: User = Depends(get_current_user), db:
     return _canvas_detail_response(canvas)
 
 
-@router.put("/{canvas_id}", response_model=CanvasResponse, responses=placement_errors(422))
+@router.put(
+    "/{canvas_id}", response_model=CanvasResponse,
+    responses={**placement_errors(422), **conflict_responses(CanvasVersionConflictResponse)},
+)
 async def update_canvas(canvas_id: str, req: CanvasUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    changes = req.model_dump(exclude_none=True)
+    """``base_version`` is checked only when ``title`` is set; a mismatch is 409 ``version_conflict``."""
+    changes = req.model_dump(exclude_none=True, exclude={"base_version"})
     if req.title is not None:
         try:
             changes["title"] = rename_title(req.title)
         except InvalidCanvasTitleError as exc:
             raise placement_http_error(exc) from exc
+    try:
+        if req.title is not None:
+            await versions.check_canvas(db, canvas_id, owner_id(user), req.base_version)
+    except VersionConflictError as exc:
+        raise version_conflict_http_error(exc, _canvas_response) from exc
     canvas = await canvas_service.update_canvas(db, canvas_id, str(user.id), **changes)
     if not canvas:
         raise HTTPException(status_code=404, detail="Canvas not found")
     return _canvas_response(canvas)
 
 
-@router.delete("/{canvas_id}", status_code=204)
-async def delete_canvas(canvas_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+@router.delete("/{canvas_id}", status_code=204, responses=conflict_responses(CanvasVersionConflictResponse))
+async def delete_canvas(
+    canvas_id: str,
+    base_version: int | None = base_version_query(),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """A ``base_version`` that is not the canvas's version is 409 ``version_conflict``."""
+    try:
+        await versions.check_canvas(db, canvas_id, owner_id(user), base_version)
+    except VersionConflictError as exc:
+        raise version_conflict_http_error(exc, _canvas_response) from exc
     if not await canvas_service.delete_canvas(db, canvas_id, str(user.id)):
         raise HTTPException(status_code=404, detail="Canvas not found")
 

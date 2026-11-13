@@ -3,6 +3,9 @@
 Content fields live on ``Snippet`` and are shared by every canvas holding it; layout fields
 (``LAYOUT_FIELDS``) live on the ``SnippetPlacement`` of one canvas. Ownership of a snippet is
 ``Snippet.owner_id``; canvas-scoped operations check the placement's canvas owner.
+
+A content change also bumps ``Snippet.version`` once (docs/features/sync_versions.md#versions);
+layout changes never do.
 """
 
 import logging
@@ -28,6 +31,7 @@ from app.services.placements.queries import (
 )
 from app.services.placements.removal import delete_everywhere, lock_snippets
 from app.services.placements.view import LAYOUT_FIELDS, PlacedSnippet
+from app.services.sync.bump import bump
 
 logger = logging.getLogger(__name__)
 
@@ -39,16 +43,19 @@ def split_fields(fields: Mapping[str, object]) -> tuple[dict[str, object], dict[
     return content, layout
 
 
-async def create_snippet(db: AsyncSession, canvas_id: str, owner_id: str, **kwargs) -> PlacedSnippet | None:
+async def create_snippet(
+    db: AsyncSession, canvas_id: str, owner_id: str, *, snippet_id: uuid.UUID | None = None, **kwargs
+) -> PlacedSnippet | None:
     """A new snippet owned by ``owner_id`` with its placement on the canvas; None when the canvas
-    is not the caller's. ``group_id`` must be a group of that canvas (``GroupNotFoundError``)."""
+    is not the caller's. ``group_id`` must be a group of that canvas (``GroupNotFoundError``).
+    ``snippet_id`` is a client-chosen id (app/services/sync/client_ids.py resolves retries)."""
     cid, owner = uuid.UUID(canvas_id), uuid.UUID(owner_id)
     if await owned_canvas(db, cid, owner) is None:
         return None
     content, layout = split_fields(kwargs)
     if layout.get("group_id") is not None:
         await ensure_group_on_canvas(db, layout["group_id"], cid)
-    snippet = Snippet(id=uuid.uuid4(), owner_id=owner, **content)
+    snippet = Snippet(id=snippet_id or uuid.uuid4(), owner_id=owner, **content)
     placement = SnippetPlacement(id=uuid.uuid4(), snippet_id=snippet.id, canvas_id=cid, **layout)
     db.add(snippet)
     db.add(placement)
@@ -94,7 +101,8 @@ def content_edits_differ(snippet: Snippet, edits: Mapping[str, object]) -> bool:
 
 def apply_update(placed: PlacedSnippet, content_edits: Mapping[str, object], changes: Mapping[str, object]) -> bool:
     """Set the non-``None`` ``changes``: content on the snippet, layout on this canvas's placement.
-    Bumps ``content_updated_at`` when ``content_edits`` change stored content; returns whether it did."""
+    Bumps ``content_updated_at`` and ``version`` when ``content_edits`` change stored content;
+    returns whether it did. Derived values alone (phonetics, a resent grid) bump neither."""
     content_changed = content_edits_differ(placed.snippet, content_edits)
     for key, value in changes.items():
         if value is None:
@@ -104,6 +112,7 @@ def apply_update(placed: PlacedSnippet, content_edits: Mapping[str, object], cha
     if content_changed:
         # SQL now(): the transaction clock, so it equals the updated_at written by the same UPDATE.
         placed.snippet.content_updated_at = func.now()
+        bump(placed.snippet)
     return content_changed
 
 
@@ -179,6 +188,7 @@ async def replace_with_merged(
     originals: Sequence[PlacedSnippet],
     *,
     reparent: Reparent | None = None,
+    merged_id: uuid.UUID | None = None,
 ) -> PlacedSnippet:
     """Create the merged snippet (content and layout from ``fields``) with ``tags`` and its
     placement on ``canvas_id``, and take ``originals`` off the canvas, in one transaction.
@@ -189,10 +199,11 @@ async def replace_with_merged(
     them (the merge route passes ``recording_service.reassign_recordings``) move to the merged one.
 
     All or nothing: any database error rolls the whole transaction back and raises
-    ``MergePersistError``; on success there is exactly one commit.
+    ``MergePersistError``; on success there is exactly one commit. ``merged_id`` is a client-chosen
+    id for the merged snippet (app/services/sync/client_ids.py resolves retries).
     """
     content, layout = split_fields(fields)
-    snippet = Snippet(id=uuid.uuid4(), owner_id=originals[0].owner_id, **content)
+    snippet = Snippet(id=merged_id or uuid.uuid4(), owner_id=originals[0].owner_id, **content)
     snippet.tags = list(tags)
     placement = SnippetPlacement(id=uuid.uuid4(), snippet_id=snippet.id, canvas_id=canvas_id, **layout)
     kept = [o for o in originals if placed_elsewhere(o)]
