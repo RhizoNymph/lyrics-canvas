@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.tags.ui.ExpressionInput
 import dev.nymph.lyrics.app.tags.ui.PresetMenu
@@ -44,7 +45,7 @@ import java.util.Locale
 /** Search box, anchor chips, k, min score, slot, sources, rare words (QueryControls.tsx), "Only my lines matching". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>) {
+fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>, pattern: PatternEntry? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             OutlinedTextField(
@@ -63,7 +64,7 @@ fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Label("Anchors from selection")
-            AnchorChipsView(state.chips, vm)
+            AnchorChipsView(state.chips, vm, pattern)
         }
 
         Column {

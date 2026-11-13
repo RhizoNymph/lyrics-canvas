@@ -122,6 +122,16 @@ server's (Keep server's / Overwrite with mine / Save mine as new). Layout is las
 related words and preset saves say "Needs connection" while the server is down. See
 [android_offline_sync.md](./features/android_offline_sync.md).
 
+### Rhyme Patterns (Android)
+On Android the rhyme sheet has a pattern mode for 2..16 consecutive lines of one snippet: a chip's
+"Lines" toggle (tap the first and the last line number) or "Pattern (last N lines)" detects the slots
+where the lines rhyme with each other; the lines show slot members in colour, a legend toggles or drops
+slots, tapping a word adds it to a slot, moves it, removes it or starts a new one (order kept locally),
+and each on slot gets its own horizontally paged list of words and phrases rhyming with every member;
+picks build a tuple ("Make snippet", "Add picks to word bank"), and a Whole lines tab lists the user's
+lines that already hit 2+ slots. Server-only ("Needs connection" offline). See
+[android_rhyme_patterns.md](./features/android_rhyme_patterns.md).
+
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
 while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
@@ -144,6 +154,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Rests and Search](./features/android_rests_and_search.md) | Android rest marks (`_` in text ↔ grid rests, display text consumers), ▶ nudge inserting a rest at the end of a line, in-canvas search filter, search across canvases with focus on a snippet |
+| [Android Rhyme Patterns](./features/android_rhyme_patterns.md) | Android rhyme-sheet pattern mode: line-range picking, detected and edited slots (pure reducer), one paged list per slot, tuple tray, whole-line matches |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
 | [PostgreSQL Backup](./features/postgres_backup.md) | Nightly `pg_dump` CronJob (`backup.*`) to a hostPath or PVC, homelab dumps on node1, laptop rsync pull timer (`deploy/homelab/backup`), restore procedure |
@@ -726,6 +737,17 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/nav/AppNavHost.kt (LocalSyncUi, NotSyncedRoute, ReviewRoute)
     depends_on: [android_app, sync_versions, android_health_banner, android_snippet_placements, android_tag_expressions, android_word_bank, android_rests_and_search, merge_blocks]
     doc: docs/features/android_offline_sync.md
+  android_rhyme_patterns:
+    description: Android client of rhyme patterns across lines. In the rhyme sheet a chip's "Lines" toggle (tap first and last line number) or "Pattern (last N lines)" (stepper 2..16, default min(4, lines)) picks 2..16 lines of one snippet (PatternRange, LinePick reducer); POST /api/nlp/rhyme-pattern/detect builds a SlotBoard (members inside their lines, one per line per slot, no overlap, slot order on every line, <= 8 slots, ids s0.. kept, user slots u0..). The pure applySlotEdit reducer adds / moves / removes a word, starts a slot in order, drops and toggles slots, refusing order breaks with a typed reason; wordActions pre-checks the word picker. planPatternSuggest sends the on slots (k null, members in line order), controls, tag filter, exclude_ids, per-slot offsets for paging and line matches only with notes on; the VM re-queries 150 ms after any change (mapLatest, stale answers dropped). One horizontally paged column per on slot (rows pick into the TupleTray; Make snippet joins picks by spaces, no derived_from; Add picks to word bank), and a Whole lines tab (hits coloured, materialize with derived_from naming the pattern). Typed PatternError for pattern_range_invalid, pattern_span_invalid, pattern_slot_order, invalid_tag_expression, 404 and NeedsConnection (GatedRhymePatternRepository).
+    entry_points:
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/RhymePattern.kt
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/rhyme/pattern/
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/RhymePatternRepository.kt
+      - android/core/sync/src/main/kotlin/dev/nymph/lyrics/sync/repo/GatedRhymePatternRepository.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/pattern/
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/ui/RhymeSidebar.kt
+    depends_on: [rhyme_patterns, rhyme_view, android_app, android_offline_sync, android_tag_expressions, android_word_bank]
+    doc: docs/features/android_rhyme_patterns.md
   android_rests_and_search:
     description: Android client of rest marks and search. :core:logic tokenizer (`_` is one rest and a word separator; word_index counts words only), display text (strip; rests-only lines dropped), passing every vector of rest_mark_vectors.json (byte-for-byte copy in core/logic test resources). Local estimate emits {"rest": true} cells; rebuildRawText emits `_` per rest; attachWords and rhyme lineWords use word tokens; the editor's arranged check on open compares display text (legacy rows keep their rests, next save writes `_`). nudgeSelection(+1) at the end of a line inserts a rest before the selection (selection shifts right, row arranged); left at 0 stays a no-op. Display text in rhyme chips, card text fallback and word-bank add from editor selections. In-canvas search box above the tag filter bar (canvas and list mode) - NFC + lowercase substring per term on display text, debounced 150 ms, ANDed with the tag filter with the same hiding, "N of M", ×/Escape, per canvas for the process. Canvas list search across canvases - GET /api/search (typed DTOs, SearchError incl. invalid_search_query, limit clamped 1..200, local 200-code-point check), debounced 250 ms, Canvases + Snippets sections, highlighted excerpts, canvas title tap targets, "No matches", Retry. CanvasRoute.focusSnippetId opens a canvas with the snippet selected and centred (list - scrolled to), clearing a hiding in-canvas search and snackbar "Hidden by the tag filter" when the tag filter hides it.
     entry_points:

@@ -62,7 +62,8 @@ import dev.nymph.lyrics.model.TransferMode
 import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.di.ProcessScope
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
-import dev.nymph.lyrics.app.rhyme.ui.RhymePanel
+import dev.nymph.lyrics.app.rhyme.pattern.PatternViewModel
+import dev.nymph.lyrics.app.rhyme.ui.RhymeSidebar
 import dev.nymph.lyrics.app.tags.tagsViewModel
 import dev.nymph.lyrics.app.tags.ui.FilterBar
 import dev.nymph.lyrics.app.tags.ui.TagPickerSheet
@@ -124,6 +125,8 @@ fun CanvasScreen(
     val quickAdd = wordBankQuickAdd(container)
     QuickAddToasts(quickAdd)
     val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets) }
+    val patternVm: PatternViewModel = viewModel { PatternViewModel(vm, container.rhymePatterns, container.snippets) }
+    val pattern by patternVm.state.collectAsStateWithLifecycle()
     val tagsVm = tagsViewModel(container, canvasId, vm)
     val state by vm.state.collectAsStateWithLifecycle()
     val rhyme by rhymeVm.state.collectAsStateWithLifecycle()
@@ -182,11 +185,16 @@ fun CanvasScreen(
             is CanvasGestureAction.Transform -> vm.transform(action.centroid, action.pan, action.zoom)
         }
     }
-    val toggleRhymes = { if (rhyme.open) rhymeVm.close() else rhymeVm.open() }
+    // Closing the sheet ends the pattern session too.
+    val closeRhymes = {
+        patternVm.exit()
+        rhymeVm.close()
+    }
+    val toggleRhymes = { if (rhyme.open) closeRhymes() else rhymeVm.open() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val sidePane = maxWidth >= SIDE_PANE_MIN_WIDTH
-        BackHandler(enabled = sidePane && rhyme.open && selection is Selection.Idle) { rhymeVm.close() }
+        BackHandler(enabled = sidePane && rhyme.open && selection is Selection.Idle) { closeRhymes() }
         Scaffold(
             containerColor = Palette.CanvasBackground,
             topBar = {
@@ -284,17 +292,17 @@ fun CanvasScreen(
                 }
                 if (sidePane && rhyme.open) {
                     VerticalDivider(color = Palette.Border)
-                    RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, onAddToBank = quickAdd::add, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
+                    RhymeSidebar(rhyme, rhymeVm, pattern, patternVm, tags, onClose = closeRhymes, onAddToBank = quickAdd::add, modifier = Modifier.width(SIDE_PANE_WIDTH).fillMaxHeight())
                 }
             }
         }
         if (!sidePane && rhyme.open) {
             ModalBottomSheet(
-                onDismissRequest = rhymeVm::close,
+                onDismissRequest = closeRhymes,
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
                 containerColor = Palette.Sidebar,
             ) {
-                RhymePanel(rhyme, rhymeVm, tags, onClose = rhymeVm::close, onAddToBank = quickAdd::add, modifier = Modifier.fillMaxSize())
+                RhymeSidebar(rhyme, rhymeVm, pattern, patternVm, tags, onClose = closeRhymes, onAddToBank = quickAdd::add, modifier = Modifier.fillMaxSize())
             }
         }
     }

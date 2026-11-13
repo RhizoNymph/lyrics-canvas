@@ -26,6 +26,9 @@ touch. Lives in `android/` of this repo.
   queued, a sync engine sends them when the server is reachable, and conflicts are parked for review
   (sync status indicator, "Not synced" badges, review screen, "Needs connection" on server-only
   actions): [android_offline_sync.md](./android_offline_sync.md).
+- Rhyme patterns across lines: pick 2+ lines of a snippet on a rhyme chip ("Lines", or "Pattern
+  (last N lines)"), edit the detected slots, one list per slot, tuple tray, whole-line matches:
+  [android_rhyme_patterns.md](./android_rhyme_patterns.md).
 
 ## Non-scope
 
@@ -60,7 +63,7 @@ server merge endpoint.
 | Canvases | `GET /api/canvases`, `POST /api/canvases`, `GET /api/canvases/{id}`, `PUT /api/canvases/{id}` (viewport) |
 | Snippets | `POST /api/canvases/{id}/snippets`, `PUT /api/snippets/{id}`, `DELETE /api/snippets/{id}`, `PATCH /api/snippets/batch-position` |
 | Merge | `POST /api/canvases/{id}/merge` (new, see Backend) |
-| NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest` |
+| NLP | `POST /api/nlp/syllabify`, `POST /api/nlp/rhyme-suggest`, `POST /api/nlp/rhyme-pattern/detect`, `POST /api/nlp/rhyme-pattern/suggest` (see [android_rhyme_patterns.md](./android_rhyme_patterns.md)) |
 | Search | `GET /api/search?q=&limit=` (see [android_rests_and_search.md](./android_rests_and_search.md)) |
 | Status | `GET /api/health`, `GET /_status/alerts` (frontend nginx origin; see [android_health_banner.md](./android_health_banner.md)) |
 | Voice | `POST /api/canvases/{id}/voice-takes` (multipart), `GET /api/snippets/{id}/recordings`, `GET /api/recordings/{id}/audio`, `DELETE /api/recordings/{id}`, `PUT` / `DELETE /api/recordings/{id}/verification`, `GET /api/recordings/stats` (see [android_voice_capture.md](./android_voice_capture.md)) |
@@ -120,6 +123,8 @@ Open canvas -> CanvasViewModel(StateFlow<CanvasUiState>) + RhymeViewModel(port =
        (order captured on show / reload / editor save; row tap = onTap, long-press = onListLongPress)
   selection (RhymeCanvasPort.rhymeView) + sheet controls -> planRhymeQuery
     -> distinctUntilChanged -> debounce(150ms, first at once) -> mapLatest -> rhyme-suggest -> rows
+  chip "Lines" range / "Pattern (last N lines)" -> PatternViewModel: detect -> slot edits -> planPatternSuggest
+    -> debounce(150ms) -> mapLatest -> rhyme-pattern/suggest -> one column per slot (android_rhyme_patterns.md)
   Materialize -> materializePosition() -> POST snippet (derived_from) -> port.insertMaterialized
   Merge -> MergeRequest.of -> POST merge -> replace originals with merged snippet, select it
   Tap card -> EditorRoute -> GridEditorRoute(snippet) -> onSaved -> CanvasViewModel.replaceSnippet
@@ -186,6 +191,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `Snippet.kt` | `Snippet` (phonetics as `JsonElement?` passthrough; `contentUpdatedAt` = `content_updated_at`), `SnippetType`, `GridMode`, `Provenance`, `DerivedFrom`, `SnippetCreateRequest`, `SnippetUpdateRequest`, `PositionUpdate`, `BatchPositionRequest`, `BatchPositionResponse` |
 | | | `Merge.kt` | `MergeMode`, `MergeRequest` (only via `MergeRequest.of`, null for < 2 distinct ids), `MergeResponse` |
 | | | `Nlp.kt` | `SyllabifyRequest` |
+| | | `RhymePattern.kt` | Rhyme-pattern DTOs and `PatternErrorCode` ([android_rhyme_patterns.md](./android_rhyme_patterns.md#files)) |
 | | | `Rhyme.kt` | `RhymeLimits` (`PAGE_SIZE`, `MAX_LIMIT`, `STRESS_PATTERN`), `RhymeK` (int-serialised enum), `SourceName`, sealed `AnchorRef` = `SnippetAnchorRef` / `TextAnchorRef` (discriminator `kind`), `AnchorRange`, `Slot`, `ScoreWeights`, `DialectRule(Kind)`, `DialectMap`, `RhymeSuggestRequest`, `RhymeSyllable`, `RhymeUnitFields`, `RhymeUnit`, `RhymeCandidate`, `SyllableAlignment`, `RhymeSuggestResponse` |
 | | `dev.nymph.lyrics.model.status` | `Health.kt`, `ClusterAlert.kt`, `AlertsFetch.kt` | `HealthSignal`, `Outage`, `DownCause`, `UnreachableReason`; `ClusterAlert`, `AlertSeverity`, `IncidentKey`; `AlertsFetch`, `AlertsFetchError` |
 | | `dev.nymph.lyrics.model.error` | `ApiError.kt` | sealed `ApiError` (`Unauthorized(status, detail)`, `NotFound(detail)`, `Validation(status, detail)`, `Server(status, detail)`, `Network(cause)`, `Decoding(cause)`), `ApiError.fromHttp`, `ApiError.detailFromBody` (FastAPI string, pydantic list, or a structured detail's message), `ApiError.code` / `errorCodeFromBody` (`{"detail": {"error": code}}`; `NotFound`, `Validation`, `Server` carry it) |
@@ -202,6 +208,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `QueryFromSelection.kt` | `selectedSnippets`, `anchorSnippets`, `anchorsFromSelection` |
 | | | `RhymeQuery.kt` | request-building rules of `rhymeStore.ts`: `SlotMode`, `RhymeSources`, `RhymeQueryParams`, `RhymeSelection`, sealed `RhymeQueryPlan` (`Skip` / `Query`, both carrying pruned exclusions and ranges), `planRhymeQuery`, `pruneExclusions`, `pruneRanges`, `slotFromFirstAnchor`, `derivedFromFor`, `materializeRequest` |
 | | | `RhymeError.kt` | `RhymeErrorKind`, `RhymeOperation`, `RhymeError`, `toRhymeError(ApiError, op)` |
+| | `dev.nymph.lyrics.logic.rhyme.pattern` | `PatternRange.kt`, `LinePick.kt`, `SlotBoard.kt`, `SlotEdit.kt`, `PatternQuery.kt`, `TupleTray.kt`, `PatternResults.kt`, `PatternError.kt` | Rhyme patterns: line ranges and picking, the slot board and its edit reducer, request planning, tuple tray, result pages, typed errors ([android_rhyme_patterns.md](./android_rhyme_patterns.md#files)) |
 | | `dev.nymph.lyrics.logic.editor` | `EditorRowsState.kt` | `EditorRowsState` (internal constructor), `CaretRequest`, `initEditorState`, `gridLineForRow`, `setActiveRow`, `typeLine`, `insertRow`, `deleteRow`, `splitRow`, `joinWithPrevious`, `joinWithNext`, `moveChunkInRow`, `insertRestInRow`, `removeCellsInRow`, `reorderRows`, `mergeSyllabified`, `needsSyllabify`, `rawTextForSave` |
 | | `dev.nymph.lyrics.logic.canvas` | `Viewport.kt` | `Point`, `ViewSize`, `MIN_ZOOM`/`MAX_ZOOM`, `clampZoom`, `Viewport` (`worldToScreen`, `screenToWorld`, `zoomAbout`, `scaleAbout`, `panBy`, `toState`, `Viewport.from(ViewportState?)`), `viewportCenter` |
 | | | `HitTest.kt` | `Rect`, `MIN/MAX_SNIPPET_SCALE`, `clampSnippetScale`, `cardBounds`, `cardScreenBounds`, `drawOrder`, `hitTest`, `hitTestScreen` |
@@ -221,7 +228,8 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | `…app.canvas.render` | `CardLayout.kt`, `Culling.kt`, `CardRenderer.kt` | Pure card geometry (web `gridDraw` / `SnippetCard`), culling and background grid; `DrawScope.drawCard` |
 | | `…app.canvas.gesture` | `GestureReducer.kt`, `CanvasGestures.kt` | Pure touch state machine (`reduceGesture`); pointer-input modifier feeding it |
 | | `…app.rhyme` | `RhymeCanvasPort.kt`, `RhymeUiState.kt`, `AnchorChips.kt`, `RhymeViewModel.kt` | Canvas port for the sheet; sheet state; pure chip model; query pipeline, controls, materialize |
-| | `…app.rhyme.ui` | `RhymePanel.kt`, `QueryControls.kt`, `AnchorChipsView.kt`, `CandidateRow.kt`, `SyllableStrip.kt`, `AlignmentTable.kt` | Sheet content (web `components/rhyme/*`) |
+| | `…app.rhyme.ui` | `RhymeSidebar.kt`, `RhymePanel.kt`, `QueryControls.kt`, `AnchorChipsView.kt`, `CandidateRow.kt`, `SyllableStrip.kt`, `AlignmentTable.kt` | Sheet content (web `components/rhyme/*`); `RhymeSidebar` switches to pattern mode |
+| | `…app.rhyme.pattern` (+ `ui`) | `PatternViewModel.kt`, `PatternUiState.kt`, `PatternLegend.kt`, `PatternMessages.kt`, `ui/PatternPanel.kt`, ... | Rhyme pattern mode, see [android_rhyme_patterns.md](./android_rhyme_patterns.md#files) |
 | | `…app.ui` | `UserMessages.kt`, `theme/Palette.kt`, `theme/LyricsTheme.kt` | `ApiError.userMessage()`, hex colour parsing; web palette; dark Material 3 theme |
 | | `…app.editor` | `GridEditorRoute.kt` | Editor entry point (B2); hosts the editor's Record button and recordings section |
 | | `…app.voice` (+ `recorder`, `recordings`, `ui`) | `VoiceCaptureViewModel.kt`, `VoiceSettings.kt`, `MediaRecorderAudioRecorder.kt`, `RecordingsViewModel.kt`, `VoiceCaptureDialog.kt`, ... | Voice capture, see [android_voice_capture.md](./android_voice_capture.md#files) |
@@ -233,6 +241,7 @@ Paths are under `android/`. `:app` packages are under `app/src/main/kotlin/dev/n
 | | | `CanvasRepository.kt` | `CanvasRepository` / `HttpCanvasRepository` (`list`, `create`, `get`, `update`, `saveViewport`) |
 | | | `SnippetRepository.kt` | `SnippetRepository` / `HttpSnippetRepository` (`create`, `update`, `delete`, `batchPosition`, `merge`) |
 | | | `NlpRepository.kt` | `NlpRepository` / `HttpNlpRepository` (`syllabify`, `rhymeSuggest`) |
+| | | `RhymePatternRepository.kt` | `RhymePatternRepository` / `HttpRhymePatternRepository` (`detect`, `suggest`); gated by `GatedRhymePatternRepository` in `:core:sync` |
 | | | `VoiceRepository.kt` | `VoiceRepository` / `HttpVoiceRepository` (`uploadTake`, `recordings`, `downloadAudio`, `deleteRecording`) |
 
 ### Files: `:app` grid editor (`dev.nymph.lyrics.app.editor`)

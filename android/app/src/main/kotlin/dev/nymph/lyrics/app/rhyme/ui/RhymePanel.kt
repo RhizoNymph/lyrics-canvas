@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.rhyme.RhymeError
@@ -60,6 +61,8 @@ fun RhymePanel(
     modifier: Modifier = Modifier,
     /** "+ bank" on a candidate: add its text to the word bank. */
     onAddToBank: ((String) -> Unit)? = null,
+    /** Pattern-mode entry on the chips (line ranges, "Pattern (last N lines)"). */
+    pattern: PatternEntry? = null,
 ) {
     LazyColumn(modifier.background(Palette.Sidebar)) {
         item(key = "header") {
@@ -69,7 +72,7 @@ fun RhymePanel(
             }
             HorizontalDivider(color = Palette.Border)
         }
-        item(key = "controls") { Box(Modifier.padding(12.dp)) { QueryControls(state, vm, tags) } }
+        item(key = "controls") { Box(Modifier.padding(12.dp)) { QueryControls(state, vm, tags, pattern) } }
         item(key = "status") {
             HorizontalDivider(color = Palette.Border)
             Row(

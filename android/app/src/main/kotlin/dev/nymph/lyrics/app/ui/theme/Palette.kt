@@ -60,6 +60,17 @@ object Palette {
         Provenance.GENERATED -> "TEXT"
     }
 
+    /** Rhyme-pattern slot colours, by slot position (A, B, ...); distinct from the provenance colours. */
+    private val SLOT_COLORS = listOf(
+        Color(0xFFF59E0B), Color(0xFF22C55E), Color(0xFFEC4899), Color(0xFF38BDF8),
+        Color(0xFFA78BFA), Color(0xFFF97316), Color(0xFF2DD4BF), Color(0xFFFACC15),
+    )
+
+    fun slot(index: Int): Color = SLOT_COLORS[Math.floorMod(index, SLOT_COLORS.size)]
+
+    /** Opacity for partial or off slots in the pattern lines and legend. */
+    const val DIMMED_SLOT_ALPHA: Float = 0.45f
+
     /** Opacity for candidates that do not fit the slot (NON_FIT_ALPHA). */
     const val NON_FIT_ALPHA: Float = 0.45f
 
