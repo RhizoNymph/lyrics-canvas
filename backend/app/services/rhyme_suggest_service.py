@@ -18,6 +18,7 @@ from app.models.snippet import Snippet, SnippetType
 from app.schemas.phonetics import SnippetPhonetics
 from app.schemas.rhyme import (
     Anchor,
+    DialectMapModel,
     RhymeGridCellModel,
     RhymeGridLineModel,
     RhymeCandidateModel,
@@ -25,6 +26,7 @@ from app.schemas.rhyme import (
     RhymeSuggestResponse,
     RhymeSyllable,
     RhymeUnitModel,
+    ScoreWeightsModel,
     Slot,
     SnippetAnchor,
     SyllableAlignmentModel,
@@ -140,7 +142,17 @@ class DbSnippetRepository:
 # --- pure helpers ---
 
 
-def resolve_dialect(req: RhymeSuggestRequest) -> DialectMap:
+class PhoneticsOptions(Protocol):
+    """Request fields shared by rhyme-suggest and rhyme-pattern: dialect map and score weights."""
+
+    @property
+    def dialect(self) -> DialectMapModel | None: ...
+
+    @property
+    def weights(self) -> ScoreWeightsModel | None: ...
+
+
+def resolve_dialect(req: PhoneticsOptions) -> DialectMap:
     if req.dialect is None:
         return DEFAULT_DIALECT_MAP
     return DialectMap(
@@ -148,7 +160,7 @@ def resolve_dialect(req: RhymeSuggestRequest) -> DialectMap:
     )
 
 
-def resolve_weights(req: RhymeSuggestRequest) -> ScoreWeights | None:
+def resolve_weights(req: PhoneticsOptions) -> ScoreWeights | None:
     if req.weights is None:
         return None
     return ScoreWeights(vowel=req.weights.vowel, coda=req.weights.coda, onset=req.weights.onset)
