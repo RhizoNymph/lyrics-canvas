@@ -1236,6 +1236,69 @@
         "title": "IdConflictResponse",
         "type": "object"
       },
+      "LineMatchHit": {
+        "properties": {
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "slot_id": {
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_end": {
+            "title": "Word End",
+            "type": "integer"
+          },
+          "word_start": {
+            "title": "Word Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slot_id",
+          "word_start",
+          "word_end",
+          "text",
+          "score"
+        ],
+        "title": "LineMatchHit",
+        "type": "object"
+      },
+      "LineMatchModel": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/LineMatchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "slots_hit": {
+            "title": "Slots Hit",
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/RhymeUnitModel"
+          }
+        },
+        "required": [
+          "unit",
+          "hits",
+          "slots_hit",
+          "score"
+        ],
+        "title": "LineMatchModel",
+        "type": "object"
+      },
       "LinePhonetics": {
         "properties": {
           "line_index": {
@@ -1381,6 +1444,622 @@
           "deleted_ids"
         ],
         "title": "MergeResponse",
+        "type": "object"
+      },
+      "PatternCandidateModel": {
+        "properties": {
+          "alignment": {
+            "items": {
+              "$ref": "#/components/schemas/SyllableAlignmentModel"
+            },
+            "title": "Alignment",
+            "type": "array"
+          },
+          "best_anchor_id": {
+            "title": "Best Anchor Id",
+            "type": "string"
+          },
+          "ephemeral": {
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "fits_slot": {
+            "title": "Fits Slot",
+            "type": "boolean"
+          },
+          "grid_line": {
+            "$ref": "#/components/schemas/RhymeGridLineModel"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Index"
+          },
+          "match_depth": {
+            "title": "Match Depth",
+            "type": "integer"
+          },
+          "member_scores": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Member Scores",
+            "type": "array"
+          },
+          "provenance": {
+            "enum": [
+              "note",
+              "dictionary",
+              "datamuse",
+              "generated"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet Id"
+          },
+          "source": {
+            "enum": [
+              "notes",
+              "dictionary"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeSyllable"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word End"
+          },
+          "word_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Offset"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "provenance",
+          "ephemeral",
+          "syllable_count",
+          "stress",
+          "rhyme_key",
+          "syllables",
+          "grid_line",
+          "score",
+          "match_depth",
+          "best_anchor_id",
+          "fits_slot",
+          "alignment",
+          "source",
+          "member_scores"
+        ],
+        "title": "PatternCandidateModel",
+        "type": "object"
+      },
+      "PatternDetectRequest": {
+        "properties": {
+          "canvas_id": {
+            "minLength": 1,
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "dialect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DialectMapModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line_end": {
+            "minimum": 0.0,
+            "title": "Line End",
+            "type": "integer"
+          },
+          "line_start": {
+            "minimum": 0.0,
+            "title": "Line Start",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 0.75,
+            "maximum": 1.0,
+            "minimum": 0.3,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "snippet_id": {
+            "minLength": 1,
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreWeightsModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "canvas_id",
+          "snippet_id",
+          "line_start",
+          "line_end"
+        ],
+        "title": "PatternDetectRequest",
+        "type": "object"
+      },
+      "PatternDetectResponse": {
+        "properties": {
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/PatternLineModel"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/PatternSlotModel"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines",
+          "slots",
+          "elapsed_ms"
+        ],
+        "title": "PatternDetectResponse",
+        "type": "object"
+      },
+      "PatternLineModel": {
+        "properties": {
+          "grid_line": {
+            "$ref": "#/components/schemas/RhymeGridLineModel"
+          },
+          "line_index": {
+            "title": "Line Index",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/PatternWordModel"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "line_index",
+          "text",
+          "words",
+          "grid_line"
+        ],
+        "title": "PatternLineModel",
+        "type": "object"
+      },
+      "PatternSlotModel": {
+        "properties": {
+          "cohesion": {
+            "title": "Cohesion",
+            "type": "number"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "integer"
+          },
+          "default_on": {
+            "title": "Default On",
+            "type": "boolean"
+          },
+          "full": {
+            "title": "Full",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "k": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/PatternSpanModel"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "members",
+          "coverage",
+          "full",
+          "default_on",
+          "k",
+          "cohesion",
+          "syllable_count",
+          "stress"
+        ],
+        "title": "PatternSlotModel",
+        "type": "object"
+      },
+      "PatternSlotResult": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PatternCandidateModel"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "slot": {
+            "$ref": "#/components/schemas/PatternSlotModel"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slot",
+          "candidates",
+          "total"
+        ],
+        "title": "PatternSlotResult",
+        "type": "object"
+      },
+      "PatternSpanModel": {
+        "properties": {
+          "line_index": {
+            "minimum": 0.0,
+            "title": "Line Index",
+            "type": "integer"
+          },
+          "rhyme_key": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rhyme Key",
+            "type": "array"
+          },
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "syllables": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeSyllable"
+            },
+            "title": "Syllables",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_end": {
+            "minimum": 1.0,
+            "title": "Word End",
+            "type": "integer"
+          },
+          "word_start": {
+            "minimum": 0.0,
+            "title": "Word Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line_index",
+          "word_start",
+          "word_end",
+          "text",
+          "syllable_count",
+          "stress",
+          "rhyme_key",
+          "syllables"
+        ],
+        "title": "PatternSpanModel",
+        "type": "object"
+      },
+      "PatternSuggestRequest": {
+        "properties": {
+          "canvas_id": {
+            "minLength": 1,
+            "title": "Canvas Id",
+            "type": "string"
+          },
+          "dialect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DialectMapModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclude_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclude Ids",
+            "type": "array"
+          },
+          "include_rare": {
+            "default": false,
+            "title": "Include Rare",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "line_end": {
+            "minimum": 0.0,
+            "title": "Line End",
+            "type": "integer"
+          },
+          "line_match_limit": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Line Match Limit",
+            "type": "integer"
+          },
+          "line_match_offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Line Match Offset",
+            "type": "integer"
+          },
+          "line_matches": {
+            "default": true,
+            "title": "Line Matches",
+            "type": "boolean"
+          },
+          "line_start": {
+            "minimum": 0.0,
+            "title": "Line Start",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "offsets": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Offsets",
+            "type": "object"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotSpec"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Slots",
+            "type": "array"
+          },
+          "snippet_id": {
+            "minLength": 1,
+            "title": "Snippet Id",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "enum": [
+                "notes",
+                "dictionary"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          },
+          "tag_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag Filter"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreWeightsModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "canvas_id",
+          "snippet_id",
+          "line_start",
+          "line_end",
+          "slots"
+        ],
+        "title": "PatternSuggestRequest",
+        "type": "object"
+      },
+      "PatternSuggestResponse": {
+        "properties": {
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "line_match_total": {
+            "title": "Line Match Total",
+            "type": "integer"
+          },
+          "line_matches": {
+            "items": {
+              "$ref": "#/components/schemas/LineMatchModel"
+            },
+            "title": "Line Matches",
+            "type": "array"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/PatternSlotResult"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots",
+          "line_matches",
+          "line_match_total",
+          "elapsed_ms"
+        ],
+        "title": "PatternSuggestResponse",
+        "type": "object"
+      },
+      "PatternWordModel": {
+        "properties": {
+          "stress": {
+            "title": "Stress",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "word_index": {
+            "title": "Word Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "word_index",
+          "text",
+          "syllable_count",
+          "stress"
+        ],
+        "title": "PatternWordModel",
         "type": "object"
       },
       "PlacementErrorBody": {
@@ -2438,6 +3117,49 @@
         "title": "Slot",
         "type": "object"
       },
+      "SlotSpec": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "k": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SpanRef"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "SlotSpec",
+        "type": "object"
+      },
       "SnippetAnchor": {
         "description": "A snippet line, or a word range of it (``word_end`` exclusive; None = to the end of the line).",
         "properties": {
@@ -3034,6 +3756,33 @@
           "detail"
         ],
         "title": "SnippetsVersionConflictResponse",
+        "type": "object"
+      },
+      "SpanRef": {
+        "description": "Words ``[word_start, word_end)`` of one line (word indexes count words only, rests excluded).",
+        "properties": {
+          "line_index": {
+            "minimum": 0.0,
+            "title": "Line Index",
+            "type": "integer"
+          },
+          "word_end": {
+            "minimum": 1.0,
+            "title": "Word End",
+            "type": "integer"
+          },
+          "word_start": {
+            "minimum": 0.0,
+            "title": "Word Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line_index",
+          "word_start",
+          "word_end"
+        ],
+        "title": "SpanRef",
         "type": "object"
       },
       "SplitMode": {
@@ -5508,6 +6257,100 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/nlp/rhyme-pattern/detect": {
+      "post": {
+        "description": "The rhyme slots shared by a range of 2..16 lines of one snippet (docs/features/rhyme_patterns.md).",
+        "operationId": "rhyme_pattern_detect_api_nlp_rhyme_pattern_detect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatternDetectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternDetectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rhyme Pattern Detect",
+        "tags": [
+          "nlp"
+        ]
+      }
+    },
+    "/api/nlp/rhyme-pattern/suggest": {
+      "post": {
+        "description": "Per-slot candidates that rhyme with every slot member, and note lines that already hit 2+ slots.",
+        "operationId": "rhyme_pattern_suggest_api_nlp_rhyme_pattern_suggest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatternSuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternSuggestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rhyme Pattern Suggest",
+        "tags": [
+          "nlp"
+        ]
       }
     },
     "/api/nlp/rhyme-suggest": {

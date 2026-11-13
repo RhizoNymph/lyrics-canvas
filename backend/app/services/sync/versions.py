@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,9 @@ class HasVersion(Protocol):
 
     @property
     def version(self) -> int: ...
+
+
+T = TypeVar("T", bound=HasVersion)
 
 
 def conflicts(current: int, base_version: int | None) -> bool:
@@ -110,7 +113,7 @@ async def check_removal(
         raise VersionConflictError(_message("snippet", snippet_id, placed.version, base_version), placed)
 
 
-def check_originals[T: HasVersion](originals: Sequence[T], base_versions: Mapping[uuid.UUID, int]) -> None:
+def check_originals(originals: Sequence[T], base_versions: Mapping[uuid.UUID, int]) -> None:
     """Merge: every original named in ``base_versions`` must be at that version (the originals are
     already locked by the merge's load). The conflict's ``current`` lists the stale ones, in the
     order of ``originals``; ids not among the originals are ignored."""

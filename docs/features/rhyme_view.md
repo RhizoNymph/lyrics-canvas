@@ -8,6 +8,9 @@ Source brief: "Rhyme View — Implementation Brief" (Sep 22, 2026). This doc is 
 derived from it after reading the codebase. Where the two disagree, this doc wins and the reason is noted
 under [Decisions](#decisions).
 
+Selecting 2+ lines of one snippet switches to the pattern mode: see
+[Rhyme Patterns Across Lines](./rhyme_patterns.md).
+
 ## Scope (v0)
 
 - **Phonetic engine** (`backend/app/services/phonetics/`): pronunciation lookup (CMU dict, g2p_en fallback,
