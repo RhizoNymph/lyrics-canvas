@@ -89,6 +89,10 @@ class PlacedSnippet:
     def content_updated_at(self) -> datetime:
         return self.snippet.content_updated_at
 
+    @property
+    def version(self) -> int:
+        return self.snippet.version
+
     # ---- this canvas's layout ----
 
     @property

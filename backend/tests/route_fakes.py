@@ -43,6 +43,7 @@ def fake_snippet(canvas_id: uuid.UUID, text: str, **overrides) -> SimpleNamespac
         created_at=CREATED,
         updated_at=UPDATED,
         content_updated_at=CONTENT_UPDATED,
+        version=1,
         canvases=(SimpleNamespace(id=canvas_id, title="Song"),),
     )
     fields.update(overrides)
@@ -67,6 +68,7 @@ def fake_canvas(owner_id: uuid.UUID, snippets: list, groups: list, tags: list, *
         viewport_state={"x": 1.5, "y": -2, "zoom": 1},
         created_at=CREATED,
         updated_at=UPDATED,
+        version=1,
         snippets=snippets,
         groups=groups,
         tags=tags,

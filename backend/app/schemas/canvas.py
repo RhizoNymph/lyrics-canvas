@@ -2,9 +2,11 @@ from pydantic import BaseModel
 
 from app.schemas.group import GroupResponse
 from app.schemas.snippet import SnippetResponse
+from app.schemas.versioning import BaseVersion, ClientId
 
 
 class CanvasCreate(BaseModel):
+    id: ClientId | None = None
     # stripped; empty falls back to "Untitled Canvas"; over 255 characters is invalid_canvas_title
     title: str = "Untitled Canvas"
 
@@ -14,6 +16,8 @@ class CanvasUpdate(BaseModel):
     title: str | None = None
     is_public: bool | None = None
     viewport_state: dict | None = None
+    # checked only when title is set (viewport and sharing are last-write-wins)
+    base_version: BaseVersion | None = None
 
 
 class CanvasResponse(BaseModel):
@@ -25,6 +29,7 @@ class CanvasResponse(BaseModel):
     viewport_state: dict | None = None
     created_at: str
     updated_at: str
+    version: int  # +1 per title change
 
     # Responses always carry every field, so defaulted fields are required in the output schema.
     model_config = {"from_attributes": True, "json_schema_serialization_defaults_required": True}

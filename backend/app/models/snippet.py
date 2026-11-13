@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_uuid
+from app.models.versioned import starts_at_initial_version, version_check, version_column
 
 
 class SnippetType(str, enum.Enum):
@@ -22,8 +23,10 @@ class GridMode(str, enum.Enum):
     fixed = "fixed"
 
 
+@starts_at_initial_version
 class Snippet(Base):
     __tablename__ = "snippets"
+    __table_args__ = (version_check("snippets"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     # Content only: the layout on each canvas lives on SnippetPlacement (docs/features/snippet_placements.md).
@@ -49,6 +52,9 @@ class Snippet(Base):
     content_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Content version: +1 per change of text, type, grid mode, beats, grid or tag links; layout and
+    # phonetics-only recomputes leave it alone (docs/features/sync_versions.md#versions).
+    version: Mapped[int] = version_column()
 
     # DB cascades remove placements with the snippet; the ORM never loads them implicitly.
     placements = relationship(

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 from app.schemas.tag import SnippetTagResponse
+from app.schemas.versioning import BaseVersion, ClientId
 
 
 class FaithfulModel(BaseModel):
@@ -49,6 +50,7 @@ class GridDataModel(FaithfulModel):
 
 
 class SnippetCreate(BaseModel):
+    id: ClientId | None = None
     snippet_type: SnippetType = SnippetType.freestyle
     grid_mode: GridMode = GridMode.auto
     beats_per_line: int | None = None
@@ -75,6 +77,8 @@ class SnippetUpdate(BaseModel):
     height: float | None = None
     z_index: int | None = None
     group_id: str | None = None
+    # checked only when a content field is set (layout is last-write-wins)
+    base_version: BaseVersion | None = None
 
 
 class BatchPositionItem(BaseModel):
@@ -126,6 +130,8 @@ class SnippetResponse(BaseModel):
     updated_at: str
     # Last content edit (text, type, grid); moves, resizes and tags do not change it.
     content_updated_at: str
+    # Content version: +1 per change of text, type, grid mode, beats, grid or tags (not layout).
+    version: int
     canvases: list[SnippetCanvasRef] = []
 
     # Responses always carry every field, so defaulted fields are required in the output schema.

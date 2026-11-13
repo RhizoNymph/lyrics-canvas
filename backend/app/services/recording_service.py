@@ -32,6 +32,7 @@ from app.schemas.phonetics import SnippetPhonetics
 from app.services.placements.queries import placed_by_placement_id, placed_snippet
 from app.services.placements.view import PlacedSnippet
 from app.services.snippet_content import content_for, derive_new_content
+from app.services.sync.bump import bump
 from app.services.voice.append import append_lines
 from app.services.voice.dataset_export import ExportRecording
 from app.services.voice.errors import (
@@ -235,6 +236,7 @@ async def append_with_recording(
     placed.placement.height = content.height
     # SQL now(): the transaction clock, equal to the updated_at written by the same UPDATE.
     snippet.content_updated_at = func.now()
+    bump(snippet)  # an append is a content change (docs/features/sync_versions.md#versions)
     row = recording.row(snippet.id)
     db.add(row)
     await _commit(db, "voice_take.append", canvas_id=canvas_id, snippet_id=snippet_id)

@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_uuid
+from app.models.versioned import starts_at_initial_version, version_check, version_column
 
 MAX_WORD_LENGTH = 64  # code points; the column width (validated before it reaches the DB)
 
@@ -20,16 +21,20 @@ bank_word_tags = Table(
 )
 
 
+@starts_at_initial_version
 class BankWord(Base):
     """A word or short phrase in a user's bank. ``text`` keeps its case; unique per user ignoring case."""
 
     __tablename__ = "bank_words"
+    __table_args__ = (version_check("bank_words"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     text: Mapped[str] = mapped_column(String(MAX_WORD_LENGTH), nullable=False)
+    # +1 per text change and per tag link or unlink (docs/features/sync_versions.md#versions)
+    version: Mapped[int] = version_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # tag deletes remove the links by the FK cascade, not through the ORM

@@ -8,6 +8,7 @@ import uuid
 from pydantic import BaseModel, field_validator
 
 from app.schemas.snippet import SnippetResponse
+from app.schemas.versioning import BaseVersions, ClientId
 
 
 class MergeMode(str, enum.Enum):
@@ -20,6 +21,8 @@ class MergeRequest(BaseModel):
 
     snippet_ids: list[uuid.UUID]
     mode: MergeMode
+    merged_id: ClientId | None = None  # client-chosen id of the merged snippet
+    base_versions: BaseVersions | None = None  # {original id: version}
 
     @field_validator("snippet_ids")
     @classmethod

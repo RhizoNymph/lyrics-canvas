@@ -156,6 +156,7 @@ Example, a snippet on two canvases, read from "Song":
   "created_at": "2026-11-09 10:00:00.000000+00:00",
   "updated_at": "2026-11-09 10:00:00.000000+00:00",
   "content_updated_at": "2026-11-09 10:00:00.000000+00:00",
+  "version": 1,
   "canvases": [
     {"id": "a7c3e9f1-0b2d-4c6e-8f1a-3b5d7e9f1a2c", "title": "drafts"},
     {"id": "5e2a8c1d-7b3f-4e9a-a6d4-2c1b0f9e8d7a", "title": "Song"}
@@ -178,6 +179,12 @@ document), from `app/services/placements/errors.py` via `app/api/placement_error
 
 A missing or malformed `canvas_id` is pydantic's 422. Existing 404s (`Canvas not found`,
 `Snippet not found`) keep their string details.
+
+`version` (the snippet's content version) and the offline-sync fields (`base_version` on PUT and
+the deletes, client `id` on creates, 409 `version_conflict` / `id_conflict`) are specified in
+[sync_versions.md](./sync_versions.md). Layout changes (PUT layout fields, batch-position, transfer,
+removing one of several placements) never bump `version` and ignore `base_version`; removing the
+**last** placement deletes the snippet and checks it.
 
 ### Canvases
 
@@ -343,3 +350,4 @@ read it like the old ORM row. `CanvasDetail` does the same for canvas detail (`s
 - A canvas title is 1-255 code points after strip.
 - Transfer and merge are all or nothing with one commit; transfer never changes an existing target
   placement.
+- Placement and layout changes never change a snippet's `version` ([sync_versions.md](./sync_versions.md)).
