@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from typing import TypeAlias
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,7 @@ from app.models.snippet import Snippet
 from app.models.tag import Tag
 from app.models.word_bank import BankWord
 
-type Versioned = Snippet | Canvas | Tag | BankWord
+Versioned: TypeAlias = Snippet | Canvas | Tag | BankWord
 
 
 def bump(entity: Versioned) -> None:
