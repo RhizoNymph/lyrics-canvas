@@ -2,7 +2,8 @@
 
 1. Spans of every line (``spans.line_spans``) and every passing cross-line pair score
    (``PairScorer.pair``: at ``min(k_a, k_b)``, at least ``min_score``), found through
-   last-nucleus buckets.
+   last-nucleus buckets. Two spans of the same words (ignoring case and punctuation) never
+   pair: a repeated word scores 1.0 but is not a rhyme to write to.
 2. Pairwise alignment of every two lines: the best chain of span matches that is in order and
    non-overlapping on both lines (Needleman-Wunsch over word positions, gap cost 0). A chain's value is
    ``(sum of scores, sum of match depths k, -words)``: higher score first, then rhymes that cover
@@ -22,6 +23,7 @@ Deterministic: every choice has a total order (value, then input position).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from app.services.phonetics.dialect import DialectMap
@@ -33,6 +35,7 @@ from app.services.phonetics.pattern.types import LineWords, PatternSlot, Pattern
 from app.services.phonetics.score import ScoreWeights
 
 DETECT_MIN_SCORE = 0.75
+_NOT_LETTERS = re.compile(r"[^\w']+|_")
 
 Value = tuple[float, int, int]  # (score sum, depth sum, -words)
 ZERO: Value = (0.0, 0, 0)
@@ -94,6 +97,7 @@ class _Detector:
 
     def _score_pairs(self) -> None:
         signatures = [self.scorer.signature(span) for span in self.all]
+        words = [same_words_key(span) for span in self.all]
         # per line: last nucleus -> signature -> span ids (only vowel-neighbour buckets can rhyme)
         buckets: dict[int, dict[str, dict[TailSignature, list[int]]]] = {}
         for line in self.lines:
@@ -118,6 +122,8 @@ class _Detector:
                                 depth = min(sig_a.k, sig_b.k)
                                 for i in members_a:
                                     for j in members_b:
+                                        if words[i] == words[j]:
+                                            continue
                                         value: Value = (result, depth, -(self.all[i].pos.word_count + self.all[j].pos.word_count))
                                         self.scores[(i, j)] = value
                                         self.scores[(j, i)] = value
@@ -258,6 +264,12 @@ class _Detector:
             placed.append(line)
             remaining.remove(line)
         return [[self.all[slot[line]] for line in sorted(slot)] for slot in profile]
+
+
+def same_words_key(span: PatternSpan) -> tuple[str, ...]:
+    """The span's words, lowercased, without punctuation (apostrophes kept): equal keys are a
+    repeat, not a rhyme."""
+    return tuple(w for w in (_NOT_LETTERS.sub("", word).strip("'") for word in span.unit.text.lower().split()) if w)
 
 
 def _group(ids: Sequence[int], signatures: Sequence[TailSignature]) -> dict[TailSignature, list[int]]:

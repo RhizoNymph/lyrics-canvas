@@ -144,3 +144,21 @@ def test_sixteen_lines_of_sixteen_words_under_50ms():
     assert len(slots) == 8
     assert_slot_invariants(slots, 0.75)
     assert sorted(timings)[1] < 50, timings
+
+
+def test_a_repeated_word_is_not_a_rhyme():
+    slots = _detect(("I'm the one to stay", "I'm the one to play", "I'm the one today"))
+    assert_slot_invariants(slots, 0.75)
+    assert [texts(s) for s in slots] == [["stay", "play", "today"]]
+
+
+def test_repeats_ignore_case_and_punctuation():
+    slots = _detect(("Don't you see, it's late", "don't. Just wait"))
+    assert [texts(s) for s in slots] == [["late", "wait"]]
+
+
+def test_no_slot_holds_the_same_word_twice():
+    lines = ("but I never knew the way", "what a thing to do today", "but the sky is blue and gray")
+    for slot in _detect(lines):
+        words = [t.lower() for t in texts(slot)]
+        assert len(set(words)) == len(words), words
