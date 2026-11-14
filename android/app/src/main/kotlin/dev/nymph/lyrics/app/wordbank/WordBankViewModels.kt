@@ -29,7 +29,7 @@ fun QuickAddToasts(quickAdd: WordBankQuickAddViewModel) {
 /** The word bank screen's ViewModel, creating drafts on [canvas]. */
 @Composable
 fun wordBankViewModel(container: AppContainer, canvas: WordBankCanvasPort): WordBankViewModel =
-    viewModel { WordBankViewModel(container.wordBank, canvas) }
+    viewModel { WordBankViewModel(container.wordBank, canvas, container.rhymeOrders) }
 
 /**
  * The word bank's tag controls: its own filter (remembered under `word_bank_filter`), the shared

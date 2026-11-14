@@ -1,5 +1,8 @@
 package dev.nymph.lyrics.app.wordbank
 
+import dev.nymph.lyrics.app.rhyme.order.InMemoryRhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
+import dev.nymph.lyrics.model.RhymeOrder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.app.tags.TagTarget
@@ -64,6 +67,7 @@ const val MAX_IDS_PER_REQUEST: Int = 500
 class WordBankViewModel(
     private val repo: WordBankRepository,
     private val canvas: WordBankCanvasPort,
+    private val orders: RhymeOrderStore = InMemoryRhymeOrderStore(),
 ) : ViewModel(), TagTarget<BankWordId> {
     private val _state = MutableStateFlow(WordBankUiState())
     val state: StateFlow<WordBankUiState> = _state.asStateFlow()
@@ -81,6 +85,7 @@ class WordBankViewModel(
         reload()
         // The local copy changes with every edit and sync; a loaded list follows it.
         viewModelScope.launch { repo.observeWords().collect { list -> updateWords { list } } }
+        viewModelScope.launch { orders.order.collect { applyRhymeOrder(it) } }
     }
 
     private fun message(text: String) {
@@ -295,6 +300,23 @@ class WordBankViewModel(
 
     fun setRhymesMinScore(score: Double) = _state.update { it.copy(rhymesWith = it.rhymesWith.copy(minScore = score.coerceIn(0.0, 1.0))) }
 
+    /**
+     * The device's order changed (here or on the rhyme sheet): a shown rhymes-with list is fetched
+     * again in it.
+     */
+    private fun applyRhymeOrder(order: RhymeOrder) {
+        if (_state.value.rhymesWith.order == order) return
+        _state.update { it.copy(rhymesWith = it.rhymesWith.copy(order = order)) }
+        val s = _state.value
+        if (s.tab == WordBankTab.RHYMES && s.rhymeView == RhymeView.RHYMES_WITH && s.rhymesWith.result !is Remote.Idle) loadRhymesWith()
+    }
+
+    /** The rhymes-with order toggle: refetch in [order] and remember it on this device. */
+    fun setRhymesOrder(order: RhymeOrder) {
+        applyRhymeOrder(order)
+        viewModelScope.launch { orders.save(order) }
+    }
+
     /** Rank the filtered bank against the typed text, else the one selected word; neither: ask for one. */
     fun loadRhymesWith() {
         val s = _state.value
@@ -304,8 +326,9 @@ class WordBankViewModel(
             _state.update { it.copy(rhymesWith = it.rhymesWith.copy(result = Remote.Idle, needsAnchor = true)) }
             return
         }
-        val request = BankRhymesRequest.of(anchor, tagFilter = tagFilterParam(s.filter), minScore = s.rhymesWith.minScore)
-        _state.update { it.copy(rhymesWith = it.rhymesWith.copy(result = Remote.Loading, needsAnchor = false)) }
+        val order = s.rhymesWith.order
+        val request = BankRhymesRequest.of(anchor, tagFilter = tagFilterParam(s.filter), minScore = s.rhymesWith.minScore, order = order)
+        _state.update { it.copy(rhymesWith = it.rhymesWith.copy(result = Remote.Loading, needsAnchor = false, askedOrder = order)) }
         rhymesJob = viewModelScope.launch {
             val result = when (val r = repo.rhymes(request)) {
                 is ApiResult.Success -> Remote.Loaded(r.value)

@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
+import dev.nymph.lyrics.app.rhyme.order.InMemoryRhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
 import dev.nymph.lyrics.logic.rhyme.RangeClickState
+import dev.nymph.lyrics.logic.rhyme.ResultOrdering
 import dev.nymph.lyrics.logic.rhyme.RhymeOperation
 import dev.nymph.lyrics.logic.rhyme.RhymeQueryPlan
 import dev.nymph.lyrics.logic.rhyme.RhymeSelection
@@ -22,6 +25,7 @@ import dev.nymph.lyrics.model.AnchorRange
 import dev.nymph.lyrics.model.CanvasId
 import dev.nymph.lyrics.model.RhymeK
 import dev.nymph.lyrics.model.RhymeLimits
+import dev.nymph.lyrics.model.RhymeOrder
 import dev.nymph.lyrics.model.RhymeSuggestRequest
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetId
@@ -76,6 +80,9 @@ private fun RhymeQueryPlan.identity(): Any = listOf(this::class, queryKey(), exc
  * planned with [planRhymeQuery], debounced ([RHYME_QUERY_DEBOUNCE_MS]; the first plan runs at once)
  * and executed with `mapLatest`, so a newer query cancels an older one. Never throws: failures
  * become [RhymeUiState.error].
+ *
+ * The order ("Rhyme" / "Rhyme, then meaning") is part of the query params, follows the device's
+ * choice in [orders] and is saved there by [setOrder]; a change re-queries from the first page.
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class RhymeViewModel(
@@ -83,6 +90,7 @@ class RhymeViewModel(
     private val nlp: NlpRepository,
     private val snippets: SnippetRepository,
     private val debounceMs: Long = RHYME_QUERY_DEBOUNCE_MS,
+    private val orders: RhymeOrderStore = InMemoryRhymeOrderStore(),
 ) : ViewModel() {
     private val session = MutableStateFlow(RhymeUiState(canvas = port.currentRhymeView()))
     val state: StateFlow<RhymeUiState> = session.asStateFlow()
@@ -98,6 +106,15 @@ class RhymeViewModel(
                 .distinctUntilChanged { a, b -> a?.withoutCamera() == b?.withoutCamera() }
                 .collect { view -> session.update { it.copy(canvas = view) } }
         }
+        viewModelScope.launch { orders.order.collect(::applyOrder) }
+    }
+
+    private fun applyOrder(order: RhymeOrder) = session.update { if (it.params.order == order) it else it.copy(params = it.params.copy(order = order)) }
+
+    /** The order toggle: re-query in [order] (from the first page) and remember it on this device. */
+    fun setOrder(order: RhymeOrder) {
+        applyOrder(order)
+        viewModelScope.launch { orders.save(order) }
     }
 
     // ---- Session ----
@@ -177,7 +194,10 @@ class RhymeViewModel(
             is RhymeQueryPlan.Skip, is RhymeQueryPlan.Blocked -> {
                 lastQueryKey = null
                 session.update {
-                    it.pruned(plan).copy(anchors = emptyList(), candidates = emptyList(), total = 0, offset = 0, loading = false, error = null)
+                    it.pruned(plan).copy(
+                        anchors = emptyList(), candidates = emptyList(), total = 0, offset = 0, loading = false, error = null,
+                        ordering = ResultOrdering(),
+                    )
                 }
             }
             is RhymeQueryPlan.Query -> {
@@ -193,6 +213,7 @@ class RhymeViewModel(
                             loading = false,
                             error = null,
                             expandedRow = null,
+                            ordering = ResultOrdering(asked = request.order ?: RhymeOrder.RHYME, applied = result.value.orderApplied),
                         )
                     }
                     is ApiResult.Failure -> session.update { it.copy(loading = false, error = toRhymeError(result.error, RhymeOperation.QUERY)) }

@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.app.rhyme.pattern
 
+import dev.nymph.lyrics.logic.rhyme.ResultOrdering
 import dev.nymph.lyrics.logic.rhyme.pattern.LineMatchList
 import dev.nymph.lyrics.logic.rhyme.pattern.LinePick
 import dev.nymph.lyrics.logic.rhyme.pattern.PatternFailure
@@ -67,6 +68,8 @@ data class PatternSession(
     val materializing: Set<String> = emptySet(),
     /** Snippets made from this pattern's anchor (placement step-down, like materialize). */
     val made: Int = 0,
+    /** The order the slot columns were fetched with (asked, and applied by the server). */
+    val ordering: ResultOrdering = ResultOrdering(),
 ) {
     val board: SlotBoard? get() = (detection as? Detection.Ready)?.board
 

@@ -31,7 +31,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.tags.ui.Hint
+import dev.nymph.lyrics.app.rhyme.order.BandHeader
+import dev.nymph.lyrics.app.rhyme.order.OrderNote
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderToggle
+import dev.nymph.lyrics.app.rhyme.order.SimilarityLabel
+import dev.nymph.lyrics.app.rhyme.order.bandedKey
 import dev.nymph.lyrics.app.ui.theme.Palette
+import dev.nymph.lyrics.logic.rhyme.BandedItem
 import dev.nymph.lyrics.app.wordbank.Remote
 import dev.nymph.lyrics.app.wordbank.RhymeView
 import dev.nymph.lyrics.app.wordbank.WordBankUiState
@@ -133,6 +139,8 @@ private fun RhymesWith(state: WordBankUiState, vm: WordBankViewModel) {
         OutlinedButton(onClick = vm::loadRhymesWith) { Text("Find") }
     }
     MinScore("Min score", rhymes.minScore, vm::setRhymesMinScore, vm::loadRhymesWith)
+    RhymeOrderToggle(rhymes.order, vm::setRhymesOrder, Modifier.padding(horizontal = 12.dp))
+    OrderNote(rhymes.presentation, Modifier.padding(horizontal = 12.dp))
     if (rhymes.needsAnchor) Hint("Select exactly one word, or type one.", Palette.Muted)
     when (val result = rhymes.result) {
         Remote.Idle -> Unit
@@ -150,9 +158,15 @@ private fun RhymesWith(state: WordBankUiState, vm: WordBankViewModel) {
                 )
             }
             if (response.matches.isEmpty()) item { Hint("No bank words rhyme at this score.") }
-            items(response.matches, key = { it.word.id.value }) { match ->
+            val entries = rhymes.items
+            items(entries.size, key = { i -> bandedKey(entries, i) { it.word.id.value } }) { i ->
+                val match = when (val entry = entries[i]) {
+                    is BandedItem.Header -> return@items BandHeader(entry.band)
+                    is BandedItem.Row -> entry.value
+                }
                 MatchRow(match.word, match.word.id in state.selection, vm::toggleSelected) {
-                    LinearProgressIndicator(progress = { match.score.toFloat().coerceIn(0f, 1f) }, modifier = Modifier.width(72.dp))
+                    SimilarityLabel(match.similarity)
+                    LinearProgressIndicator(progress = { match.score.toFloat().coerceIn(0f, 1f) }, modifier = Modifier.padding(start = 6.dp).width(72.dp))
                     Text(score(match.score), fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(start = 6.dp))
                 }
             }

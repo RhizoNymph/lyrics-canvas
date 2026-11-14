@@ -1,5 +1,9 @@
 package dev.nymph.lyrics.app.rhyme.pattern
 
+import dev.nymph.lyrics.app.rhyme.order.InMemoryRhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
+import dev.nymph.lyrics.logic.rhyme.ResultOrdering
+import dev.nymph.lyrics.model.RhymeOrder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.nymph.lyrics.app.rhyme.RHYME_QUERY_DEBOUNCE_MS
@@ -80,7 +84,8 @@ private fun PatternPlan.key(): Any = when (this) {
  * a chip, detects the slots, keeps the user's slot edits (pure reducer), and re-queries suggest
  * [debounceMs] after any edit or control change, the newest query winning (`mapLatest`). Paging,
  * the tuple tray, "Make snippet" and line-match materialize run on top. Never throws: failures
- * become [PatternSession.failure].
+ * become [PatternSession.failure]. The columns' order follows the device's choice in [orders]
+ * (shared with the rhyme sheet and the word bank); a change re-queries from the first page.
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class PatternViewModel(
@@ -88,6 +93,7 @@ class PatternViewModel(
     private val patterns: RhymePatternRepository,
     private val snippets: SnippetRepository,
     private val debounceMs: Long = RHYME_QUERY_DEBOUNCE_MS,
+    private val orders: RhymeOrderStore = InMemoryRhymeOrderStore(),
 ) : ViewModel() {
     private val ui = MutableStateFlow(PatternUiState())
     val state: StateFlow<PatternUiState> = ui.asStateFlow()
@@ -97,6 +103,15 @@ class PatternViewModel(
 
     init {
         viewModelScope.launch { runSuggests() }
+        viewModelScope.launch { orders.order.collect(::applyOrder) }
+    }
+
+    private fun applyOrder(order: RhymeOrder) = ui.update { if (it.params.order == order) it else it.copy(params = it.params.copy(order = order)) }
+
+    /** The columns' order toggle: re-query every column from its first page and remember it on this device. */
+    fun setOrder(order: RhymeOrder) {
+        applyOrder(order)
+        viewModelScope.launch { orders.save(order) }
     }
 
     // ---- Entering / leaving ----
@@ -233,7 +248,7 @@ class PatternViewModel(
     private suspend fun runPlan(plan: PatternPlan) {
         when (plan) {
             is PatternPlan.Skip, is PatternPlan.Blocked -> updateSession {
-                it.copy(columns = emptyList(), lineMatches = LineMatchList(), loading = false)
+                it.copy(columns = emptyList(), lineMatches = LineMatchList(), loading = false, ordering = ResultOrdering())
             }
             is PatternPlan.Query -> {
                 pageJobs.forEach { it.cancel() }
@@ -251,6 +266,7 @@ class PatternViewModel(
                                 lineMatches = lines,
                                 slotInfo = s.slotInfo + result.value.slots.associate { SlotId(it.slot.id) to it.slot },
                                 loading = false,
+                                ordering = ResultOrdering(asked = request.order ?: RhymeOrder.RHYME, applied = result.value.orderApplied),
                             )
                         }
                         is ApiResult.Failure -> s.copy(loading = false, failure = PatternFailure(PatternOperation.SUGGEST, toPatternError(result.error)))

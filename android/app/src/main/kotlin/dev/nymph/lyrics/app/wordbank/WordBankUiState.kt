@@ -1,5 +1,12 @@
 package dev.nymph.lyrics.app.wordbank
 
+import dev.nymph.lyrics.logic.rhyme.BandedItem
+import dev.nymph.lyrics.logic.rhyme.OrderPresentation
+import dev.nymph.lyrics.logic.rhyme.orderPresentation
+import dev.nymph.lyrics.logic.rhyme.rowBand
+import dev.nymph.lyrics.logic.rhyme.withBandHeaders
+import dev.nymph.lyrics.model.BankRhymeMatch
+import dev.nymph.lyrics.model.RhymeOrder
 import dev.nymph.lyrics.logic.tags.TagFilter
 import dev.nymph.lyrics.logic.wordbank.WordBankError
 import dev.nymph.lyrics.logic.wordbank.countLabel
@@ -60,7 +67,25 @@ data class RhymesWithState(
     val result: Remote<BankRhymesResponse> = Remote.Idle,
     /** Shown when there is no anchor to query. */
     val needsAnchor: Boolean = false,
-)
+    /** "Rhyme" or "Rhyme, then meaning" (the device's choice, shared with the rhyme sheet). */
+    val order: RhymeOrder = RhymeOrder.RHYME,
+    /** The order asked for with the request that [result] answers. */
+    val askedOrder: RhymeOrder = RhymeOrder.RHYME,
+) {
+    /** Headers or not, and the "Meaning order unavailable" note, for the loaded matches. */
+    val presentation: OrderPresentation
+        get() = when (val r = result) {
+            is Remote.Loaded -> orderPresentation(askedOrder, r.value.orderApplied)
+            else -> OrderPresentation.PLAIN
+        }
+
+    /** The loaded matches with band headers where the band changes, when meaning order was applied. */
+    val items: List<BandedItem<BankRhymeMatch>>
+        get() {
+            val matches = (result as? Remote.Loaded)?.value?.matches.orEmpty()
+            return withBandHeaders(matches, presentation) { rowBand(it.band, it.score) }
+        }
+}
 
 /** The related search's progress. */
 sealed interface RelatedStatus {

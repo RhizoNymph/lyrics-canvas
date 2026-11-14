@@ -1,6 +1,11 @@
 package dev.nymph.lyrics.app.rhyme
 
+import dev.nymph.lyrics.logic.rhyme.BandedItem
 import dev.nymph.lyrics.logic.rhyme.ManualSlotError
+import dev.nymph.lyrics.logic.rhyme.OrderPresentation
+import dev.nymph.lyrics.logic.rhyme.ResultOrdering
+import dev.nymph.lyrics.logic.rhyme.rowBand
+import dev.nymph.lyrics.logic.rhyme.withBandHeaders
 import dev.nymph.lyrics.logic.rhyme.ManualSlotResult
 import dev.nymph.lyrics.logic.rhyme.RhymeError
 import dev.nymph.lyrics.logic.rhyme.RhymeQueryParams
@@ -65,6 +70,8 @@ data class RhymeUiState(
     val canvas: RhymeCanvasView? = null,
     /** "Only my lines matching" (kept when the sheet closes, like the other query controls). */
     val tagFilter: ExpressionField = ExpressionField(),
+    /** The order the shown candidates were fetched with (asked, and applied by the server). */
+    val ordering: ResultOrdering = ResultOrdering(),
 ) {
     val controls: RhymeControls get() = RhymeControls(typedText, params, excluded, ranges, tagFilter)
 
@@ -74,6 +81,12 @@ data class RhymeUiState(
     val chips: List<AnchorChip> get() = anchorChips(canvas, excluded, ranges, anchors, expandedChips, awaitingEnd)
 
     val rows: List<RhymeCandidate> get() = listRows(candidates, offset, dismissed)
+
+    /** Headers or not, and the "Meaning order unavailable" note. */
+    val presentation: OrderPresentation get() = ordering.presentation
+
+    /** [rows] with band headers where the band changes, when meaning order was applied. */
+    val items: List<BandedItem<RhymeCandidate>> get() = withBandHeaders(rows, presentation) { rowBand(it.band, it.score) }
 
     val shown: ShownRange get() = shownRows(rows.size, total)
 
