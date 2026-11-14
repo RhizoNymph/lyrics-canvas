@@ -45,6 +45,7 @@ export function snippet(id: string, text: string, overrides: SnippetOverrides = 
     created_at: '',
     updated_at: '',
     content_updated_at: '',
+    list_rank: 'a0',
     ...overrides,
   };
 }

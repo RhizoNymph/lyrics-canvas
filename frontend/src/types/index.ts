@@ -86,6 +86,11 @@ export interface Snippet {
   updated_at: string;
   /** ISO-8601; bumped by the server on content changes (text, type, grid) only, never on moves. */
   content_updated_at: string;
+  /**
+   * The placement's custom list order key on `canvas_id` (a fractional index key, see lib/listMode/rank).
+   * Layout, like the position: per canvas, last write wins.
+   */
+  list_rank: string;
 }
 
 export interface Group {
@@ -151,11 +156,13 @@ export interface RemovePlacementResponse {
 }
 
 /** One entry of `PATCH /api/snippets/batch-position`. */
-export interface PositionUpdate {
-  id: string;
-  position_x: number;
-  position_y: number;
-}
+/**
+ * One item of `PATCH /api/snippets/batch-position`: a position, a custom list rank, or both. An item never
+ * carries neither.
+ */
+export type BatchPositionItem =
+  | { id: string; position_x: number; position_y: number; list_rank?: string }
+  | { id: string; list_rank: string };
 
 export interface User {
   id: string;
