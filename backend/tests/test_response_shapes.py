@@ -60,6 +60,8 @@ def legacy_snippet(s) -> dict:
         "height": s.height,
         "z_index": s.z_index,
         "group_id": str(s.group_id) if s.group_id else None,
+        # custom list order key of the placement (docs/features/snippet_placements.md#list-order)
+        "list_rank": s.list_rank,
         # tags are user-wide now: embedded as {id, name, color} (docs/features/tag_expressions.md)
         "tags": [{"id": str(t.id), "name": t.name, "color": t.color} for t in (s.tags or [])],
         "phonetics": s.phonetics,

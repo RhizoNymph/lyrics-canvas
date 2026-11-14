@@ -33,6 +33,7 @@ def _placement(p: SnippetPlacement) -> SyncPlacement:
         height=p.height,
         z_index=p.z_index,
         group_id=str(p.group_id) if p.group_id else None,
+        list_rank=p.list_rank,
     )
 
 

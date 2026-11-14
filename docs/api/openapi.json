@@ -471,11 +471,23 @@
         "type": "object"
       },
       "BatchPositionItem": {
+        "description": "Any of the fields may be omitted; an item with only ``list_rank`` re-ranks without moving.",
         "properties": {
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
           },
           "position_x": {
             "anyOf": [
@@ -520,7 +532,7 @@
         "type": "object"
       },
       "BatchPositionUpdate": {
-        "description": "Positions of placements on ``canvas_id`` (required; applies to every update).",
+        "description": "Positions and list ranks of placements on ``canvas_id`` (required; applies to every update).\nOne invalid rank fails the whole call (422 ``invalid_list_rank``) before anything changes.",
         "properties": {
           "canvas_id": {
             "format": "uuid",
@@ -3300,6 +3312,17 @@
             ],
             "title": "Id"
           },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
+          },
           "position_x": {
             "default": 0.0,
             "title": "Position X",
@@ -3356,7 +3379,7 @@
         "type": "object"
       },
       "SnippetResponse": {
-        "description": "A snippet in the context of one canvas: content is shared by every canvas holding it;\n``canvas_id, position_x, position_y, width, height, z_index, group_id`` and ``placement_id``\nare that canvas's placement. ``canvases`` lists every canvas holding the snippet (including\nthis one), sorted by lower-cased title, then id.",
+        "description": "A snippet in the context of one canvas: content is shared by every canvas holding it;\n``canvas_id, position_x, position_y, width, height, z_index, group_id, list_rank`` and\n``placement_id`` are that canvas's placement (``list_rank``: the custom list order key, sorted\nby byte order, ties by ``placement_id``). ``canvases`` lists every canvas holding the snippet (including\nthis one), sorted by lower-cased title, then id.",
         "properties": {
           "beats_per_line": {
             "anyOf": [
@@ -3431,6 +3454,10 @@
             "title": "Id",
             "type": "string"
           },
+          "list_rank": {
+            "title": "List Rank",
+            "type": "string"
+          },
           "phonetics": {
             "anyOf": [
               {
@@ -3500,6 +3527,7 @@
           "height",
           "z_index",
           "group_id",
+          "list_rank",
           "tags",
           "phonetics",
           "derived_from",
@@ -3614,6 +3642,17 @@
               }
             ],
             "title": "Height"
+          },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
           },
           "position_x": {
             "anyOf": [
@@ -3935,6 +3974,10 @@
             "title": "Height",
             "type": "number"
           },
+          "list_rank": {
+            "title": "List Rank",
+            "type": "string"
+          },
           "placement_id": {
             "title": "Placement Id",
             "type": "string"
@@ -3969,7 +4012,8 @@
           "width",
           "height",
           "z_index",
-          "group_id"
+          "group_id",
+          "list_rank"
         ],
         "title": "SyncPlacement",
         "type": "object"
@@ -4036,7 +4080,7 @@
         "type": "object"
       },
       "SyncSnippet": {
-        "description": "A snippet's shared content: ``SnippetResponse`` without the per-canvas fields\n(``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,\ncanvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``.",
+        "description": "A snippet's shared content: ``SnippetResponse`` without the per-canvas fields\n(``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,\nlist_rank, canvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``.",
         "properties": {
           "beats_per_line": {
             "anyOf": [
@@ -5730,7 +5774,7 @@
     },
     "/api/canvases/{canvas_id}/snippets": {
       "post": {
-        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``.",
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without\n``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is\n422 ``invalid_list_rank``.",
         "operationId": "create_snippet_api_canvases__canvas_id__snippets_post",
         "parameters": [
           {
@@ -5788,11 +5832,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -6913,6 +6957,7 @@
     },
     "/api/snippets/batch-position": {
       "patch": {
+        "description": "Positions and/or list ranks of placements on ``canvas_id``; a whole-canvas re-rank is one\ncall. One invalid ``list_rank`` is 422 ``invalid_list_rank`` and nothing changes.",
         "operationId": "batch_position_api_snippets_batch_position_patch",
         "requestBody": {
           "content": {
@@ -6939,11 +6984,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -7028,7 +7073,7 @@
         ]
       },
       "put": {
-        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id) update the placement on ``canvas_id``. ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
+        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422\n``invalid_list_rank``). ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
         "operationId": "update_snippet_api_snippets__snippet_id__put",
         "parameters": [
           {
@@ -7098,11 +7143,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [

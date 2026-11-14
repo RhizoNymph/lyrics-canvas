@@ -37,6 +37,7 @@ def fake_snippet(canvas_id: uuid.UUID, text: str, **overrides) -> SimpleNamespac
         height=80.0,
         z_index=0,
         group_id=None,
+        list_rank="a0",
         tags=[],
         phonetics=compute_snippet_phonetics(text, grid, None).model_dump(mode="json") if grid is not None else None,
         derived_from=None,
