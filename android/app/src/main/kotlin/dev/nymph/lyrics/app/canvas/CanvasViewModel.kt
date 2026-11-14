@@ -31,7 +31,12 @@ import dev.nymph.lyrics.logic.canvas.centredOn
 import dev.nymph.lyrics.logic.canvas.hitTestScreen
 import dev.nymph.lyrics.logic.canvas.toMergeError
 import dev.nymph.lyrics.logic.canvas.viewportCenter
+import dev.nymph.lyrics.app.canvas.list.InMemoryListSortStore
+import dev.nymph.lyrics.app.canvas.list.ListSortStore
 import dev.nymph.lyrics.logic.list.ListOrder
+import dev.nymph.lyrics.logic.list.ListSort
+import dev.nymph.lyrics.logic.list.ReorderPlan
+import dev.nymph.lyrics.logic.list.planReorder
 import dev.nymph.lyrics.logic.placements.RemovalPlan
 import dev.nymph.lyrics.logic.placements.applyTransfer
 import dev.nymph.lyrics.logic.placements.toPlacementError
@@ -53,6 +58,7 @@ import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
 import dev.nymph.lyrics.model.SnippetType
+import dev.nymph.lyrics.model.SnippetUpdateRequest
 import dev.nymph.lyrics.model.Tag
 import dev.nymph.lyrics.model.TagId
 import dev.nymph.lyrics.model.TransferResponse
@@ -99,8 +105,11 @@ const val FOCUS_HANDLED_KEY: String = "focus_handled"
  * [CanvasEvent.Message].
  *
  * List mode shows the same snippets as rows ([CanvasUiState.Ready.listRows]) in a [ListOrder]
- * captured when the list is shown, reloaded, or an editor save comes back, so rows never move
- * under the user's finger; selection, merge and delete are shared with the canvas.
+ * captured when the list is shown, reloaded, re-sorted, reordered, or an editor save comes back,
+ * so rows never move under the user's finger; selection, merge and delete are shared with the
+ * canvas. The sort ([ListSort]) is remembered per device ([ListSortStore]); [moveListRow] drops a
+ * dragged row (see [planReorder]): in Custom one layout update, otherwise the shown order becomes
+ * the canvas's custom order in one batch and the sort switches to Custom.
  *
  * Tags ([TagCanvasPort]): the filter bar's filter hides non-matching snippets from both views
  * ([CanvasUiState.Ready.visibleSnippets]) and deselects them; picker links, renames and deletes
@@ -120,6 +129,7 @@ const val FOCUS_HANDLED_KEY: String = "focus_handled"
  * @param savedState keeps the canvas / list mode across configuration changes and process death
  * @param canvasUpdates tells the canvas list about a rename
  * @param searchMemory the in-canvas search text per canvas for the session
+ * @param listSorts the list-mode sort of this device
  */
 @OptIn(FlowPreview::class)
 class CanvasViewModel(
@@ -132,6 +142,7 @@ class CanvasViewModel(
     canvasUpdates: CanvasUpdates = CanvasUpdates(),
     private val searchMemory: CanvasSearchMemory = CanvasSearchMemory(),
     private val searchDebounceMs: Long = CANVAS_SEARCH_DEBOUNCE_MS,
+    private val listSorts: ListSortStore = InMemoryListSortStore(),
 ) : ViewModel(), RhymeCanvasPort, TagCanvasPort, WordBankCanvasPort, PlacementCanvasPort {
     private val _state = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
     val state: StateFlow<CanvasUiState> = _state.asStateFlow()
@@ -162,6 +173,9 @@ class CanvasViewModel(
     /** A focused snippet to centre once the canvas has a size. */
     private var pendingCentre: SnippetId? = null
 
+    /** The list sort in force, also before the canvas loads (the stored one may arrive later). */
+    private var listSort: ListSort = ListSort.DEFAULT
+
     private val renamer = CanvasRenamer(canvases, viewModelScope, canvasUpdates) { canvas ->
         updateReady { it.copy(title = canvas.title, snippets = withCanvasRenamed(it.snippets, canvas.id, canvas.title)) }
     }
@@ -172,6 +186,7 @@ class CanvasViewModel(
     init {
         reload()
         viewModelScope.launch { canvases.observe(canvasId).collect(::followCopy) }
+        viewModelScope.launch { listSorts.sort.collect(::applyListSort) }
         viewModelScope.launch {
             _searchInput
                 .debounce { if (it.isBlank()) 0L else searchDebounceMs }
@@ -242,7 +257,7 @@ class CanvasViewModel(
 
     private fun modeFor(kind: CanvasModeKind, snippets: List<Snippet>): CanvasMode = when (kind) {
         CanvasModeKind.CANVAS -> CanvasMode.Canvas
-        CanvasModeKind.LIST -> CanvasMode.SnippetList(ListOrder.of(snippets))
+        CanvasModeKind.LIST -> CanvasMode.SnippetList(ListOrder.of(snippets, listSort))
     }
 
     /** Show the canvas or the list; showing the list sorts it afresh. Remembered before the canvas loads too. */
@@ -253,7 +268,63 @@ class CanvasViewModel(
 
     /** Capture a new list order from the current snippets (no-op on the canvas). */
     private fun resortList() = updateReady { ready ->
-        if (ready.mode is CanvasMode.SnippetList) ready.copy(mode = CanvasMode.SnippetList(ListOrder.of(ready.snippets))) else ready
+        if (ready.mode is CanvasMode.SnippetList) ready.copy(mode = CanvasMode.SnippetList(ListOrder.of(ready.snippets, listSort))) else ready
+    }
+
+    // ---- List sort and reorder ----
+
+    /** The stored sort arrived (or changed): a shown list is sorted afresh by it. */
+    private fun applyListSort(sort: ListSort) {
+        if (sort == listSort) return
+        listSort = sort
+        resortList()
+    }
+
+    /** The sort menu: re-sort the list and remember the choice on this device. */
+    fun setListSort(sort: ListSort) {
+        applyListSort(sort)
+        persistScope.launch { listSorts.save(sort) }
+    }
+
+    /**
+     * A dragged row was dropped so it is the [toIndex]-th of the shown rows (counted without it).
+     * Applied at once (rows re-sorted by the new keys, the sort switched to Custom after a
+     * re-rank) and saved as layout; a failure restores the previous keys, order and sort and says
+     * why. Ignored while a merge or delete is in flight.
+     */
+    fun moveListRow(id: SnippetId, toIndex: Int) {
+        val ready = ready() ?: return
+        val list = ready.mode as? CanvasMode.SnippetList ?: return
+        if (ready.busy) return
+        val plan = planReorder(list.order, ready.snippets, ready.listRows, id, toIndex) ?: return
+        val ranks: Map<SnippetId, String> = when (plan) {
+            is ReorderPlan.Move -> mapOf(plan.id to plan.rank.value)
+            is ReorderPlan.Rerank -> plan.ranks.associate { (sid, rank) -> sid to rank.value }
+        }
+        val before = ready.snippets.filter { it.id in ranks }.associate { it.id to it.listRank }
+        val previousSort = listSort
+        withListRanks(ranks, ListSort.CUSTOM)
+        if (previousSort != ListSort.CUSTOM) persistScope.launch { listSorts.save(ListSort.CUSTOM) }
+        viewModelScope.launch {
+            val error = when (plan) {
+                is ReorderPlan.Move -> snippets.update(canvasId, plan.id, SnippetUpdateRequest(listRank = plan.rank.value)).errorOrNull()
+                is ReorderPlan.Rerank ->
+                    snippets.batchPosition(canvasId, plan.ranks.map { (sid, rank) -> PositionUpdate(sid, listRank = rank.value) }).errorOrNull()
+            } ?: return@launch
+            withListRanks(before, previousSort)
+            if (previousSort != ListSort.CUSTOM) persistScope.launch { listSorts.save(previousSort) }
+            message(toPlacementError(error).userMessage())
+        }
+    }
+
+    /** Set these placements' keys and show the list sorted afresh by [sort]. */
+    private fun withListRanks(ranks: Map<SnippetId, String>, sort: ListSort) {
+        listSort = sort
+        updateReady { ready ->
+            val next = ready.snippets.map { s -> ranks[s.id]?.let { s.copy(listRank = it) } ?: s }
+            val mode = if (ready.mode is CanvasMode.SnippetList) CanvasMode.SnippetList(ListOrder.of(next, sort)) else ready.mode
+            ready.copy(snippets = next, mode = mode)
+        }
     }
 
     fun snippet(id: SnippetId): Snippet? = ready()?.byId?.get(id)
