@@ -23,6 +23,9 @@ Picks for each slot build a tuple that becomes a snippet.
   45% of the pane, at least 140 dp, so the next one peeks); each column scrolls on its own and has
   "More" for that slot's next page. Rows: text, score, "fits", source badge ("my line" / "dict"),
   "+ bank", ×. Tap = pick for the tuple (tap again to unpick).
+- Order toggle above the columns ("Rhyme" / "Rhyme, then meaning", shared with the rhyme sheet and
+  the word bank): with meaning order each column has band headers and rows show "≈NN%"; see
+  [android_rhyme_meaning_order.md](./android_rhyme_meaning_order.md).
 - Tuple tray: picks in slot order with gaps (`steady · ___ · strong`); Make snippet, Add picks to
   word bank, Clear.
 - Whole-line matches tab: note lines with their hits coloured per slot and "N of M slots"; tap to

@@ -51,6 +51,10 @@ snippet on the canvas it was opened from.
   `TagTarget<K>`, `FilterTextStore`, `TagChangeListener`) so the filter bar, presets and picker
   serve both snippets and words with one implementation.
 
+- **Order** (Rhymes with): the "Rhyme" / "Rhyme, then meaning" toggle shared with the rhyme sheet;
+  meaning order shows band headers and "≈NN%" per match. See
+  [android_rhyme_meaning_order.md](./android_rhyme_meaning_order.md).
+
 ## Non-scope
 
 - The routes, migration and algorithms (backend; [word_bank.md](./word_bank.md)); the web client
