@@ -132,6 +132,15 @@ picks build a tuple ("Make snippet", "Add picks to word bank"), and a Whole line
 lines that already hit 2+ slots. Server-only ("Needs connection" offline). See
 [android_rhyme_patterns.md](./features/android_rhyme_patterns.md).
 
+### Personal API Tokens (backend)
+A user can create revocable personal API tokens (`POST /api/tokens {name, expires_in_days}`: 1..365
+days, default 90, null = never) for scripts and agents. A token is `lct_` + 43 URL-safe chars, shown
+once; only its sha256 is stored (`api_tokens`, migration 011), with a 12-char prefix for display.
+`GET /api/tokens` lists the live (not revoked) ones newest first, `DELETE /api/tokens/{id}` revokes. A
+bearer starting with `lct_` authenticates as its user on every route while not revoked or expired
+(`last_used_at` written at most once a minute); the token routes themselves need a login JWT (403
+`token_management_forbidden`). See [api_tokens.md](./features/api_tokens.md).
+
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
 while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
@@ -196,6 +205,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | Module | Scope |
 |--------|-------|
 | [Authentication](./backend/auth.md) | JWT, bcrypt, user model, login/register |
+| [Personal API Tokens](./features/api_tokens.md) | `api_tokens` (migration 011), `/api/tokens` create / list / revoke, `lct_` bearer auth, login-only token management |
 | [Database & Models](./backend/database.md) | PostgreSQL, ORM models, Alembic migrations |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippets, sharing, forking |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, user-wide tag labels, associations, tag presets |
@@ -265,8 +275,11 @@ Snippet, Canvas, Tag, BankWord: version (content version, +1 per content change;
 | Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
 | Sync | 1 (snapshot) | Bearer |
+| API tokens | 3 (create, list, revoke) | Bearer login JWT only |
 | Health | 1 | Public |
-| **Total** | **58 endpoints** | |
+| **Total** | **61 endpoints** | |
+
+Bearer is a login JWT or a personal API token (`lct_…`, [api_tokens.md](./features/api_tokens.md)).
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -790,3 +803,14 @@ Features Index:
       - frontend/src/components/sidebar/RhymeSidebar.tsx (mode switch)
     depends_on: [rhyme_patterns, rhyme_view, web_tag_expressions, web_word_bank, web_rests_and_search]
     doc: docs/features/web_rhyme_patterns.md
+  api_tokens:
+    description: Revocable personal API tokens for scripts and agents. Migration 011 creates api_tokens (id, user_id FK users ON DELETE CASCADE indexed, name 1-64 after trim, token_hash char(64) unique sha256 hex, prefix first 12 chars, created_at, last_used_at, expires_at null = never, revoked_at). POST /api/tokens {name, expires_in_days 1..365 default 90 or null} -> 201 {token {id, name, prefix, created_at, last_used_at, expires_at}, secret lct_ + 43 chars shown once}; GET /api/tokens lists not revoked tokens newest first without secrets; DELETE /api/tokens/{id} -> 204 sets revoked_at. deps.get_auth treats a bearer starting with lct_ as an API token (sha256 lookup, valid while not revoked and not expired, last_used_at written at most once a minute by a conditional UPDATE, debug log auth.api_token user_id token_id, never the secret), anything else as the unchanged JWT path; get_current_user returns the user either way; require_login guards the token routes (403 token_management_forbidden for an API token). Typed errors invalid_token_name (422), token_not_found (404), token_management_forbidden (403).
+    entry_points:
+      - backend/alembic/versions/011_api_tokens.py
+      - backend/app/models/api_token.py
+      - backend/app/services/api_tokens/ (errors, secrets, values, service)
+      - backend/app/schemas/api_token.py
+      - backend/app/api/tokens.py (POST/GET /api/tokens, DELETE /api/tokens/{id})
+      - backend/app/api/deps.py (get_auth, get_current_user, require_login)
+    depends_on: [typed_api]
+    doc: docs/features/api_tokens.md

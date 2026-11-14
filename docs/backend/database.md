@@ -317,6 +317,12 @@ in the old list order (snippet `content_updated_at` desc, `created_at` desc, id)
 indexes `(canvas_id, list_rank)`. The downgrade drops the index and the column. Details:
 [snippet_placements.md](../features/snippet_placements.md#migration-010).
 
+**File:** `alembic/versions/011_api_tokens.py`
+
+Creates `api_tokens` (personal API tokens: `user_id` FK users ON DELETE CASCADE indexed, `name`,
+unique `token_hash` sha256 hex, `prefix`, `created_at`, `last_used_at`, `expires_at`, `revoked_at`).
+The downgrade drops it. Details: [api_tokens.md](../features/api_tokens.md#migration-011).
+
 ### Running Migrations
 
 ```bash
