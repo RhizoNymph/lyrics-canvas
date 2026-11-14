@@ -157,7 +157,7 @@ recognized after the 404 and returned.
   "server_time": "2026-11-11 16:42:00.123456+00:00",
   "canvases":   [CanvasResponse, …],
   "placements": [{"snippet_id", "canvas_id", "placement_id", "position_x", "position_y",
-                  "width", "height", "z_index", "group_id"}, …],
+                  "width", "height", "z_index", "group_id", "list_rank"}, …],
   "snippets":   [{"id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text",
                   "phonetics", "derived_from", "created_at", "updated_at", "content_updated_at",
                   "version", "tag_ids": [tag id, …]}, …],
@@ -172,7 +172,7 @@ recognized after the 404 and returned.
 - `canvases` is ordered like `GET /api/canvases` (updated last first); `placements` by placement
   creation; `snippets` by creation; `tags`, `tag_presets` and `word_bank` like their list routes.
 - Each snippet appears once, however many canvases hold it. Its per-canvas fields
-  (`placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id`) are in
+  (`placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id, list_rank`) are in
   `placements`; `canvases: [{id, title}]` is built by the client from `placements` and `canvases`.
   `tags` is replaced by `tag_ids`, sorted by lower-cased tag name then id; the tag objects are in
   `tags`.
