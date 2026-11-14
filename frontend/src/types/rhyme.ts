@@ -5,6 +5,7 @@
  */
 import type { GridLine } from './index';
 import type { TagExprError } from '@/lib/tagExpr/errors';
+import type { RhymeBand, RhymeOrder } from '@/lib/rhyme/order';
 
 export type Stress = 0 | 1 | 2;
 export type RhymeK = 1 | 2 | 3 | 4;
@@ -60,6 +61,13 @@ export interface RhymeCandidate extends RhymeUnit {
   /** Right-to-left: index 0 is the final syllable. */
   alignment: SyllableAlignment[];
   source: SourceName;
+  /**
+   * Fixed rhyme-score band (lib/rhyme/order.ts). The server always sends it; optional here only so wire
+   * fixtures written before the field existed still type-check (`rowBand` derives it from `score` then).
+   */
+  band?: RhymeBand;
+  /** Cosine similarity to the anchor (4 decimals) when meaning order was applied; null otherwise. */
+  similarity?: number | null;
 }
 
 /**
@@ -142,6 +150,8 @@ export interface RhymeSuggestRequest {
    * sidebar's filter is empty; never sent when it does not parse.
    */
   tag_filter?: string;
+  /** "meaning" = rhyme bands, then similarity to the anchors. Omitted for the server default "rhyme". */
+  order?: 'meaning';
 }
 
 export interface RhymeSuggestResponse {
@@ -149,6 +159,8 @@ export interface RhymeSuggestResponse {
   candidates: RhymeCandidate[];
   total: number;
   elapsed_ms: number;
+  /** The order the server used; "rhyme" when meaning was asked but the model is unavailable. */
+  order_applied?: RhymeOrder;
 }
 
 // ---- Errors ----

@@ -5,6 +5,10 @@ import { errorTextStyle, fieldStyle, mutedTextStyle, smallBtnStyle } from '@/com
 import MinScoreSlider from './MinScoreSlider';
 import ScoreBar from './ScoreBar';
 import { rowStyle } from './styles';
+import { orderPresentation, withBandHeaders } from '@/lib/rhyme/order';
+import type { RhymeOrder } from '@/lib/rhyme/order';
+import RhymeOrderToggle from '@/components/rhyme/order/RhymeOrderToggle';
+import { BandHeader, OrderNote, SimilarityBadge } from '@/components/rhyme/order/orderParts';
 
 interface Props {
   state: Remote<BankRhymesResponse>;
@@ -20,11 +24,14 @@ interface Props {
   onMinScore: (score: number) => void;
   onToggleWord: (id: string) => void;
   onSelectAll: (ids: readonly string[]) => void;
+  /** The order the shown result was asked for (default "rhyme"); with the response's `order_applied` it picks headers or the "unavailable" note. */
+  requestedOrder?: RhymeOrder;
 }
 
 /** Bank words ranked against one anchor (the one selected word, or typed text), with score bars. */
-export default function RhymesWithView({ state, text, selectedWordText, selectedCount, minScore, selected, onText, onMinScore, onToggleWord, onSelectAll }: Props) {
+export default function RhymesWithView({ state, text, selectedWordText, selectedCount, minScore, selected, onText, onMinScore, onToggleWord, onSelectAll, requestedOrder = 'rhyme' }: Props) {
   const hasAnchor = text.trim() !== '' || selectedWordText !== null;
+  const presentation = state.kind === 'ready' ? orderPresentation(requestedOrder, state.value.order_applied) : 'plain';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <input
@@ -35,6 +42,7 @@ export default function RhymesWithView({ state, text, selectedWordText, selected
         style={fieldStyle}
       />
       <MinScoreSlider label="Min score" value={minScore} onChange={onMinScore} />
+      <RhymeOrderToggle />
       {!hasAnchor && (
         <div style={mutedTextStyle}>
           {selectedCount > 1 ? `${selectedCount} words are selected; select exactly one or type a word.` : 'Select exactly one word or type one.'}
@@ -56,8 +64,12 @@ export default function RhymesWithView({ state, text, selectedWordText, selected
               </button>
             )}
           </div>
+          <OrderNote presentation={presentation} />
           <div role="listbox" aria-label="Rhyme matches" aria-multiselectable>
-            {state.value.matches.map((m) => (
+            {withBandHeaders(state.value.matches, presentation).map((item) => {
+              if (item.kind === 'header') return <BandHeader key={item.key} band={item.band} />;
+              const m = item.row;
+              return (
               <div
                 key={m.word.id}
                 role="option"
@@ -66,10 +78,12 @@ export default function RhymesWithView({ state, text, selectedWordText, selected
                 style={rowStyle(selected.has(m.word.id))}
               >
                 <span style={{ fontSize: 13, flex: 1 }}>{m.word.text}</span>
+                <SimilarityBadge similarity={m.similarity} />
                 <ScoreBar value={m.score} label="score" />
                 <span style={{ ...mutedTextStyle, fontFamily: 'monospace' }}>d{m.match_depth}</span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

@@ -5,6 +5,8 @@
 import { PATTERN_LINE_MATCH_PAGE_SIZE, PATTERN_PAGE_SIZE } from '@/types/rhymePattern';
 import type { LineMatch, PatternCandidate, PatternSlot, PatternSuggestResponse } from '@/types/rhymePattern';
 import { lineWords } from '@/lib/grid/restMarks';
+import { resultOrdering } from '@/lib/rhyme/order';
+import type { ResultOrdering, RhymeOrder } from '@/lib/rhyme/order';
 
 export interface SlotColumn {
   /** The slot as the server recomputed it from the members sent. */
@@ -20,10 +22,14 @@ export interface PatternResults {
   readonly lineMatches: readonly LineMatch[];
   readonly lineMatchTotal: number;
   readonly lineMatchOffset: number;
+  /** Order of the slot columns: asked for by the first page, applied by the server. Later pages keep it. */
+  readonly ordering: ResultOrdering;
 }
 
-export function firstPageResults(res: PatternSuggestResponse, dismissed: ReadonlySet<string>): PatternResults {
+/** `requested` is the order the first page was asked for (absent = rhyme). */
+export function firstPageResults(res: PatternSuggestResponse, dismissed: ReadonlySet<string>, requested: RhymeOrder = 'rhyme'): PatternResults {
   return {
+    ordering: resultOrdering(requested, res.order_applied),
     columns: new Map(
       res.slots.map((r) => [r.slot.id, { slot: r.slot, candidates: r.candidates.filter((c) => !dismissed.has(c.id)), total: r.total, offset: 0 }]),
     ),

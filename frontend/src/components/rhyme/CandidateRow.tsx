@@ -4,6 +4,7 @@ import AlignmentTable from './AlignmentTable';
 import { PROVENANCE_COLORS, PROVENANCE_LABELS, NON_FIT_ALPHA } from './rhymeColors';
 import { btnStyle, primaryBtnStyle, monoStyle } from './sidebarStyles';
 import AddToBankButton from '@/components/wordBank/AddToBankButton';
+import { SimilarityBadge } from './order/orderParts';
 
 interface Props {
   candidate: RhymeCandidate;
@@ -43,6 +44,7 @@ export default function CandidateRow({ candidate, anchor, hasSlot, expanded, onT
           {candidate.text}
         </span>
         <span style={{ flex: 1 }} />
+        <SimilarityBadge similarity={candidate.similarity} />
         <span style={{ ...monoStyle, fontSize: 11, color: '#c0c0d8' }}>{candidate.score.toFixed(2)}</span>
         <span style={{ ...monoStyle, fontSize: 11, color: '#8a8aaa' }}>d{candidate.match_depth}</span>
         {hasSlot && candidate.fits_slot && (

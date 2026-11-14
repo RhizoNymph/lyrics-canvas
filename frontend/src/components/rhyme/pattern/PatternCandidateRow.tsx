@@ -2,6 +2,7 @@ import type { PatternCandidate } from '@/types/rhymePattern';
 import AddToBankButton from '@/components/wordBank/AddToBankButton';
 import { PROVENANCE_COLORS } from '../rhymeColors';
 import { btnStyle, monoStyle } from '../sidebarStyles';
+import { SimilarityBadge } from '../order/orderParts';
 
 interface Props {
   candidate: PatternCandidate;
@@ -34,6 +35,7 @@ export default function PatternCandidateRow({ candidate, picked, colour, onPick,
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <span style={{ fontWeight: 'bold', fontSize: 12, color: '#e0e0e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{candidate.text}</span>
+        <SimilarityBadge similarity={candidate.similarity} />
         <span style={{ ...monoStyle, fontSize: 10, color: '#c0c0d8' }}>{candidate.score.toFixed(2)}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }} onClick={(e) => e.stopPropagation()}>

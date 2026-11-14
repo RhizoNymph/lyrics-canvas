@@ -10,6 +10,9 @@ import type { Snippet } from '@/types';
 import { toRhymeError } from '@/lib/rhyme/errors';
 import { RHYME_PAGE_SIZE, RhymeError } from '@/types/rhyme';
 import { format, parse, renameInText } from '@/lib/tagExpr';
+import { RHYME_ORDERING, orderField, resultOrdering } from '@/lib/rhyme/order';
+import type { ResultOrdering, RhymeOrder } from '@/lib/rhyme/order';
+import { currentRhymeOrder } from './rhymeOrderStore';
 import type {
   AnchorRange,
   RhymeK,
@@ -51,6 +54,8 @@ export interface RhymeState {
   total: number;
   offset: number;
   dismissed: Set<string>;
+  /** Order of the loaded candidates; "More" pages keep it so appends continue the same bands. */
+  ordering: ResultOrdering;
   /** Materializations made per anchor snippet id this session (drives the row step-down). */
   materializeCounts: Map<string, number>;
   /** Canvas element size, for the viewport-centre fallback when materializing without a single anchor. */
@@ -95,6 +100,7 @@ function cleared() {
     total: 0,
     offset: 0,
     dismissed: new Set<string>(),
+    ordering: RHYME_ORDERING,
     materializeCounts: new Map<string, number>(),
     loading: false,
     error: null,
@@ -171,7 +177,10 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
    * Build the request for the current state, or null when nothing should be queried, or a blocking
    * error when the tag filter does not parse (the server is never sent known-invalid input).
    */
-  const buildRequest = (offset: number): { request: RhymeSuggestRequest; slot: Slot | null } | RhymeError | null => {
+  const buildRequest = (
+    offset: number,
+    order: RhymeOrder,
+  ): { request: RhymeSuggestRequest; slot: Slot | null } | RhymeError | null => {
     const state = get();
     const canvas = useCanvasStore.getState();
     if (!state.active || !canvas.canvasId) return null;
@@ -203,6 +212,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
         weights: null,
         dialect: null,
         ...(tagFilter.expr !== null ? { tag_filter: format(tagFilter.expr) } : {}),
+        ...orderField(order),
       },
       slot,
     };
@@ -264,15 +274,16 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
     setViewSize: (width, height) => set({ viewSize: { width, height } }),
 
     runQuery: async () => {
-      const built = buildRequest(0);
+      const order = currentRhymeOrder();
+      const built = buildRequest(0, order);
       const seq = ++querySeq;
       if (built instanceof RhymeError) {
-        set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: built });
+        set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, loading: false, error: built });
         return;
       }
       if (!built) {
         if (get().active) {
-          set({ anchors: [], candidates: [], total: 0, offset: 0, loading: false, error: null });
+          set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, loading: false, error: null });
         }
         return;
       }
@@ -286,6 +297,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
           candidates: res.data.candidates.filter((c) => !dismissed.has(c.id)),
           total: res.data.total,
           offset: 0,
+          ordering: resultOrdering(order, res.data.order_applied),
           loading: false,
           error: null,
         });
@@ -299,7 +311,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       const state = get();
       const nextOffset = state.offset + RHYME_PAGE_SIZE;
       if (state.loading || nextOffset >= state.total) return;
-      const built = buildRequest(nextOffset);
+      const built = buildRequest(nextOffset, state.ordering.requested);
       if (!built || built instanceof RhymeError) return;
       const seq = ++querySeq;
       set({ loading: true, error: null });

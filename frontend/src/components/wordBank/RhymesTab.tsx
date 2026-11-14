@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveRhymeAnchor } from '@/lib/wordBank';
 import { useWordBankStore } from '@/stores/wordBankStore';
 import { useWordBankQueryStore } from '@/stores/wordBankQueryStore';
+import { useRhymeOrderStore } from '@/stores/rhymeOrderStore';
 import { smallBtnStyle } from '@/components/tags/tagStyles';
 import FamiliesView from './FamiliesView';
 import RhymesWithView from './RhymesWithView';
@@ -81,6 +82,8 @@ function RhymesWithPane() {
   const minScore = useWordBankQueryStore((s) => s.rhymeMinScore);
   const setMinScore = useWordBankQueryStore((s) => s.setRhymeMinScore);
   const load = useWordBankQueryStore((s) => s.loadRhymes);
+  const requestedOrder = useWordBankQueryStore((s) => s.rhymesOrder);
+  const order = useRhymeOrderStore((s) => s.order);
   const pinned = useRef<string | null>(null);
 
   const anchor = useMemo(() => resolveRhymeAnchor(text, selected, pinned.current), [text, selected]);
@@ -88,7 +91,7 @@ function RhymesWithPane() {
   const anchorKey = anchor === null ? 'none' : anchor.kind === 'word' ? `w:${anchor.wordId}` : `t:${anchor.text}`;
   const anchorWord = anchor?.kind === 'word' ? words.find((w) => w.id === anchor.wordId) : undefined;
 
-  useDebounced(`${anchorKey}|${revision}|${appliedText}|${minScore}`, () => void load(anchor));
+  useDebounced(`${anchorKey}|${revision}|${appliedText}|${minScore}|${order}`, () => void load(anchor));
 
   return (
     <RhymesWithView
@@ -102,6 +105,7 @@ function RhymesWithPane() {
       onMinScore={setMinScore}
       onToggleWord={(id) => select({ type: 'toggle', id })}
       onSelectAll={(ids) => select({ type: 'add', ids })}
+      requestedOrder={requestedOrder}
     />
   );
 }
