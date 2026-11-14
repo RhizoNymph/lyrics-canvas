@@ -118,6 +118,16 @@
       },
       "BankRhymeMatch": {
         "properties": {
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "match_depth": {
             "title": "Match Depth",
             "type": "integer"
@@ -126,6 +136,17 @@
             "title": "Score",
             "type": "number"
           },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
           "word": {
             "$ref": "#/components/schemas/BankWordResponse"
           }
@@ -133,7 +154,9 @@
         "required": [
           "word",
           "score",
-          "match_depth"
+          "match_depth",
+          "band",
+          "similarity"
         ],
         "title": "BankRhymeMatch",
         "type": "object"
@@ -161,6 +184,15 @@
             "minimum": 0.0,
             "title": "Min Score",
             "type": "number"
+          },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
           },
           "tag_filter": {
             "anyOf": [
@@ -210,11 +242,20 @@
             },
             "title": "Matches",
             "type": "array"
+          },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
           }
         },
         "required": [
           "anchor",
-          "matches"
+          "matches",
+          "order_applied"
         ],
         "title": "BankRhymesResponse",
         "type": "object"
@@ -1455,6 +1496,16 @@
             "title": "Alignment",
             "type": "array"
           },
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "best_anchor_id": {
             "title": "Best Anchor Id",
             "type": "string"
@@ -1516,6 +1567,17 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
           },
           "snippet_id": {
             "anyOf": [
@@ -1601,6 +1663,8 @@
           "fits_slot",
           "alignment",
           "source",
+          "band",
+          "similarity",
           "member_scores"
         ],
         "title": "PatternCandidateModel",
@@ -1942,6 +2006,15 @@
             "title": "Offsets",
             "type": "object"
           },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/SlotSpec"
@@ -2017,6 +2090,14 @@
             "title": "Line Matches",
             "type": "array"
           },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/PatternSlotResult"
@@ -2029,7 +2110,8 @@
           "slots",
           "line_matches",
           "line_match_total",
-          "elapsed_ms"
+          "elapsed_ms",
+          "order_applied"
         ],
         "title": "PatternSuggestResponse",
         "type": "object"
@@ -2388,6 +2470,16 @@
             "title": "Alignment",
             "type": "array"
           },
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "best_anchor_id": {
             "title": "Best Anchor Id",
             "type": "string"
@@ -2442,6 +2534,17 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
           },
           "snippet_id": {
             "anyOf": [
@@ -2526,7 +2629,9 @@
           "best_anchor_id",
           "fits_slot",
           "alignment",
-          "source"
+          "source",
+          "band",
+          "similarity"
         ],
         "title": "RhymeCandidateModel",
         "type": "object"
@@ -2708,6 +2813,15 @@
             "title": "Offset",
             "type": "integer"
           },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
+          },
           "slot": {
             "anyOf": [
               {
@@ -2779,6 +2893,14 @@
             "title": "Elapsed Ms",
             "type": "number"
           },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -2788,7 +2910,8 @@
           "anchors",
           "candidates",
           "total",
-          "elapsed_ms"
+          "elapsed_ms",
+          "order_applied"
         ],
         "title": "RhymeSuggestResponse",
         "type": "object"
@@ -8224,7 +8347,7 @@
     },
     "/api/word-bank/rhymes": {
       "post": {
-        "description": "Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text.",
+        "description": "Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text;\n``order=\"meaning\"`` sorts by score band, then meaning similarity to the anchor text.",
         "operationId": "rhymes_api_word_bank_rhymes_post",
         "requestBody": {
           "content": {

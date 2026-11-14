@@ -94,6 +94,7 @@ def pattern_candidate_model(
     slot: PatternSlot,
     snippet_id: str,
     grid_data: Mapping[str, object] | None,
+    similarity: float | None = None,
 ) -> PatternCandidateModel:
     weakest = found.weakest
     base = candidate_model(
@@ -105,6 +106,7 @@ def pattern_candidate_model(
         ),
         Slot(syllable_count=slot.syllable_count, stress=slot.stress),
         grid_data,
+        similarity,
     )
     return PatternCandidateModel(**base.model_dump(), member_scores=[s.score for s in found.scores])
 
