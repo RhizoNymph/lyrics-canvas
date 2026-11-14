@@ -321,14 +321,16 @@ raw text with the existing overrides as the base; a text change recomputes from 
   "offset": 0,
   "weights": {"vowel": 1.0, "coda": 0.6, "onset": 0.25},          // or null
   "dialect": {"rules": [{"kind": "final_merge", "source": ["IH","NG"], "target": ["IH","N"]}]},  // or null
-  "tag_filter": "type:hook & !draft"  // or null: notes source only uses matching snippets (docs/features/tag_expressions.md)
+  "tag_filter": "type:hook & !draft",  // or null: notes source only uses matching snippets (docs/features/tag_expressions.md)
+  "order": "rhyme"              // or "meaning": "Rhyme, then meaning" (see below)
 }
 // response
 {
   "anchors": [Unit],
   "candidates": [Candidate],
   "total": 312,
-  "elapsed_ms": 41.2
+  "elapsed_ms": 41.2,
+  "order_applied": "rhyme"      // "meaning" only when meaning order was asked and applied
 }
 ```
 
@@ -347,6 +349,8 @@ interface RhymeCandidate extends RhymeUnit {
   score: number; match_depth: number; best_anchor_id: string; fits_slot: boolean;
   alignment: SyllableAlignment[];                            // right-to-left
   source: 'notes' | 'dictionary';
+  band: 'perfect' | 'strong' | 'near' | 'loose';             // from score, always set
+  similarity: number | null;                                 // meaning order only (4 decimals)
 }
 ```
 
@@ -374,6 +378,174 @@ Semantics:
   word, or an unpronounceable text anchor (`RhymeQueryError`), and on a malformed dialect rule
   (`DialectRuleError`). Mapped in the route.
 - Budget: dictionary query ≤ 200 ms warm, measured by a test.
+- `order` (default `"rhyme"`, today's order) and `"meaning"`: see the next section. Every candidate
+  carries its `band`; `similarity` is null unless `order_applied` is `"meaning"`.
+
+## Rhyme, then meaning
+
+User decision 2026-11-14: an order toggle "Rhyme" / "Rhyme, then meaning" for the rhyme sidebar
+(this endpoint), the pattern columns (`POST /api/nlp/rhyme-pattern/suggest`,
+[rhyme_patterns.md](./rhyme_patterns.md)) and word bank rhymes (`POST /api/word-bank/rhymes`,
+[word_bank.md](./word_bank.md)). The backend is described here; the three endpoints share it.
+
+### Scope and non-scope
+
+- Scope: the `order` request field, `band` / `similarity` on every candidate, `order_applied` on the
+  response, the meaning target, the embedding cache, the fallback when the model is unavailable.
+- Non-scope: client toggles and band headers (web and Android branches), writing
+  `snippet_embeddings` rows, any change to scoring, filters or `total`.
+
+### Bands (`app/services/rhyme_order.py`, the one home of the constants)
+
+| band | rule |
+|---|---|
+| `perfect` | score ≥ 0.95 |
+| `strong` | 0.85 ≤ score < 0.95 |
+| `near` | 0.75 ≤ score < 0.85 |
+| `loose` | score < 0.75 |
+
+The server always sends `band` (both orders); clients use their copies only for labels. The score a
+band reads is the candidate's wire `score` (for a pattern candidate, its weakest member score).
+
+### Ordering
+
+- `rhyme`: exactly today's order (unchanged code path; the embedding model is never touched).
+- `meaning`: every candidate that passed the filters is first ranked in today's order; the first
+  `MEANING_POOL` (1500) of them are sorted by (band rank asc, similarity desc, score desc, position in
+  today's order asc), the rest follow in today's order with `similarity: null`. Since today's order is
+  by score first, everything past the pool is in the pool's last band or a lower one, so bands never
+  interleave. Similarities are compared after rounding to 4 decimals (what the wire shows).
+- Ordering happens before paging, so `offset` (and the pattern's per-slot `offsets`) pages are
+  disjoint and stable for the same request while the vectors stay cached (see Invariants).
+- Pattern suggest: per slot column, one embedding batch for all columns; line matches keep their order.
+- Word bank rhymes: every match is ranked (the `limit` is applied after ordering).
+
+### Meaning target
+
+| endpoint | target |
+|---|---|
+| rhyme-suggest | mean of: each distinct snippet referenced by `anchors` (whole snippet display text, rest marks removed), and each distinct text anchor's text |
+| rhyme-pattern suggest | the request's snippet (whole display text) |
+| word bank rhymes | the anchor word's text (`word_id`) or the typed `text` |
+
+A snippet part is its `snippet_embeddings` row when that row is current
+(`updated_at >= snippets.content_updated_at`), else its display text. A candidate is embedded by its
+`text` (word or line phrase). Target = mean of the L2-normalized part vectors; similarity = cosine.
+
+### Data and control flow
+
+```
+endpoint (order="meaning")
+  -> rank in today's order (unchanged)                         [worker thread as before]
+  -> meaning target parts: DbSnippetEmbeddingStore.current(snippet ids) | display text | text
+  -> apply_order / apply_orders (app/services/meaning/order.py)
+       -> MeaningService.similarities(target, pooled candidate texts)
+            -> model loaded once (asyncio.Lock + asyncio.to_thread(sentence_transformer_embedder))
+               unavailable -> None (warn once: meaning.unavailable)
+            -> rows: VectorLRU hits -> related-word vocabulary rows (dictionary words, same model)
+               -> the rest in ONE batched encode in asyncio.to_thread -> into the LRU
+            -> cosine against the normalized mean target
+       -> None -> today's order, order_applied="rhyme"
+       -> else order_by_meaning (app/services/rhyme_order.py), order_applied="meaning"
+  -> page (offset/limit) -> response models with band + similarity
+```
+
+The LRU and the service state are touched only on the event loop; only the model load and the encode
+run in worker threads, so no lock guards them. `get_model()` itself gained a `threading.Lock`: the
+related-word build and the meaning service can both call it from worker threads on a cold start.
+
+### Cache
+
+`VectorLRU` (`app/services/meaning/cache.py`): text -> read-only float32 row, at most 20 000 entries
+(384 × 4 B row + numpy header + key + OrderedDict entry ≈ 1.9 KB each, ≈ 38 MB at most). Dictionary
+words never enter it: they are read from the related-word index matrix
+(`RelatedWords.vocabulary_vectors`, the same `all-MiniLM-L6-v2` model, already built at startup with
+`RELATED_WORDS_WARMUP`). Before that index is ready they are encoded like any other text. Computed
+snippet vectors are cached by text; nothing is written to `snippet_embeddings`.
+
+### Model unavailable
+
+When sentence-transformers cannot load the model, the response is in today's order with
+`order_applied: "rhyme"` and `similarity: null` everywhere; one `meaning.unavailable reason=...`
+warning per process, and no further load attempts. A failing encode batch (`EmbeddingFailedError`)
+falls back the same way for that request only (`meaning.embed_failed`, warn).
+
+### Performance (measured 2026-11-14)
+
+Production copy (latest nightly dump restored into a throwaway pgvector container, 22 snippets of the
+main user, `alembic upgrade head`), uvicorn on the dev laptop (Ryzen 7 7840U, 16 threads, load
+average 4-10 from other work; production node0 is a Ryzen 9 5950X with no CPU limit), model from a
+local cache, related-word index built at startup. Times are client round trips.
+
+| request | rhyme order | meaning order |
+|---|---|---|
+| rhyme-suggest, first request per anchor (cold LRU), 21 snippet-line anchors | median 56, p95 159 ms | median 86, p95 546 ms |
+| rhyme-suggest, 20 new text anchors (cold) | median 152, p95 629 ms | median 177, p95 635 ms |
+| rhyme-suggest, same anchor repeated (warm), n=20 | median 88, p95 92 ms | median 115, p95 135 ms |
+| rhyme-suggest next pages (offset 40/80/120) | | 117-129 ms |
+| pattern suggest, 3 slots, 3 snippets, warm median | 102 / 234 / 376 ms | 144 / 309 / 808 ms |
+| pattern suggest, 3 slots, first request | 109 / 229 / 1849 ms | 621 / 1670 / 527 ms |
+| word bank rhymes (1 word in the bank) | 5 ms | 5 ms |
+| rhyme-suggest `include_rare`, 8 new text anchors (cold) | median ~600 ms | median 1024, p95 2607 ms |
+
+Encoding cost (in process, same laptop): 1500 rare single words 0.6-0.9 s at any batch size from 32 to
+512; 300 four-word phrases 0.35 s. All 5000 candidates of a common query would cost ~2.3 s cold,
+which is why the pool exists: with it the cold cost is bounded by ~1500 encodes, and with common
+words served from the vocabulary matrix the default (`include_rare: false`) cold p95 stays well
+inside the 1.5 s budget, warm p95 inside 0.5 s, and 3-slot pattern suggest inside 2 s (median).
+
+The p95 tails above 0.5 s show up in **both** orders: they are full garbage-collection passes over
+the dictionary rhyme index (measured: `gc.collect()` 8 ms on an empty process, 243 ms once the
+common index is built, 1091 ms once the `include_rare` index is built), not meaning work. The
+`include_rare` meaning case can exceed the cold budget on the laptop (rare words are not in the
+vocabulary matrix, so up to 1500 are encoded). Both are noted under Decisions.
+
+### Deployment
+
+The backend image does **not** contain the model: `backend/Dockerfile` bakes only the NLTK data, and
+sentence-transformers downloads `all-MiniLM-L6-v2` from huggingface.co into `HF_HOME`
+(`/cache/huggingface`, the `backend.modelCache` PVC in `deploy/helm/environments/homelab.yaml`) on
+first use. Checked 2026-11-14 on the running pod: the PVC holds the complete snapshot (88 MB) and the
+related-word matrix (41 MB), the model loads at startup (`RELATED_WORDS_WARMUP=true`), `HF_HUB_OFFLINE`
+is not set and the pod reaches huggingface.co. So meaning order works in production today, but each
+process start still contacts the Hub; with the PVC warm and the Hub unreachable the load depends on
+huggingface_hub falling back to the cache (it does for connection errors, not for an HTTP error
+answer such as a proxy's 403, which is what the sandboxed dev run hit). Without the model the
+endpoints fall back to `order_applied: "rhyme"`. Baking the model into the image or setting
+`HF_HUB_OFFLINE=1` once the cache is warm would make it independent of the network.
+
+### Files
+
+| File | Role | Key exports |
+|---|---|---|
+| `backend/app/services/rhyme_order.py` | Bands and the pure re-ordering | `Band`, `OrderName`, `BAND_FLOORS`, `BAND_ORDER`, `BAND_RANK`, `MEANING_POOL`, `band_of`, `wire_similarity`, `Ordered`, `meaning_pool`, `order_by_meaning`, `rhyme_order` |
+| `backend/app/services/meaning/service.py` | Similarities with lazy model, LRU, vocabulary rows, fallback | `MeaningService`, `TextPart`, `VectorPart`, `TargetPart`, `VocabularyVectors` |
+| `backend/app/services/meaning/embedder.py` | Injectable embedding model | `Embedder`, `EmbedderFactory`, `SentenceTransformerEmbedder`, `sentence_transformer_embedder`, `normalized_rows` |
+| `backend/app/services/meaning/cache.py` | Bounded LRU of rows | `VectorLRU`, `CACHE_ENTRIES` |
+| `backend/app/services/meaning/store.py` | Current stored snippet embeddings, snippet target parts | `SnippetEmbeddingStore`, `DbSnippetEmbeddingStore`, `NoStoredEmbeddings`, `SnippetText`, `snippet_parts` |
+| `backend/app/services/meaning/order.py` | Async glue: order one list or several | `apply_order`, `apply_orders`, `OrderOutcome`, `ListsOutcome` |
+| `backend/app/services/meaning/errors.py` | Typed failures | `MeaningError`, `EmbedderUnavailableError`, `EmbeddingFailedError` |
+| `backend/app/api/embeddings.py` | Process-wide `related_words` and `meaning_service`, route dependencies | `get_related_words`, `get_meaning_service` |
+| `backend/app/services/word_bank/related.py` | `VocabularyIndex.vectors`, `RelatedWords.vocabulary_vectors` (rows for dictionary words) | |
+| `backend/app/services/nlp/embedding_service.py` | `get_model()` behind a `threading.Lock` | |
+| `backend/app/services/rhyme_suggest_service.py` | `suggest(..., meaning=, embeddings=)`, `meaning_target`, `candidate_model(..., similarity)` | |
+| `backend/tests/meaning/` | Fake deterministic embedder (`fakes.py`), unit, service, route and DB tests; `test_real_model.py` is opt-in (`RUN_EMBEDDING_MODEL_TESTS=1`, marker `embedding_model`, model must already be in the local Hugging Face cache, run offline) | |
+
+### Invariants
+
+- `order` absent or `"rhyme"`: same candidates, same order, same `total` as before this feature; the
+  model is never loaded for it.
+- `order_applied == "meaning"` iff every similarity in the pool was computed; then bands are
+  non-decreasing down the list and, within a band, similarities are non-increasing among pooled
+  candidates.
+- `band == band_of(score)` for every candidate in both orders; `similarity` is null when
+  `order_applied == "rhyme"` and for candidates past the pool.
+- Meaning order never adds, drops or rescores a candidate; `total` is unchanged.
+- Pages of one request are disjoint and in order as long as the vectors involved stay in the LRU or
+  the vocabulary matrix (an evicted text re-encoded in another batch can differ in the last float
+  bits, which rounding to 4 decimals almost always absorbs).
+- The embedding model is only called from worker threads; the cache and service state only from the
+  event loop.
 
 Materializing (the brief's "promote") is the existing `POST /api/canvases/{id}/snippets` with `raw_text`,
 `position_x/y`, and the new optional `derived_from` field on `SnippetCreate`.
@@ -386,7 +558,8 @@ Materializing (the brief's "promote") is the existing `POST /api/canvases/{id}/s
 | `backend/app/schemas/phonetics.py` | `SnippetPhonetics`, `LinePhonetics`, `WordPhonetics`, `SyllableModel`, `PronunciationOverride`, `DerivedFromModel` |
 | `backend/app/schemas/rhyme.py` | `RhymeSuggestRequest` / `RhymeSuggestResponse` and the unit, candidate, slot, weights and dialect models |
 | `backend/app/services/phonetics_service.py` | `compute_snippet_phonetics(_with_report)`, `reconcile`, `note_unit(s_from_phonetics)`, model conversions |
-| `backend/app/services/rhyme_suggest_service.py` | `suggest`, `SnippetRepository` protocol + `DbSnippetRepository`, anchor resolution, `rank`, `fits_slot`, `dedupe_note_suffixes`, response models |
+| `backend/app/services/rhyme_suggest_service.py` | `suggest`, `SnippetRepository` protocol + `DbSnippetRepository`, anchor resolution, `rank`, `fits_slot`, `dedupe_note_suffixes`, `meaning_target`, response models |
+| `backend/app/services/rhyme_order.py`, `backend/app/services/meaning/` | "Rhyme, then meaning": bands, ordering, embedding similarity (see [Rhyme, then meaning](#rhyme-then-meaning)) |
 | `backend/app/services/nlp/syllabifier.py` | Beat grid from engine phones |
 | `backend/app/services/nlp/rhyme_service.py` | Legacy `find_rhymes` / `find_rhymes_in_texts` on the engine |
 | `backend/app/api/nlp.py` | `POST /api/nlp/rhyme-suggest`, `GET /api/nlp/rhymes` |
@@ -476,8 +649,10 @@ select snippet(s) or type phrase (optionally pick a word range on a chip)
   -> POST /api/nlp/rhyme-suggest
        -> resolve anchors to Units (snippet.phonetics lines or word slices of them, or pronounce(text))
        -> NotesSource.suggest + DictionarySource.suggest (both via RhymeIndex.query, engine-scored)
-       -> merge, dedupe by unit id, rank, slot-fit check, page
-  <- anchors + candidates
+       -> merge, dedupe by unit id, rank, slot-fit check
+       -> order="meaning": bands, then embedding similarity to the anchors (pool of 1500)
+       -> page
+  <- anchors + candidates (each with band, similarity) + order_applied
   -> sidebar list (rows; nothing on the canvas)
   -> materialize -> materializePosition -> POST /api/canvases/{id}/snippets {raw_text, position, derived_from}
        -> syllabify_text + phonetics computed server-side -> snippet inserted in canvasStore
@@ -603,3 +778,22 @@ select snippet(s) or type phrase (optionally pick a word range on a chip)
   (`anchorRanges`) with the same lifetime rules as chip exclusions, plus pruning when the snippet's
   text no longer has those words, which keeps a 422 from an edited snippet off the screen. The
   from-selection slot follows the range (its words' cells, interior rests included).
+- **Rhyme, then meaning (2026-11-14).**
+  - Dictionary candidates read their vectors from the related-word index matrix (same model, already
+    built at startup) instead of being encoded, which is what keeps cold requests cheap. Until that
+    index is ready they are encoded like any text.
+  - `MEANING_POOL = 1500`: measured above, encoding all of up to 5000 candidates per source cold would
+    cost ~2.3 s; the pool bounds it to ~0.7 s. Candidates past the pool follow in today's order with
+    `similarity: null`; bands still never interleave.
+  - `snippet_embeddings` is read but never written: nothing in the codebase writes it today (the table
+    is empty in production), and migration 001 created its column as `bytea` while the model maps
+    `vector(384)`, so ORM writes would fail on the migrated schema. Snippet vectors computed for a
+    target are cached in the LRU by text instead. A follow-up migration to `vector(384)` would make
+    the reuse path live; the DB test converts the column to the model's type to exercise it.
+  - The model unavailable state is sticky for the process (one warning, no retries): `get_model()`
+    would otherwise retry a slow failing download on every request.
+  - Similarities are compared after rounding to 4 decimals, so the order matches what the wire shows.
+  - p95 tails in both orders come from full GC passes over the dictionary rhyme index (≈0.25 s
+    common, ≈1.1 s with the `include_rare` index on the laptop); not addressed here (a `gc.freeze()`
+    after the index build is the obvious follow-up). With `include_rare`, cold meaning requests can
+    exceed 1.5 s on the laptop because rare words are encoded (median 1.0 s, p95 2.6 s).
