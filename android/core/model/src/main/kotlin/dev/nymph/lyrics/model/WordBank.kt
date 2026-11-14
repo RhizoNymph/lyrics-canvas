@@ -106,6 +106,8 @@ data class BankRhymesRequest private constructor(
     @SerialName("min_score") val minScore: Double = DEFAULT_MIN_SCORE,
     val k: Int = 2,
     val limit: Int = 100,
+    /** [RhymeOrder.MEANING]: bands, by similarity to the anchor's text within a band. Null (omitted) = rhyme order. */
+    val order: RhymeOrder? = null,
 ) {
     companion object {
         const val DEFAULT_MIN_SCORE: Double = 0.5
@@ -116,9 +118,12 @@ data class BankRhymesRequest private constructor(
             minScore: Double = DEFAULT_MIN_SCORE,
             k: Int = 2,
             limit: Int = 100,
+            order: RhymeOrder = RhymeOrder.RHYME,
         ): BankRhymesRequest = when (anchor) {
-            is BankRhymeAnchor.Word -> BankRhymesRequest(wordId = anchor.id, tagFilter = tagFilter, minScore = minScore, k = k, limit = limit)
-            is BankRhymeAnchor.Text -> BankRhymesRequest(text = anchor.text, tagFilter = tagFilter, minScore = minScore, k = k, limit = limit)
+            is BankRhymeAnchor.Word ->
+                BankRhymesRequest(wordId = anchor.id, tagFilter = tagFilter, minScore = minScore, k = k, limit = limit, order = order.requestValue)
+            is BankRhymeAnchor.Text ->
+                BankRhymesRequest(text = anchor.text, tagFilter = tagFilter, minScore = minScore, k = k, limit = limit, order = order.requestValue)
         }
     }
 }
@@ -136,13 +141,21 @@ data class BankRhymeMatch(
     val word: BankWord,
     val score: Double,
     @SerialName("match_depth") val matchDepth: Int,
+    /** The score band ([RhymeCandidate.band]). */
+    val band: RhymeBand? = null,
+    /** Similarity to the anchor's text; null unless meaning order was applied. */
+    val similarity: Double? = null,
 )
 
-/** Response of `POST /api/word-bank/rhymes`: score desc, then depth desc, then lowercase text. */
+/**
+ * Response of `POST /api/word-bank/rhymes`: score desc, then depth desc, then lowercase text; with
+ * [orderApplied] meaning, by band, then similarity desc within a band.
+ */
 @Serializable
 data class BankRhymesResponse(
     val anchor: BankRhymeAnchorInfo,
     val matches: List<BankRhymeMatch> = emptyList(),
+    @SerialName("order_applied") val orderApplied: RhymeOrder = RhymeOrder.RHYME,
 )
 
 /** Body of `POST /api/word-bank/families`. */

@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.logic.rhyme
 
+import dev.nymph.lyrics.model.RhymeOrder
 import dev.nymph.lyrics.logic.canvas.Point
 import dev.nymph.lyrics.logic.tags.ExpressionField
 import dev.nymph.lyrics.logic.tags.RhymeTagFilter
@@ -45,6 +46,8 @@ data class RhymeQueryParams(
     val slotMode: SlotMode = SlotMode.FROM_SELECTION,
     val sources: RhymeSources = RhymeSources(),
     val includeRare: Boolean = false,
+    /** "Rhyme" or "Rhyme, then meaning" (the device's choice); sent as `order` when meaning. */
+    val order: RhymeOrder = RhymeOrder.RHYME,
 )
 
 /** What the canvas and the sheet contribute to a query. */
@@ -153,6 +156,7 @@ fun planRhymeQuery(
         weights = null,
         dialect = null,
         tagFilter = tagFilterText,
+        order = params.order.requestValue,
     )
     return RhymeQueryPlan.Query(request, slot, excluded, ranges)
 }
