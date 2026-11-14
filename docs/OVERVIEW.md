@@ -132,6 +132,13 @@ picks build a tuple ("Make snippet", "Add picks to word bank"), and a Whole line
 lines that already hit 2+ slots. Server-only ("Needs connection" offline). See
 [android_rhyme_patterns.md](./features/android_rhyme_patterns.md).
 
+### API Tokens (web)
+The canvas list page header has an "API tokens" button (next to "Voice dataset") that opens a dialog for
+the user's personal API tokens: the list (name, prefix, created, last used, expires), create (name and an
+expiry of 30 days, 90 days, 1 year or never; default 90 days) with the secret shown once, a copy button and
+a warning, and revoke with a confirmation. Scripts and agents use these tokens as a bearer. See
+[web_api_tokens.md](./features/web_api_tokens.md).
+
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
 while down) and listens to the outcome of every API call. After two consecutive failures a banner says the
@@ -700,6 +707,18 @@ Features Index:
       - frontend/src/components/pages/CanvasListPage.tsx
     depends_on: [snippet_placements, web_tag_expressions, list_mode, merge_blocks, typed_api]
     doc: docs/features/web_snippet_placements.md
+  web_api_tokens:
+    description: Web client of personal API tokens. Canvas list header "API tokens" button opens ApiTokensDialog. Typed api/apiTokens.ts (GET/POST /api/tokens, DELETE /api/tokens/{id}) rejecting only with ApiTokenError (invalid_token_name, token_not_found, token_management_forbidden, validation, network, aborted, server, http). apiTokenStore holds the list (newest first), create state, the one-time secret (memory only, never logged or persisted, dropped on Done / close / revoking that token) and revoke state; one create and one revoke at a time; token_not_found on revoke counts as gone. Create validates the trimmed name (1..64 code points) locally and sends expires_in_days 30 / 90 / 365 / null (default 90). Revoke asks inline; copy uses the async Clipboard API.
+    entry_points:
+      - frontend/src/components/account/ApiTokensDialog.tsx
+      - frontend/src/components/account/ApiTokensView.tsx
+      - frontend/src/stores/apiTokenStore.ts
+      - frontend/src/lib/apiTokens/
+      - frontend/src/api/apiTokens.ts
+      - frontend/src/types/apiTokens.ts
+      - frontend/src/components/pages/CanvasListPage.tsx (API tokens button)
+    depends_on: [api_tokens]
+    doc: docs/features/web_api_tokens.md
 ```
   web_rests_and_search:
     description: Web client of rest marks and search. lib/grid/restMarks (tokenizeLine - every _ is a rest and a word separator, word_index counts words only; lineWords, displayText strip) passing spec/rest_mark_vectors.json; localSyllabifyLine emits {rest:true} per _, rebuildRawText writes _ per rest and each word at its first syllable, attachWords over word tokens; the editor keeps typed _, writes grid rests back as _, opens legacy rows (grid rests, no _) arranged by display-text match and saves canonical text; ArrowRight at the line end inserts a rest before the selection (nudgeSelection). Rhyme anchors, word bank add-from-selection, list/card text fallbacks and similarity previews use display text. In-canvas search box (canvasSearchStore, 150 ms debounce, session-only per canvas) filters canvas and list mode AND the tag filter, "N of M", ×/Esc clear, Ctrl/Cmd+F focus; SearchModal, its toolbar button and uiStore state removed. Canvas list header search over GET /api/search (typed SearchError incl. invalid_search_query and network, 250 ms debounce, latest-only), Canvases and Snippets sections with highlighted excerpts and canvas links; /canvas/:id?snippet=<sid> selects and centres (list mode scrolls), clears a hiding in-canvas search, toasts "Hidden by the tag filter".
