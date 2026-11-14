@@ -49,7 +49,10 @@ data class ContentPatch private constructor(
     }
 }
 
-/** The layout fields of a snippet PUT on one canvas (null = unchanged); never empty, built by [of]. */
+/**
+ * The layout fields of a snippet PUT on one canvas (null = unchanged), the custom list-order key
+ * included; never empty, built by [of].
+ */
 @Serializable
 @ConsistentCopyVisibility
 data class LayoutPatch private constructor(
@@ -59,6 +62,7 @@ data class LayoutPatch private constructor(
     val height: Double? = null,
     @SerialName("z_index") val zIndex: Int? = null,
     @SerialName("group_id") val groupId: GroupId? = null,
+    @SerialName("list_rank") val listRank: String? = null,
 ) {
     /** Last write wins, field by field. */
     fun then(later: LayoutPatch): LayoutPatch = LayoutPatch(
@@ -68,6 +72,7 @@ data class LayoutPatch private constructor(
         height = later.height ?: height,
         zIndex = later.zIndex ?: zIndex,
         groupId = later.groupId ?: groupId,
+        listRank = later.listRank ?: listRank,
     )
 
     companion object {
@@ -78,10 +83,12 @@ data class LayoutPatch private constructor(
             height: Double? = null,
             zIndex: Int? = null,
             groupId: GroupId? = null,
-        ): LayoutPatch? = LayoutPatch(positionX, positionY, width, height, zIndex, groupId).takeIf {
-            positionX != null || positionY != null || width != null || height != null || zIndex != null || groupId != null
+            listRank: String? = null,
+        ): LayoutPatch? = LayoutPatch(positionX, positionY, width, height, zIndex, groupId, listRank).takeIf {
+            positionX != null || positionY != null || width != null || height != null || zIndex != null || groupId != null || listRank != null
         }
 
-        fun of(body: SnippetUpdateRequest): LayoutPatch? = of(body.positionX, body.positionY, body.width, body.height, body.zIndex, body.groupId)
+        fun of(body: SnippetUpdateRequest): LayoutPatch? =
+            of(body.positionX, body.positionY, body.width, body.height, body.zIndex, body.groupId, body.listRank)
     }
 }
