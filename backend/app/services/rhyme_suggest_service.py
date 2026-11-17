@@ -116,6 +116,7 @@ def _record(snippet: Snippet) -> SnippetRecord:
         tag_ids=tuple(str(t.id) for t in (snippet.tags or [])),
         snippet_type=snippet.snippet_type,
         tag_names=tuple(t.name for t in (snippet.tags or [])),
+        score=snippet.score,
     )
 
 

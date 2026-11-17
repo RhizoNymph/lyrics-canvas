@@ -2600,7 +2600,86 @@
         "title": "RemovePlacementResponse",
         "type": "object"
       },
-      "RhymeCandidateModel": {
+      "RhymeGridCellModel": {
+        "additionalProperties": true,
+        "description": "A grid cell in a rhyme unit's ``grid_line``. Unlike the snippet ``GridCellModel`` it emits\nevery field (unset ones as null), which is the rhyme-suggest wire shape the web client reads.",
+        "properties": {
+          "rest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest"
+          },
+          "stress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress"
+          },
+          "syllable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syllable"
+          },
+          "word_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Index"
+          }
+        },
+        "title": "RhymeGridCellModel",
+        "type": "object"
+      },
+      "RhymeGridLineModel": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/RhymeGridCellModel"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "syllable_count": {
+            "title": "Syllable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cells",
+          "syllable_count",
+          "raw_text"
+        ],
+        "title": "RhymeGridLineModel",
+        "type": "object"
+      },
+      "RhymeSuggestCandidateModel": {
+        "description": "A rhyme-suggest candidate (pattern candidates have no rhythm fit).",
         "properties": {
           "alignment": {
             "items": {
@@ -2669,6 +2748,17 @@
             },
             "title": "Rhyme Key",
             "type": "array"
+          },
+          "rhythm_fit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rhythm Fit"
           },
           "score": {
             "title": "Score",
@@ -2772,85 +2862,7 @@
           "band",
           "similarity"
         ],
-        "title": "RhymeCandidateModel",
-        "type": "object"
-      },
-      "RhymeGridCellModel": {
-        "additionalProperties": true,
-        "description": "A grid cell in a rhyme unit's ``grid_line``. Unlike the snippet ``GridCellModel`` it emits\nevery field (unset ones as null), which is the rhyme-suggest wire shape the web client reads.",
-        "properties": {
-          "rest": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rest"
-          },
-          "stress": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stress"
-          },
-          "syllable": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Syllable"
-          },
-          "word_index": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Word Index"
-          }
-        },
-        "title": "RhymeGridCellModel",
-        "type": "object"
-      },
-      "RhymeGridLineModel": {
-        "properties": {
-          "cells": {
-            "items": {
-              "$ref": "#/components/schemas/RhymeGridCellModel"
-            },
-            "title": "Cells",
-            "type": "array"
-          },
-          "raw_text": {
-            "title": "Raw Text",
-            "type": "string"
-          },
-          "syllable_count": {
-            "title": "Syllable Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "cells",
-          "syllable_count",
-          "raw_text"
-        ],
-        "title": "RhymeGridLineModel",
+        "title": "RhymeSuggestCandidateModel",
         "type": "object"
       },
       "RhymeSuggestRequest": {
@@ -2961,6 +2973,11 @@
             "title": "Order",
             "type": "string"
           },
+          "rhythm_fit": {
+            "default": false,
+            "title": "Rhythm Fit",
+            "type": "boolean"
+          },
           "slot": {
             "anyOf": [
               {
@@ -3023,7 +3040,7 @@
           },
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/RhymeCandidateModel"
+              "$ref": "#/components/schemas/RhymeSuggestCandidateModel"
             },
             "title": "Candidates",
             "type": "array"
@@ -3039,6 +3056,26 @@
             ],
             "title": "Order Applied",
             "type": "string"
+          },
+          "rhythm_applied": {
+            "default": false,
+            "title": "Rhythm Applied",
+            "type": "boolean"
+          },
+          "rhythm_unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_score",
+                  "slot_unplaced"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rhythm Unavailable Reason"
           },
           "total": {
             "title": "Total",
