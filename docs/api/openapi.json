@@ -1111,6 +1111,34 @@
         "title": "DialectRuleModel",
         "type": "object"
       },
+      "DraftMeter": {
+        "additionalProperties": false,
+        "description": "The time signature of bar 0. Values outside the format (num 1..32, den 1/2/4/8/16/32) are\n422 ``invalid_score`` ``meter_invalid``.",
+        "properties": {
+          "den": {
+            "title": "Den",
+            "type": "integer"
+          },
+          "num": {
+            "title": "Num",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "num",
+          "den"
+        ],
+        "title": "DraftMeter",
+        "type": "object"
+      },
+      "ExportFormat": {
+        "enum": [
+          "midi",
+          "musicxml"
+        ],
+        "title": "ExportFormat",
+        "type": "string"
+      },
       "ExportRequest": {
         "properties": {
           "format": {
@@ -1226,6 +1254,45 @@
           "lines"
         ],
         "title": "GridDataModel",
+        "type": "object"
+      },
+      "GridDraftRequest": {
+        "additionalProperties": false,
+        "description": "Each syllable one ``note`` long, each rest cell one beat unit, each line on a new bar.",
+        "properties": {
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "20..400, at most 2 decimals; else invalid_score tempo_invalid",
+            "title": "Bpm"
+          },
+          "meter": {
+            "$ref": "#/components/schemas/DraftMeter"
+          },
+          "note": {
+            "description": "1/8, 1/16, 1/32, 1/8t or 1/16t; anything else is invalid_score snap_invalid",
+            "title": "Note",
+            "type": "string"
+          },
+          "source": {
+            "const": "grid",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "note",
+          "meter",
+          "bpm"
+        ],
+        "title": "GridDraftRequest",
         "type": "object"
       },
       "GridLineModel": {
@@ -1414,6 +1481,59 @@
           "detail"
         ],
         "title": "IdConflictResponse",
+        "type": "object"
+      },
+      "InvalidScoreBody": {
+        "properties": {
+          "error": {
+            "const": "invalid_score",
+            "title": "Error",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "reason"
+        ],
+        "title": "InvalidScoreBody",
+        "type": "object"
+      },
+      "InvalidScoreResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/InvalidScoreBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "InvalidScoreResponse",
         "type": "object"
       },
       "LineMatchHit": {
@@ -2329,6 +2449,46 @@
         "title": "PronunciationOverride",
         "type": "object"
       },
+      "RecordingDraftRequest": {
+        "additionalProperties": false,
+        "description": "Timing from a voice take on this snippet; ``bpm`` null asks the server to estimate it.",
+        "properties": {
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
+          "meter": {
+            "$ref": "#/components/schemas/DraftMeter"
+          },
+          "recording_id": {
+            "format": "uuid",
+            "title": "Recording Id",
+            "type": "string"
+          },
+          "source": {
+            "const": "recording",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "recording_id",
+          "meter"
+        ],
+        "title": "RecordingDraftRequest",
+        "type": "object"
+      },
       "RecordingResponse": {
         "description": "A stored recording without its audio (fetch that from ``/api/recordings/{id}/audio``).",
         "properties": {
@@ -3209,6 +3369,47 @@
         "title": "RhymeUnitModel",
         "type": "object"
       },
+      "ScoreDraftResponse": {
+        "description": "A score for the snippet's current grid. Not saved: the client saves it with PUT.",
+        "properties": {
+          "bpm_estimated": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the tempo the server estimated (recording, bpm null); else null",
+            "title": "Bpm Estimated"
+          },
+          "score": {
+            "$ref": "#/components/schemas/ScoreModel"
+          },
+          "unmatched_words": {
+            "description": "take words that matched no grid word (0 for a grid draft)",
+            "title": "Unmatched Words",
+            "type": "integer"
+          },
+          "unplaced": {
+            "description": "grid syllables without a note",
+            "title": "Unplaced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "score",
+          "bpm_estimated",
+          "unplaced",
+          "unmatched_words"
+        ],
+        "title": "ScoreDraftResponse",
+        "type": "object"
+      },
       "ScoreLineModel": {
         "additionalProperties": false,
         "properties": {
@@ -3403,6 +3604,44 @@
           "bpm"
         ],
         "title": "ScoreTempoModel",
+        "type": "object"
+      },
+      "ScoreToolErrorBody": {
+        "properties": {
+          "error": {
+            "enum": [
+              "snippet_not_found",
+              "recording_not_found",
+              "recording_has_no_timings",
+              "draft_empty",
+              "score_not_found",
+              "stored_score_invalid"
+            ],
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "ScoreToolErrorBody",
+        "type": "object"
+      },
+      "ScoreToolErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ScoreToolErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ScoreToolErrorResponse",
         "type": "object"
       },
       "ScoreWeightsModel": {
@@ -7701,6 +7940,165 @@
         "summary": "List Recordings",
         "tags": [
           "voice"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/score/draft": {
+      "post": {
+        "description": "404 ``snippet_not_found`` / ``recording_not_found``; 422 ``recording_has_no_timings``,\n``draft_empty`` or ``invalid_score`` (``meter_invalid``, ``tempo_invalid``, ``snap_invalid``,\n``exceeds_max_ticks``).",
+        "operationId": "draft_score_api_snippets__snippet_id__score_draft_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GridDraftRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RecordingDraftRequest"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreToolErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ScoreToolErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidScoreResponse"
+                    }
+                  ],
+                  "title": "Response 422 Draft Score Api Snippets  Snippet Id  Score Draft Post"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Draft Score",
+        "tags": [
+          "score"
+        ]
+      }
+    },
+    "/api/snippets/{snippet_id}/score/export": {
+      "get": {
+        "description": "A download (``Content-Disposition: attachment``). 404 ``snippet_not_found`` /\n``score_not_found``; 500 ``stored_score_invalid`` (never expected).",
+        "operationId": "export_score_api_snippets__snippet_id__score_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snippet_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snippet Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExportFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.recordare.musicxml+xml": {},
+              "audio/midi": {}
+            },
+            "description": "the file"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreToolErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreToolErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Score",
+        "tags": [
+          "score"
         ]
       }
     },
