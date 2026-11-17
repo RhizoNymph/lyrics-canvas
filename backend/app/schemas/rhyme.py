@@ -6,6 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.services.rhyme_order import Band, OrderName
+
 SourceName = Literal["notes", "dictionary"]
 ProvenanceName = Literal["note", "dictionary", "datamuse", "generated"]
 STRESS_PATTERN = r"^[012]+$"
@@ -90,6 +92,9 @@ class RhymeSuggestRequest(BaseModel):
     # A tag expression (docs/features/tag_expressions.md): when set and non-empty, the notes source
     # only uses snippets whose type and tag names match. The dictionary source is never filtered.
     tag_filter: str | None = None
+    # "rhyme": today's order; "meaning": score bands, by meaning similarity to the anchors within a
+    # band (docs/features/rhyme_view.md#rhyme-then-meaning)
+    order: OrderName = "rhyme"
 
 
 class RhymeSyllable(BaseModel):
@@ -150,6 +155,8 @@ class RhymeCandidateModel(RhymeUnitModel):
     fits_slot: bool
     alignment: list[SyllableAlignmentModel]
     source: SourceName
+    band: Band  # from score: perfect >= 0.95 > strong >= 0.85 > near >= 0.75 > loose
+    similarity: float | None  # cosine to the meaning target (4 decimals); None unless meaning order was applied
 
 
 class RhymeSuggestResponse(BaseModel):
@@ -157,3 +164,4 @@ class RhymeSuggestResponse(BaseModel):
     candidates: list[RhymeCandidateModel]
     total: int
     elapsed_ms: float
+    order_applied: OrderName  # "rhyme" when meaning was asked but the model is unavailable

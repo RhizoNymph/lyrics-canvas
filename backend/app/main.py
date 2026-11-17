@@ -22,7 +22,7 @@ from app.api.search import router as search_router
 from app.api.voice import router as voice_router
 from app.api.sync import router as sync_router
 from app.api.tokens import router as tokens_router
-from app.api.word_bank import related_words
+from app.api.embeddings import related_words
 from app.api.word_bank import router as word_bank_router
 from app.services.phonetics import ResourceError, ensure_resources
 from app.services.phonetics.resources import configure as configure_nltk_data

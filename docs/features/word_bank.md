@@ -116,7 +116,7 @@ unknown `op` and a rhymes request without exactly one of `word_id` / `text` are 
 | PUT | `/api/word-bank/{id}` | `{text, base_version?}` | 200 `BankWordResponse`; 404 / 409 (`word_exists`, `version_conflict`) / 422 |
 | POST | `/api/word-bank/delete` | `{ids: str[] (1..500), base_versions?: {id: version}}` | 204; ids not the user's are ignored; 409 `version_conflict` (`current` = list) |
 | POST | `/api/word-bank/tags` | `{word_ids: str[] (1..500), tag_id, op: "link"\|"unlink", base_versions?: {id: version}}` | 200 `{words: BankWordResponse[]}` (request order, duplicates once); 409 `version_conflict` (`current` = list) |
-| POST | `/api/word-bank/rhymes` | `{word_id? \| text?, tag_filter?, min_score = 0.5 (0..1), k = 2 (1..4), limit = 100 (1..200)}` | 200 `{anchor, matches}` |
+| POST | `/api/word-bank/rhymes` | `{word_id? \| text?, tag_filter?, min_score = 0.5 (0..1), k = 2 (1..4), limit = 100 (1..200), order = "rhyme" \| "meaning"}` | 200 `{anchor, matches, order_applied}` |
 | POST | `/api/word-bank/families` | `{tag_filter?, min_score = 0.8 (0..1), k = 2 (1..4)}` | 200 `{families, unmatched}` |
 | GET | `/api/word-bank/related` | `?q=<text>&limit=30 (1..100)` | 200 `{query, results}` |
 
@@ -138,6 +138,15 @@ lookup and, for races, by the unique index (`IntegrityError` → `word_exists`).
 
 **Tags.** Idempotent. The tag must be the user's (`tag_not_found`); any word id that is not the
 user's gives 404 `word_not_found` and nothing changes.
+
+**Rhymes order.** Each match is `{word, score, match_depth, band, similarity}`. `band` comes from the
+score (perfect >= 0.95, strong >= 0.85, near >= 0.75, else loose; `app/services/rhyme_order.py`).
+`order: "rhyme"` (default) is the order below (score, match_depth, text). `order: "meaning"`
+("Rhyme, then meaning") ranks **every** match first, then sorts by band, cosine similarity to the
+anchor text (the anchor word's text or the typed text), score and the rhyme position, and applies
+`limit` last; `similarity` is set (4 decimals). Without the embedding model the response keeps the
+rhyme order with `order_applied: "rhyme"` and null similarities. Shared with rhyme-suggest and the
+pattern columns: [rhyme_view.md](./rhyme_view.md#rhyme-then-meaning).
 
 **Rhymes.**
 
@@ -195,8 +204,9 @@ POST /api/word-bank/rhymes     rhymes
   -> anchor: service.get_word | text.word_text
   -> service.filtered_words (list_words + matches(expr, SnippetFacts.of(None, tag names)))
   -> asyncio.to_thread(_matches): unit_from_text(anchor) -> phonetic_words(candidates)
-     -> rhymes.rank_rhymes(anchor, words, PairScorer(k), min_score, limit, exclude)
-  -> BankRhymesResponse (ids mapped back to the loaded BankWord rows)
+     -> rhymes.rank_rhymes(anchor, words, PairScorer(k), min_score, limit (all matches for order=meaning), exclude)
+  -> apply_order(order, matches, target=[anchor text], meaning=get_meaning_service())  (fallback: rhyme)
+  -> [:limit] -> BankRhymesResponse (band, similarity; ids mapped back to the loaded BankWord rows)
 
 POST /api/word-bank/families   families
   _tag_filter -> service.filtered_words -> asyncio.to_thread(_families):
@@ -311,14 +321,15 @@ Cost: 1000 random common words, `k = 2`, take about 2 s in the worker thread (ab
 | `backend/app/services/word_bank/phonetic.py` | Units and memoized scorer (pure) | `PhoneticWord`, `phonetic_words`, `PairScorer` (`directed`, `similarity`, `computed`), `PairScore` |
 | `backend/app/services/word_bank/rhymes.py` | Rank against one anchor (pure) | `rank_rhymes`, `RhymeMatch` |
 | `backend/app/services/word_bank/families.py` | Clustering (pure) | `rhyme_families`, `Family`, `FamiliesResult`, `Similarity`, `MAX_FAMILY_WORDS` |
-| `backend/app/services/word_bank/related.py` | Related-word index and process holder | `RelatedWords` (`start`, `wait`, `search`, `ready`), `VocabularyIndex`, `RelatedHit`, `build_vocabulary_index`, `BuiltIndex`, `Encoder`, `resolve_cache_dir`, `default_vocabulary`, `default_encoder`, `default_builder` |
+| `backend/app/services/word_bank/related.py` | Related-word index and process holder; its rows also serve dictionary words to meaning order | `RelatedWords` (`start`, `wait`, `search`, `ready`, `vocabulary_vectors`), `VocabularyIndex` (`search`, `vectors`), `RelatedHit`, `build_vocabulary_index`, `BuiltIndex`, `Encoder`, `resolve_cache_dir`, `default_vocabulary`, `default_encoder`, `default_builder` |
 | `backend/app/services/word_bank/related_cache.py` | Matrix disk cache | `cache_path`, `vocabulary_digest`, `load_matrix`, `save_matrix` |
-| `backend/app/services/nlp/embedding_service.py` | Model loader | `MODEL_NAME`, `get_model` |
+| `backend/app/services/nlp/embedding_service.py` | Model loader (behind a `threading.Lock`) | `MODEL_NAME`, `get_model` |
 | `backend/app/services/tag_expr/evaluate.py` | Typeless subjects | `SnippetFacts(snippet_type: SnippetType \| None, …)`, `matches` |
 | `backend/app/services/tag_service.py` | Tag counts | `TagSummary.word_count` |
 | `backend/app/schemas/word_bank.py` | Pydantic models | `BankWordResponse`, `BankWordsCreate(Response)`, `BankWordUpdate`, `BankWordsDelete`, `BankWordTagsUpdate`, `BankWordsResponse`, `BankRhymesRequest/Response`, `BankRhymeAnchor`, `BankRhymeMatch`, `BankFamiliesRequest/Response`, `BankFamily`, `RelatedWordResult`, `RelatedWordsResponse`, `WordBankErrorBody/Response`, `MAX_ADD_WORDS`, `MAX_ADD_TAGS`, `MAX_IDS` |
 | `backend/app/schemas/tag.py` | Tag shapes | `TagResponse.word_count` |
-| `backend/app/api/word_bank.py` | Routes | `router`, `related_words`, `get_related_words`, `word_response` |
+| `backend/app/api/word_bank.py` | Routes | `router`, `word_response` (re-exports `get_related_words`) |
+| `backend/app/api/embeddings.py` | Process-wide `related_words` and `meaning_service` | `get_related_words`, `get_meaning_service` |
 | `backend/app/api/word_bank_errors.py` | Error mapping | `word_bank_http_error` (adds `index`, `Retry-After`), `word_bank_errors` |
 | `backend/app/api/tags.py` | Tag routes | `word_count` in `_tag_response` |
 | `backend/app/config.py` | Settings | `related_words_warmup`, `related_words_cache_dir` |
@@ -337,6 +348,8 @@ Cost: 1000 random common words, `k = 2`, take about 2 s in the worker thread (ab
   nothing.
 - Every filtered word appears exactly once in families or `unmatched`; every family has >= 2 words.
 - Rhymes and families are deterministic: they do not depend on input or DB order.
+- Rhymes `order: "meaning"` returns the same set of words as `order: "rhyme"` would with `limit`
+  unbounded; it only changes which `limit` of them come back and their order.
 - The phonetic CPU work and the index build never run on the event loop (`asyncio.to_thread`); the
   index is built at most once per process.
 - `GET /api/word-bank/related` never blocks on the build: while it runs it answers 503 with

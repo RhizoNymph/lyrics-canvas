@@ -23,6 +23,7 @@ from app.services.rhyme_pattern.models import line_match_model, pattern_candidat
 from app.services.rhyme_pattern.resolve import PatternLine, pattern_line
 from app.services.rhyme_suggest_service import SnippetRecord, fits_slot, snippet_phonetics
 from app.schemas.rhyme import Slot
+from app.services.rhyme_order import Ordered, rhyme_order
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,14 +145,21 @@ class SuggestParams:
     line_match_offset: int
 
 
-def compute(
+@dataclass(frozen=True, slots=True)
+class RankedSlots:
+    """Every candidate of every slot in today's order, and the note hits used for line matches."""
+
+    ranked: list[list[Ranked]]
+    note_hits: list[list[SlotCandidate]]
+
+
+def rank_slots(
     slots: Sequence[SlotRequest],
     params: SuggestParams,
-    dialect: DialectMap,
     notes: NoteSpans | None,
     dictionary: RhymeIndex | None,
-) -> SuggestResult:
-    pages: list[SlotPage] = []
+) -> RankedSlots:
+    ranked: list[list[Ranked]] = []
     note_hits: list[list[SlotCandidate]] = []
     for request in slots:
         slot = request.slot
@@ -167,27 +175,56 @@ def compute(
             if dictionary is not None and "dictionary" in params.sources
             else []
         )
-        ranked = rank_slot(slot, dict_found, note_found if "notes" in params.sources else [])
+        ranked.append(rank_slot(slot, dict_found, note_found if "notes" in params.sources else []))
+    return RankedSlots(ranked=ranked, note_hits=note_hits)
+
+
+def page_slots(
+    slots: Sequence[SlotRequest],
+    ranked: RankedSlots,
+    orders: Sequence[Sequence[Ordered[Ranked]]],
+    params: SuggestParams,
+    dialect: DialectMap,
+    notes: NoteSpans | None,
+) -> SuggestResult:
+    """Each slot's page of ``orders`` (one ordered list per slot) and the window of line matches."""
+    pages: list[SlotPage] = []
+    for request, ordered in zip(slots, orders):
         offset = params.offsets.get(request.id, 0)
-        page = ranked[offset : offset + params.limit]
+        page = ordered[offset : offset + params.limit]
         pages.append(
             SlotPage(
                 candidates=[
                     pattern_candidate_model(
-                        r.found,
-                        r.source,
-                        slot,
+                        o.item.found,
+                        o.item.source,
+                        request.slot,
                         params.snippet_id,
-                        _grid_of(r.found, notes) if r.source == "notes" else None,
+                        _grid_of(o.item.found, notes) if o.item.source == "notes" else None,
+                        o.similarity,
                     )
-                    for r in page
+                    for o in page
                 ],
-                total=len(ranked),
+                total=len(ordered),
             )
         )
-    matches = line_matches(slots, note_hits, notes, dialect, params.exclude) if params.line_matches and notes else []
+    matches = (
+        line_matches(slots, ranked.note_hits, notes, dialect, params.exclude) if params.line_matches and notes else []
+    )
     window = matches[params.line_match_offset : params.line_match_offset + params.line_match_limit]
     return SuggestResult(pages=pages, line_matches=window, line_match_total=len(matches))
+
+
+def compute(
+    slots: Sequence[SlotRequest],
+    params: SuggestParams,
+    dialect: DialectMap,
+    notes: NoteSpans | None,
+    dictionary: RhymeIndex | None,
+) -> SuggestResult:
+    """Today's order: rank every slot and page it."""
+    ranked = rank_slots(slots, params, notes, dictionary)
+    return page_slots(slots, ranked, [rhyme_order(r) for r in ranked.ranked], params, dialect, notes)
 
 
 def _grid_of(found: SlotCandidate, notes: NoteSpans | None) -> Mapping[str, object] | None:
