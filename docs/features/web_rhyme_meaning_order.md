@@ -33,6 +33,11 @@ Backend counterpart: the rhyme-order backend branch (`order` field on the three 
   similarity; nothing in rhyme order (similarity is null there).
 - Pattern mode: the order applies per slot column; whole-line matches are unaffected (the server keeps their
   order; the client never bands them).
+- Fit rhythm (sidebar only, [web_score_tools.md](./web_score_tools.md#fit-rhythm)): when the server applied
+  rhythm fit it bands the candidates in either order, so the sidebar list draws band headers then too
+  (`listPresentation(ordering, rhythm)` in `lib/rhyme/rhythmFit.ts`); the "Meaning order unavailable" note is
+  read from the ordering alone (`presentationOf(ordering)`), so it still shows when meaning fell back but
+  rhythm banded the rows. Rows show `♩NN%` (rhythm fit) before `≈NN%`.
 
 ## Non-scope
 
@@ -96,7 +101,7 @@ byte-identical to the ones sent before this feature (the existing request-shape 
 | `frontend/src/stores/wordBankQueryStore.ts` | `rhymesOrder` (order of the latest request); `loadRhymes` sends `currentRhymeOrder()` |
 | `frontend/src/components/rhyme/order/RhymeOrderToggle.tsx` | `RhymeOrderToggleView` (radio group "Rhyme order"), default export bound to the store |
 | `frontend/src/components/rhyme/order/orderParts.tsx` | `BandHeader` (`data-band`, `compact` for columns), `SimilarityBadge` (`≈NN%`), `OrderNote` |
-| `frontend/src/components/rhyme/CandidateList.tsx` | Split into `CandidateListView` (props = store slice, testable) and the connected default; bands rows, shows the note |
+| `frontend/src/components/rhyme/CandidateList.tsx` | Split into `CandidateListView` (props = store slice, testable) and the connected default; bands rows (`listPresentation`, also when rhythm fit was applied), shows the meaning note and the rhythm note |
 | `frontend/src/components/rhyme/CandidateRow.tsx`, `pattern/PatternCandidateRow.tsx` | `SimilarityBadge` before the score |
 | `frontend/src/components/rhyme/QueryControls.tsx` | "Order" toggle |
 | `frontend/src/components/rhyme/pattern/PatternPanel.tsx`, `pattern/SlotColumns.tsx` | Toggle + note above the columns; `SlotColumns.presentation?` bands each column |
@@ -111,7 +116,8 @@ toggle, parts, `CandidateListView`, `SlotColumns`, `RhymesWithView`).
 
 - The server is the only sorter. Headers are inserted strictly where `rowBand(row)` changes in the order
   received; header keys are unique even if a band reappears.
-- Headers appear only when `order_applied === "meaning"`; a missing `order_applied` reads as `rhyme`.
+- Headers appear only when `order_applied === "meaning"` (or, in the sidebar list, when rhythm fit was
+  applied); a missing `order_applied` reads as `rhyme`.
 - The "Meaning order unavailable" note appears only when meaning was asked and rhyme was applied.
 - A rhyme-order request carries no `order` field.
 - Pages appended to a result set are always fetched in that set's requested order; a toggle change always
