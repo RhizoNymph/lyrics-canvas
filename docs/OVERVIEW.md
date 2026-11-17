@@ -157,6 +157,17 @@ not be saving; "Back online" shows briefly on recovery. It also polls `GET /_sta
 of Alertmanager) and lists firing cluster alerts, critical first; a deployment without that endpoint stays
 quiet. Cards are dismissible per incident. See [health_banner.md](./features/health_banner.md).
 
+### Agent Access (lcx)
+An agent such as Claude Code can work on the account with `tools/agent/lcx.py` (stdlib Python CLI,
+personal API token from `~/.config/lyrics-canvas/agent.env`, never printed): read commands print the
+API's JSON (canvases, one canvas in list order, tags, presets, word bank, search, the sync snapshot),
+and changes go through a typed plan file (create/rename canvases, create tags, tag snippets and words,
+move / also show / remove snippets across canvases, set layout, reorder a list, add bank words, edit
+text with `base_version`). `lcx plan check` resolves ids, titles and `$refs`, simulates the plan and
+prints a diff without writing; `lcx plan apply --yes` re-checks and applies in order, stopping at the
+first error. The skill in `tools/agent/skill/lyrics-canvas` makes the agent show that diff and wait for
+the user's approval before applying. See [agent_skill.md](./features/agent_skill.md).
+
 ## Module Documentation
 
 | Document | Scope |
@@ -194,6 +205,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Sync Versions](./features/sync_versions.md) | Offline sync backend: content versions (migration 009), `base_version` checks and 409 `version_conflict` with `current`, client-chosen ids on creates and 409 `id_conflict`, `GET /api/sync/snapshot` |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
+| [Agent Skill](./features/agent_skill.md) | `tools/agent/lcx.py` CLI (token config, read commands, typed plan v1, check diff, ordered apply stopping on the first error, rank port) and the lyrics-canvas Claude Code skill |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -835,6 +847,15 @@ Features Index:
       - frontend/src/components/sidebar/RhymeSidebar.tsx (mode switch)
     depends_on: [rhyme_patterns, rhyme_view, web_tag_expressions, web_word_bank, web_rests_and_search]
     doc: docs/features/web_rhyme_patterns.md
+  agent_skill:
+    description: tools/agent/lcx.py, a stdlib-only Python 3.11 CLI (code in tools/agent/lcxlib/) for agents. Config from env or ~/.config/lyrics-canvas/agent.env (LYRICS_API_TOKEN required, LYRICS_API_URL default http://10.1.1.69:32443, LYRICS_CA_FILE); the token only goes into the Bearer header. Reads print JSON (whoami, canvases, canvas <id|title> compact in list_rank order, tags, presets, bank, search, dump = GET /api/sync/snapshot). Plans (version 1, twelve ops, unknown ops/fields rejected) are checked against a fresh snapshot by simulating every op in order (canvas ids, exact titles or $refs; case-insensitive tag names; already-true ops are no-ops; remove_from a last canvas and stale edit_text base_version refused) into a text diff; plan apply --yes re-checks, then runs the steps in order through the real routes (tags, word-bank tags, transfer move/show, remove placement, layout PUT, batch-position re-rank with a fractional-indexing port, canvases, word bank, PUT raw_text with base_version) and stops at the first error, printing done / failed / not done. The lyrics-canvas skill (tools/agent/skill/lyrics-canvas/SKILL.md, symlinked into ~/.claude/skills) requires showing the diff and explicit user approval before apply --yes.
+    entry_points:
+      - tools/agent/lcx.py
+      - tools/agent/lcxlib/ (cli, config, client, errors, logs, rank, plan, world, checker, apply)
+      - tools/agent/skill/lyrics-canvas/SKILL.md
+      - tools/agent/tests/
+    depends_on: [sync_versions, snippet_placements, tag_expressions, word_bank, global_search]
+    doc: docs/features/agent_skill.md
   web_rhyme_meaning_order:
     description: Web client of the rhyme order toggle. One per-viewer choice (rhymeOrderStore, localStorage lyrics-canvas.rhymeOrder, default rhyme) shown as a "Rhyme" / "Rhyme, then meaning" radio group in the rhyme sidebar controls, above the pattern slot columns and in the word bank "Rhymes with" view; a change refetches each list from its first page. Meaning sends order "meaning" on POST /api/nlp/rhyme-suggest, /api/nlp/rhyme-pattern/suggest and /api/word-bank/rhymes (rhyme sends nothing). Each list keeps the order it asked for with the response's order_applied (ResultOrdering); later pages reuse the asked order. order_applied meaning -> band headers (Perfect / Strong / Near / Loose, from each row's band, fallback from score with the 0.95/0.85/0.75 edges in lib/rhyme/order.ts) where the band changes, appended pages continue the band; meaning asked but rhyme applied -> "Meaning order unavailable", no headers. Rows show the similarity as a quiet ≈NN%. Line matches in pattern mode are never banded.
     entry_points:
