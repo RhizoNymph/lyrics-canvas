@@ -9,6 +9,7 @@ import { createWordBankApi } from './wordBank';
 import { createSearchApi } from './search';
 import { createRhymePatternApi } from './rhymePattern';
 import { createApiTokenApi } from './apiTokens';
+import { createScoreApi } from './score';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -163,6 +164,9 @@ export const searchApi = createSearchApi(api);
 
 // ---- Word bank (see api/wordBank.ts) ----
 export const wordBankApi = createWordBankApi(api);
+
+// ---- Snippet score drafts and exports (see api/score.ts) ----
+export const scoreApi = createScoreApi(api);
 
 // ---- Personal API tokens (see api/apiTokens.ts) ----
 export const apiTokenApi = createApiTokenApi(api);
