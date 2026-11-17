@@ -8,7 +8,8 @@ An offline client picks the UUID of what it creates, so a create can be retried 
 * otherwise (another user's row, or a different payload): ``IdConflictError``, nothing written.
 
 "Matches the payload" compares what the create stores from the request: a canvas's title; a
-snippet's text, type, grid mode, beats, derived_from, the grid when one was sent, and a placement
+snippet's text (as stored, after the score's rest link), type, grid mode, beats, derived_from, the
+grid when one was sent, the score and score view, and a placement
 on the requested canvas (layout is last-write-wins and not compared); a tag's name and color; a
 merge's snippet on the canvas with none of the requested originals still there. Word bank adds
 resolve their ids inside app/services/word_bank/service.py ``add_words``.
@@ -91,11 +92,16 @@ class SnippetCreateContent:
     beats_per_line: int | None
     derived_from: dict | None
     grid_data: dict | None
+    # the stored (rest-linked) score and view the create computed; None = no score sent
+    score: dict | None = None
+    score_view: bool = False
 
 
 def _same_content(snippet: Snippet, content: SnippetCreateContent) -> bool:
     return (
         snippet.raw_text == content.raw_text
+        and snippet.score == content.score
+        and snippet.score_view == content.score_view
         and snippet.snippet_type == content.snippet_type
         and snippet.grid_mode == content.grid_mode
         and snippet.beats_per_line == content.beats_per_line

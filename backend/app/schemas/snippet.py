@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model
 
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
+from app.schemas.score import ScoreInput
 from app.schemas.tag import SnippetTagResponse
 from app.schemas.versioning import BaseVersion, ClientId
 from app.services.score.wire import ScoreModel
@@ -58,6 +59,11 @@ class SnippetCreate(BaseModel):
     raw_text: str = ""
     # When given, stored as-is (no re-syllabification); rests and stress are preserved.
     grid_data: GridDataModel | None = None
+    # Score format v1, validated against the new grid (422 invalid_score); its gaps are written
+    # into the grid as rests and into raw_text as ``_`` (docs/features/score_backend.md).
+    score: ScoreInput = None
+    # True = show the staff; stored false when there is no score.
+    score_view: bool = False
     position_x: float = 0.0
     position_y: float = 0.0
     width: float = 300.0
@@ -74,6 +80,11 @@ class SnippetUpdate(BaseModel):
     beats_per_line: int | None = None
     grid_data: GridDataModel | None = None
     raw_text: str | None = None
+    # Omitted = keep the stored score (carried over a text or grid change); null = remove it; an
+    # object = replace it (validated against the resulting grid, 422 invalid_score).
+    score: ScoreInput = None
+    # Omitted or null = keep; forced false when the snippet ends up without a score.
+    score_view: bool | None = None
     position_x: float | None = None
     position_y: float | None = None
     width: float | None = None

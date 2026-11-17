@@ -7,6 +7,11 @@ one canvas. Ownership of a snippet is
 
 A content change also bumps ``Snippet.version`` once (docs/features/sync_versions.md#versions);
 layout changes never do.
+
+Every content update runs the score save flow (app/services/score_save.py): the stored score is
+carried over text and grid changes, a sent score replaces it, and the score's gaps are written into
+the grid and text. Phonetics and card size follow the final text and grid
+(docs/features/score_backend.md#save-flow).
 """
 
 import logging
@@ -21,6 +26,7 @@ from sqlalchemy.orm import selectinload
 from app.models.placement import SnippetPlacement
 from app.models.snippet import Snippet
 from app.models.tag import Tag
+from app.schemas.phonetics import SnippetPhonetics
 from app.services.merge_service import MergePersistError
 from app.services.placements.errors import PlacementNotFoundError
 from app.services.placements.queries import (
@@ -34,6 +40,8 @@ from app.services.placements.list_rank import validate_rank
 from app.services.placements.ranks import rank_for_new
 from app.services.placements.removal import delete_everywhere, lock_snippets
 from app.services.placements.view import PLACEMENT_FIELDS, PlacedSnippet
+from app.services.score_save import KeepScore, ScoredContent, ScoreEdit, saved_content
+from app.services.snippet_content import content_for
 from app.services.sync.bump import bump
 
 logger = logging.getLogger(__name__)
@@ -105,21 +113,68 @@ def content_edits_differ(snippet: Snippet, edits: Mapping[str, object]) -> bool:
     )
 
 
-def apply_update(placed: PlacedSnippet, content_edits: Mapping[str, object], changes: Mapping[str, object]) -> bool:
-    """Set the non-``None`` ``changes``: content on the snippet, layout on this canvas's placement.
-    Bumps ``content_updated_at`` and ``version`` when ``content_edits`` change stored content;
-    returns whether it did. Derived values alone (phonetics, a resent grid) bump neither."""
-    content_changed = content_edits_differ(placed.snippet, content_edits)
+def apply_update(
+    placed: PlacedSnippet,
+    content_edits: Mapping[str, object],
+    changes: Mapping[str, object],
+    scored: ScoredContent | None = None,
+) -> bool:
+    """Set the non-``None`` ``changes``: content on the snippet, layout on this canvas's placement,
+    and, when given, ``scored``'s score and view (None is a value there: no score).
+    Bumps ``content_updated_at`` and ``version`` when ``content_edits`` change stored content or the
+    score or view changes; returns whether it did. Derived values alone (phonetics, a resent grid)
+    bump neither."""
+    snippet = placed.snippet
+    content_changed = content_edits_differ(snippet, content_edits) or (
+        scored is not None and (scored.score != snippet.score or scored.score_view != snippet.score_view)
+    )
     for key, value in changes.items():
         if value is None:
             continue
-        target = placed.placement if key in PLACEMENT_FIELDS else placed.snippet
+        target = placed.placement if key in PLACEMENT_FIELDS else snippet
         setattr(target, key, value)
+    if scored is not None:
+        snippet.score = scored.score
+        snippet.score_view = scored.score_view
     if content_changed:
         # SQL now(): the transaction clock, so it equals the updated_at written by the same UPDATE.
-        placed.snippet.content_updated_at = func.now()
-        bump(placed.snippet)
+        snippet.content_updated_at = func.now()
+        bump(snippet)
     return content_changed
+
+
+def runs_score_flow(changes: Mapping[str, object], edit: ScoreEdit, view: bool | None) -> bool:
+    """Whether an update touches what the score depends on (text, grid) or the score itself."""
+    return (
+        changes.get("raw_text") is not None
+        or changes.get("grid_data") is not None
+        or not isinstance(edit, KeepScore)
+        or view is not None
+    )
+
+
+def scored_changes(
+    snippet: Snippet, content_edits: Mapping[str, object], changes: Mapping[str, object], edit: ScoreEdit, view: bool | None
+) -> tuple[dict[str, object], ScoredContent]:
+    """Run the save flow on the update's text and grid (``changes``, else the stored ones). When the
+    flow rewrote them (rest link, notes moved by a rest-only edit), the changes get the final text
+    and grid and phonetics and size computed from them: with no overrides when the client sent
+    text, as the route does, else with the stored overrides. Raises the flow's ScoreErrors."""
+    stored = ScoredContent(snippet.raw_text, snippet.grid_data, snippet.score, snippet.score_view)
+    text = changes.get("raw_text")
+    grid = changes.get("grid_data")
+    text = snippet.raw_text if text is None else text
+    grid = snippet.grid_data if grid is None else grid
+    scored = saved_content(stored, raw_text=str(text), grid=grid, edit=edit, view=view)  # type: ignore[arg-type]
+    out = dict(changes)
+    if scored.raw_text != text or scored.grid != grid:
+        overrides = None
+        if "raw_text" not in content_edits and snippet.phonetics:
+            overrides = SnippetPhonetics.model_validate(snippet.phonetics).overrides
+        content = content_for(scored.raw_text, scored.grid or {"lines": []}, overrides)
+        out.update(raw_text=scored.raw_text, grid_data=scored.grid, phonetics=content.phonetics,
+                   width=content.width, height=content.height)
+    return out, scored
 
 
 async def update_snippet(
@@ -129,23 +184,33 @@ async def update_snippet(
     *,
     canvas_id: uuid.UUID,
     content_edits: Mapping[str, object],
+    score_edit: ScoreEdit = KeepScore(),
+    score_view: bool | None = None,
     **kwargs,
 ) -> PlacedSnippet:
     """PUT /api/snippets/{id}?canvas_id=: content to the shared snippet, layout to the placement on
     ``canvas_id``. ``content_edits`` are the content fields the client sent (not derived values such
-    as a re-syllabified grid). ``PlacementNotFoundError`` when not placed on the caller's canvas;
-    ``InvalidListRankError`` (before anything changes) for an invalid ``list_rank``."""
+    as a re-syllabified grid). ``score_edit`` / ``score_view`` are the score fields the client sent;
+    any text, grid or score change runs the save flow on the row locked FOR UPDATE.
+    ``PlacementNotFoundError`` when not placed on the caller's canvas; ``InvalidListRankError``
+    (before anything changes) for an invalid ``list_rank``; the flow's ``ScoreError``s (nothing
+    changed)."""
     if kwargs.get("list_rank") is not None:
         validate_rank(kwargs["list_rank"])
-    placed = await placed_snippet(db, uuid.UUID(snippet_id), canvas_id, uuid.UUID(owner_id))
+    flow = runs_score_flow(kwargs, score_edit, score_view)
+    placed = await placed_snippet(db, uuid.UUID(snippet_id), canvas_id, uuid.UUID(owner_id), lock=flow)
     if placed is None:
         raise PlacementNotFoundError(f"snippet {snippet_id} is not on canvas {canvas_id}")
     if kwargs.get("group_id") is not None:
         await ensure_group_on_canvas(db, kwargs["group_id"], canvas_id)
-    content_changed = apply_update(placed, content_edits, kwargs)
+    scored: ScoredContent | None = None
+    if flow:
+        kwargs, scored = scored_changes(placed.snippet, content_edits, kwargs, score_edit, score_view)
+    content_changed = apply_update(placed, content_edits, kwargs, scored)
     logger.debug(
-        "snippet.update snippet_id=%s canvas_id=%s fields=%s content_changed=%s",
-        snippet_id, canvas_id, sorted(k for k, v in kwargs.items() if v is not None), content_changed,
+        "snippet.update snippet_id=%s canvas_id=%s fields=%s score_edit=%s content_changed=%s",
+        snippet_id, canvas_id, sorted(k for k, v in kwargs.items() if v is not None), type(score_edit).__name__,
+        content_changed,
     )
     await db.commit()
     return await placed_by_placement_id(db, placed.placement_id)

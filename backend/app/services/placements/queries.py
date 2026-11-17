@@ -82,7 +82,8 @@ async def placed_snippets(
         Canvas.owner_id == owner_id,
     )
     if lock:
-        query = query.with_for_update(of=Snippet)
+        # the locked row is the truth: refresh a snippet this session loaded before the lock
+        query = query.with_for_update(of=Snippet).execution_options(populate_existing=True)
     result = await db.execute(query)
     return await _with_refs(db, [tuple(row) for row in result.all()])
 
