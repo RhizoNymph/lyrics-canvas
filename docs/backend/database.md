@@ -110,9 +110,11 @@ Layout (`canvas_id`, position, size, `z_index`, `group_id`) moved to `snippet_pl
 | `width`, `height` | Float, NOT NULL | 300 / 200 | |
 | `z_index` | Integer, NOT NULL | 0 | |
 | `group_id` | UUID | null | FK -> groups.id **ON DELETE SET NULL**; a group of `canvas_id` (service-enforced) |
+| `list_rank` | String(64) `COLLATE "C"`, NOT NULL | `"a0"` (ORM only) | custom list order key; services always set it |
 | `created_at` | DateTime(tz), NOT NULL | now() | |
 
-Unique `(snippet_id, canvas_id)` (`uq_snippet_placements_snippet_canvas`). Invariant: every snippet
+Unique `(snippet_id, canvas_id)` (`uq_snippet_placements_snippet_canvas`); index `(canvas_id, list_rank)`
+(`ix_snippet_placements_canvas_list_rank`). Invariant: every snippet
 has at least one placement (`app/services/placements/removal.py`).
 
 `phonetics` is computed with `grid_data` on create/update (`app/api/snippets.py`) and backfilled
@@ -307,6 +309,13 @@ snippet row (content and tag links copied, recordings not), then drops `owner_id
 Adds `version INTEGER NOT NULL DEFAULT 1` with `ck_<table>_version_positive CHECK (version >= 1)` to
 `snippets`, `canvases`, `tags` and `bank_words` (existing rows get 1). The downgrade drops the
 constraints and columns. Details: [sync_versions.md](../features/sync_versions.md#migration-009).
+
+**File:** `alembic/versions/010_placement_list_rank.py`
+
+Adds `snippet_placements.list_rank varchar(64) COLLATE "C"`, backfills each canvas with `a0, a1, ...`
+in the old list order (snippet `content_updated_at` desc, `created_at` desc, id), then sets NOT NULL and
+indexes `(canvas_id, list_rank)`. The downgrade drops the index and the column. Details:
+[snippet_placements.md](../features/snippet_placements.md#migration-010).
 
 ### Running Migrations
 
