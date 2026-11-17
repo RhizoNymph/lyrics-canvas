@@ -83,6 +83,8 @@ data class CardLayout(
     val fallbackX: Double,
     val fallbackY: Double,
     val fallbackWidth: Double,
+    /** The compact staff shown instead of the grid when the snippet is in the staff view. */
+    val staff: CompactStaff? = null,
 )
 
 /** Where a cell's text goes (placeCellText in gridDraw.ts). */
@@ -99,7 +101,8 @@ fun cardLayout(snippet: Snippet): CardLayout {
     val w = snippet.width
     val gridLeft = m.PADDING
     val gridTop = m.HEADER_HEIGHT + m.PADDING
-    val lines = snippet.gridData?.lines.orEmpty()
+    val staffView = showsStaff(snippet)
+    val lines = if (staffView) emptyList() else snippet.gridData?.lines.orEmpty()
 
     val pillTop = (m.HEADER_HEIGHT - m.TAG_PILL_HEIGHT) / 2
     val pills = arrayOfNulls<TagPill>(snippet.tags.size)
@@ -138,7 +141,8 @@ fun cardLayout(snippet: Snippet): CardLayout {
     val counts = lines.mapIndexed { row, line ->
         CountText(line.syllableCount.toString(), w - m.PADDING - 14.0, gridTop + row * m.CELL_HEIGHT + 5.0)
     }
-    val fallback = if (lines.isEmpty()) fallbackTextOf(snippet) else null
+    val fallback = if (lines.isEmpty() && !staffView) fallbackTextOf(snippet) else null
+    val staff = snippet.score?.takeIf { staffView }?.let { compactStaff(it, snippet.gridData, gridLeft, gridTop, w - 2 * m.PADDING) }
     val headerLabel = snippet.snippetType.name
     val badge = linkBadgeCount(snippet)?.let { count ->
         val label = linkBadgeLabel(count)
@@ -167,6 +171,7 @@ fun cardLayout(snippet: Snippet): CardLayout {
         fallbackX = m.PADDING,
         fallbackY = gridTop,
         fallbackWidth = w - m.PADDING * 2,
+        staff = staff,
     )
 }
 
