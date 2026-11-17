@@ -3209,6 +3209,202 @@
         "title": "RhymeUnitModel",
         "type": "object"
       },
+      "ScoreLineModel": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreNoteModel"
+            },
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notes"
+        ],
+        "title": "ScoreLineModel",
+        "type": "object"
+      },
+      "ScoreMeterModel": {
+        "additionalProperties": false,
+        "properties": {
+          "bar": {
+            "maximum": 2048.0,
+            "minimum": 0.0,
+            "title": "Bar",
+            "type": "integer"
+          },
+          "den": {
+            "enum": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "title": "Den",
+            "type": "integer"
+          },
+          "num": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Num",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bar",
+          "num",
+          "den"
+        ],
+        "title": "ScoreMeterModel",
+        "type": "object"
+      },
+      "ScoreModel": {
+        "additionalProperties": false,
+        "description": "Score format v1 (spec/score_format.md).",
+        "properties": {
+          "lines": {
+            "description": "one entry per grid line",
+            "items": {
+              "$ref": "#/components/schemas/ScoreLineModel"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "meters": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreMeterModel"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Meters",
+            "type": "array"
+          },
+          "pickup": {
+            "description": "ticks before bar 0",
+            "minimum": 0.0,
+            "title": "Pickup",
+            "type": "integer"
+          },
+          "ppq": {
+            "const": 48,
+            "title": "Ppq",
+            "type": "integer"
+          },
+          "snap": {
+            "enum": [
+              "1/8",
+              "1/16",
+              "1/32",
+              "1/8t",
+              "1/16t"
+            ],
+            "title": "Snap",
+            "type": "string"
+          },
+          "tempos": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreTempoModel"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Tempos",
+            "type": "array"
+          },
+          "v": {
+            "const": 1,
+            "title": "V",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "v",
+          "ppq",
+          "pickup",
+          "meters",
+          "tempos",
+          "snap",
+          "lines"
+        ],
+        "title": "ScoreModel",
+        "type": "object"
+      },
+      "ScoreNoteModel": {
+        "additionalProperties": true,
+        "description": "One placed syllable. Unknown keys (a future pitch) are kept and serialized.",
+        "properties": {
+          "a": {
+            "description": "accent: 0 none, 1 accent, 2 strong",
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "A",
+            "type": "integer"
+          },
+          "d": {
+            "description": "duration in ticks",
+            "minimum": 1.0,
+            "title": "D",
+            "type": "integer"
+          },
+          "s": {
+            "description": "syllable ordinal in the grid line (rest cells not counted)",
+            "minimum": 0.0,
+            "title": "S",
+            "type": "integer"
+          },
+          "t": {
+            "description": "start tick from tick 0 (ppq 48)",
+            "minimum": 0.0,
+            "title": "T",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "s",
+          "t",
+          "d",
+          "a"
+        ],
+        "title": "ScoreNoteModel",
+        "type": "object"
+      },
+      "ScoreTempoModel": {
+        "additionalProperties": false,
+        "properties": {
+          "bar": {
+            "maximum": 2048.0,
+            "minimum": 0.0,
+            "title": "Bar",
+            "type": "integer"
+          },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "quarter notes per minute, at most 2 decimals",
+            "ge": 20,
+            "le": 400,
+            "title": "Bpm"
+          }
+        },
+        "required": [
+          "bar",
+          "bpm"
+        ],
+        "title": "ScoreTempoModel",
+        "type": "object"
+      },
       "ScoreWeightsModel": {
         "properties": {
           "coda": {
@@ -3734,6 +3930,21 @@
             "title": "Raw Text",
             "type": "string"
           },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_view": {
+            "default": false,
+            "title": "Score View",
+            "type": "boolean"
+          },
           "snippet_type": {
             "$ref": "#/components/schemas/SnippetType"
           },
@@ -3771,6 +3982,8 @@
           "beats_per_line",
           "grid_data",
           "raw_text",
+          "score",
+          "score_view",
           "position_x",
           "position_y",
           "width",
@@ -4392,6 +4605,21 @@
             "title": "Raw Text",
             "type": "string"
           },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_view": {
+            "default": false,
+            "title": "Score View",
+            "type": "boolean"
+          },
           "snippet_type": {
             "$ref": "#/components/schemas/SnippetType"
           },
@@ -4418,6 +4646,8 @@
           "beats_per_line",
           "grid_data",
           "raw_text",
+          "score",
+          "score_view",
           "phonetics",
           "derived_from",
           "created_at",

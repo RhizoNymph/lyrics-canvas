@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.canvas import CanvasCreate, CanvasUpdate, CanvasResponse, CanvasDetailResponse, ShareResponse
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 from app.schemas.snippet import GridDataModel, SnippetCanvasRef, SnippetResponse
+from app.services.score.wire import ScoreModel
 from app.schemas.group import GroupResponse
 from app.schemas.tag import SnippetTagResponse
 from app.api.placement_errors import placement_errors, placement_http_error
@@ -41,6 +42,11 @@ def _snippet_tag_response(t) -> SnippetTagResponse:
     return SnippetTagResponse(id=str(t.id), name=t.name, color=t.color)
 
 
+def score_model(stored: dict | None) -> ScoreModel | None:
+    """A stored score (canonical JSON, valid for the stored grid) as its wire model."""
+    return ScoreModel.model_validate(stored) if stored is not None else None
+
+
 def _snippet_response(s) -> SnippetResponse:
     """``s`` is a snippet on one canvas (services.placements.PlacedSnippet or the same attributes):
     content from the snippet, layout from that canvas's placement."""
@@ -55,6 +61,9 @@ def _snippet_response(s) -> SnippetResponse:
         beats_per_line=s.beats_per_line,
         grid_data=GridDataModel.model_validate(s.grid_data) if s.grid_data is not None else None,
         raw_text=s.raw_text,
+        # Hand-built test doubles that predate musical mode have no score.
+        score=score_model(getattr(s, "score", None)),
+        score_view=getattr(s, "score_view", False),
         position_x=s.position_x,
         position_y=s.position_y,
         width=s.width,
