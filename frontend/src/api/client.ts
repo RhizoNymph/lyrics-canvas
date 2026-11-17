@@ -8,6 +8,7 @@ import { createVoiceApi } from './voice';
 import { createWordBankApi } from './wordBank';
 import { createSearchApi } from './search';
 import { createRhymePatternApi } from './rhymePattern';
+import { createApiTokenApi } from './apiTokens';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -162,5 +163,8 @@ export const searchApi = createSearchApi(api);
 
 // ---- Word bank (see api/wordBank.ts) ----
 export const wordBankApi = createWordBankApi(api);
+
+// ---- Personal API tokens (see api/apiTokens.ts) ----
+export const apiTokenApi = createApiTokenApi(api);
 
 export default api;

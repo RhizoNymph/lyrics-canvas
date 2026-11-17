@@ -21,6 +21,7 @@ React 18 + TypeScript + Pixi.js v7 SPA for creating, organizing, and analyzing l
 | [List Mode](./features/list_mode.md) | Canvas page list view: last-edited order, tag filter, in-place editor, shared selection | `ListView`, `ListRow`, `GridPreview`, `lib/listMode/*`, `lib/canvas/visibility` |
 | [Web Voice Capture](./features/web_voice_capture.md) | Recorder modal (taps = line breaks, double tap = stop, silence auto-stop), voice-take upload, editor recordings list | `VoiceSession`, `voiceStore`, `VoiceCaptureModal`, `RecordButton`, `RecordingsSection`, `lib/voice/*`, `api/voice.ts` |
 | [Health Banner](./features/health_banner.md) | Backend health monitor, cluster alerts poller, status banner | `useStatusMonitoring`, `statusStore`, `StatusBanner`, `lib/health/*`, `lib/alerts/*`, `lib/statusBanner/*` |
+| [Web API Tokens](./features/web_api_tokens.md) | Account "API tokens" dialog: list, create (secret shown once), revoke | `ApiTokensDialog`, `ApiTokensView`, `apiTokenStore`, `lib/apiTokens/*`, `api/apiTokens.ts` |
 | [API Client & Types](./frontend/api-client.md) | Axios HTTP client, TypeScript interfaces, constants | `client.ts`, `types/index.ts` |
 
 ## Architecture Summary
