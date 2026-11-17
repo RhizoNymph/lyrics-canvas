@@ -56,3 +56,28 @@ export { draftFromGrid, defaultAccent } from './draft';
 export { changedLineTexts, spliceLineTexts } from './text';
 export { planContentSave, scoreContentOf, ScoreSaveError } from './saveFlow';
 export type { ScoreContent, ContentSavePlan } from './saveFlow';
+export { syllableTexts } from './gridView';
+export {
+  noteWindow,
+  findNote,
+  placeNote,
+  moveNote,
+  resizeNote,
+  cycleAccent,
+  unplaceNote,
+  setMeterAt,
+  setTempoAt,
+  setPickup,
+  setSnap,
+  snapTick,
+  unplacedSyllables,
+} from './edit';
+export type { EditRefusal, EditResult } from './edit';
+export { staffBars, layoutStaff, rowAtTick, xOfTick, tickAtX, beatTicks, noteSegments, lineStarts } from './layout';
+export type { StaffBar, StaffRow, StaffLayout, LayoutOptions, BeatTick, NoteSegment } from './layout';
+export { ACCENT_GAIN, playbackPlan, msToTick } from './playback';
+export type { PlannedClick, PlannedNote, PlaybackPlan } from './playback';
+export { NO_SCORE, commitTrack, followGrid } from './track';
+export type { ScoreTrack, FollowResult } from './track';
+export { emptyHistory, record, undo, redo, HISTORY_LIMIT } from './history';
+export type { History } from './history';
