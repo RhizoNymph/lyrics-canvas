@@ -39,7 +39,7 @@ def _group_uuid(group_id: str | None) -> uuid.UUID | None:
 
 @router.post(
     "/api/canvases/{canvas_id}/snippets", response_model=SnippetResponse, status_code=201,
-    responses={**placement_errors(404), **conflict_responses(IdConflictResponse)},
+    responses={**placement_errors(404, 422), **conflict_responses(IdConflictResponse)},
 )
 async def create_snippet(
     canvas_id: str,
@@ -48,12 +48,16 @@ async def create_snippet(
     db: AsyncSession = Depends(get_db),
 ):
     """With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id
-    used by a different snippet (or one not on this canvas) is 409 ``id_conflict``."""
+    used by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without
+    ``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is
+    422 ``invalid_list_rank``."""
     # Python-mode dump keeps snippet_type/grid_mode as enums; the ORM object is
     # returned un-expired after commit, so a json-mode dump would leak plain
     # strings into the response serializer.
     data = req.model_dump()
     client_id = data.pop("id", None)
+    if data.get("list_rank") is None:
+        data.pop("list_rank", None)  # the service puts the placement at the top of the canvas
     raw_text = data.pop("raw_text", "")
     # A client-supplied grid (block merging) is stored as-is so its rests and stress survive;
     # otherwise the text is syllabified. Either way phonetics follow the stored grid.
@@ -90,7 +94,7 @@ async def create_snippet(
 
 @router.put(
     "/api/snippets/{snippet_id}", response_model=SnippetResponse,
-    responses={**placement_errors(404), **conflict_responses(SnippetVersionConflictResponse)},
+    responses={**placement_errors(404, 422), **conflict_responses(SnippetVersionConflictResponse)},
 )
 async def update_snippet(
     snippet_id: str,
@@ -100,7 +104,8 @@ async def update_snippet(
     db: AsyncSession = Depends(get_db),
 ):
     """Content fields update the shared snippet; layout fields (position, size, z_index,
-    group_id) update the placement on ``canvas_id``. ``base_version`` is checked only when a content
+    group_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422
+    ``invalid_list_rank``). ``base_version`` is checked only when a content
     field is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas."""
     data = req.model_dump(exclude_none=True, exclude={"base_version"})
     try:
@@ -156,12 +161,17 @@ async def delete_snippet(
         raise HTTPException(status_code=404, detail="Snippet not found")
 
 
-@router.patch("/api/snippets/batch-position", response_model=BatchPositionResult)
+@router.patch("/api/snippets/batch-position", response_model=BatchPositionResult, responses=placement_errors(422))
 async def batch_position(
     req: BatchPositionUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Positions and/or list ranks of placements on ``canvas_id``; a whole-canvas re-rank is one
+    call. One invalid ``list_rank`` is 422 ``invalid_list_rank`` and nothing changes."""
     updates = [u.model_dump() for u in req.updates]
-    count = await snippet_service.batch_update_positions(db, req.canvas_id, updates, str(user.id))
+    try:
+        count = await snippet_service.batch_update_positions(db, req.canvas_id, updates, str(user.id))
+    except PlacementError as exc:
+        raise placement_http_error(exc) from exc
     return BatchPositionResult(updated=count)

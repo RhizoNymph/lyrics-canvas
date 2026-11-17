@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useRhymePatternStore } from '@/stores/rhymePatternStore';
 import { useRhymeStore } from '@/stores/rhymeStore';
+import { useRhymeOrderStore } from '@/stores/rhymeOrderStore';
 import { createDebouncedRunner } from '@/lib/rhyme/debounce';
 import { RHYME_QUERY_DEBOUNCE_MS } from './useRhymeQuery';
 
 /**
  * Re-runs the pattern search 150 ms after a slot edit or a change of the shared rhyme controls (min score,
- * sources, rare words, tag filter), and re-detects 150 ms after the detection threshold changes. The first
+ * sources, rare words, tag filter, order), and re-detects 150 ms after the detection threshold changes. The first
  * search of a detection is run by the store itself. Mounted by the pattern panel.
  */
 export function useRhymePatternQuery(): void {
@@ -16,6 +17,7 @@ export function useRhymePatternQuery(): void {
   const sources = useRhymeStore((s) => s.sources);
   const includeRare = useRhymeStore((s) => s.includeRare);
   const tagFilterText = useRhymeStore((s) => s.tagFilterText);
+  const order = useRhymeOrderStore((s) => s.order);
 
   const suggestRunner = useMemo(
     () => createDebouncedRunner(() => void useRhymePatternStore.getState().runSuggest(), RHYME_QUERY_DEBOUNCE_MS),
@@ -40,7 +42,7 @@ export function useRhymePatternQuery(): void {
       return;
     }
     suggestRunner.schedule();
-  }, [edit, minScore, sources, includeRare, tagFilterText, suggestRunner]);
+  }, [edit, minScore, sources, includeRare, tagFilterText, order, suggestRunner]);
 
   useEffect(() => {
     if (firstDetect.current) {

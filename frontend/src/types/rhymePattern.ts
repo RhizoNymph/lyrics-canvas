@@ -3,6 +3,7 @@
  * to the pydantic models in backend/app/schemas/rhyme_pattern.py. See docs/features/web_rhyme_patterns.md.
  */
 import type { GridLine } from './index';
+import type { RhymeOrder } from '@/lib/rhyme/order';
 import type { DialectMap, RhymeCandidate, RhymeK, RhymeSyllable, RhymeUnit, ScoreWeights, SourceName } from './rhyme';
 
 /** At least 2 and at most 16 lines in a pattern range. */
@@ -108,6 +109,8 @@ export interface PatternSuggestRequest extends PatternLines {
   line_matches: boolean;
   line_match_limit: number;
   line_match_offset: number;
+  /** Per slot column: rhyme bands, then similarity to the snippet. Omitted for the server default "rhyme". */
+  order?: 'meaning';
 }
 
 export interface PatternCandidate extends RhymeCandidate {
@@ -143,4 +146,6 @@ export interface PatternSuggestResponse {
   line_matches: LineMatch[];
   line_match_total: number;
   elapsed_ms: number;
+  /** The order the slot columns use; line matches keep their order either way. */
+  order_applied?: RhymeOrder;
 }

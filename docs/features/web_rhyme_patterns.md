@@ -80,6 +80,16 @@ Add picks to word bank -> wordBankStore.addFromText(picks.join(', '), 'rhyme') (
 line match Materialize -> addSnippetFromText(unit.text, x, y, lineMatchDerivedFrom(...)) -> row removed
 ```
 
+### Order ("Rhyme" / "Rhyme, then meaning")
+
+The order toggle sits above the slot columns. `currentParams` adds the viewer's order
+(`rhymeOrderStore`), `buildSuggestRequest` sends `order: "meaning"` only for meaning, and a toggle change
+re-suggests from the first page (useRhymePatternQuery). `results.ordering` keeps the order the first page
+asked for with the server's `order_applied`; column and line-match pages reuse that order. With meaning
+applied each column shows compact band headers where the band changes; a fallback shows "Meaning order
+unavailable" next to the toggle. Line matches are not banded. See
+[web_rhyme_meaning_order.md](./web_rhyme_meaning_order.md).
+
 ## Files
 
 | File | Role | Key exports |

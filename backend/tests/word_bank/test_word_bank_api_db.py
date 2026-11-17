@@ -262,7 +262,7 @@ def test_rhymes_by_word_id(client):
     assert matched[:3] == [("delight", 1.0, 1), ("Fight", 1.0, 1), ("light", 1.0, 1)]
     assert "night" not in [m[0] for m in matched]
     assert "money" not in [m[0] for m in matched]
-    assert set(res["matches"][0]) == {"word", "score", "match_depth"}
+    assert set(res["matches"][0]) == {"word", "score", "match_depth", "band", "similarity"}
 
 
 def test_rhymes_by_text_excludes_equal_text(client):
@@ -294,7 +294,7 @@ def test_rhymes_unpronounceable_anchor(client):
     (word,) = add(client, "夜")["created"]
     add(client, "night")
     res = ok(client.post("/api/word-bank/rhymes", json={"word_id": word["id"]}))
-    assert res == {"anchor": {"text": "夜", "rhyme_key": [], "syllable_count": 0}, "matches": []}
+    assert res == {"anchor": {"text": "夜", "rhyme_key": [], "syllable_count": 0}, "matches": [], "order_applied": "rhyme"}
 
 
 # ---- families ----

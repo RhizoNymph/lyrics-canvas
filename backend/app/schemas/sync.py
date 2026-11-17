@@ -27,6 +27,7 @@ class SyncPlacement(BaseModel):
     height: float
     z_index: int
     group_id: str | None = None
+    list_rank: str  # custom list order key: byte order, ties by placement_id
 
     model_config = _RESPONSE_CONFIG
 
@@ -34,7 +35,7 @@ class SyncPlacement(BaseModel):
 class SyncSnippet(BaseModel):
     """A snippet's shared content: ``SnippetResponse`` without the per-canvas fields
     (``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,
-    canvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``."""
+    list_rank, canvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``."""
 
     id: str
     snippet_type: SnippetType

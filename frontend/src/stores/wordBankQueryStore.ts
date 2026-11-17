@@ -6,6 +6,8 @@ import {
 } from '@/lib/wordBank';
 import type { BankFamiliesResponse, BankRhymesResponse, RelatedWordsResponse, RhymeAnchorInput } from '@/types/wordBank';
 import { useWordBankStore } from './wordBankStore';
+import { currentRhymeOrder } from './rhymeOrderStore';
+import type { RhymeOrder } from '@/lib/rhyme/order';
 
 /** A server-backed view: never fetched, in flight, a result, or a typed failure. */
 export type Remote<T> =
@@ -35,6 +37,8 @@ interface WordBankQueryState {
   /** The typed "rhymes with" text; empty means "the one selected word". */
   rhymeText: string;
   rhymes: Remote<BankRhymesResponse>;
+  /** The order the latest "rhymes with" request asked for (the response says which one it applied). */
+  rhymesOrder: RhymeOrder;
   related: RelatedState;
 
   setFamilyMinScore: (score: number) => void;
@@ -81,6 +85,7 @@ const INITIAL = {
   rhymeMinScore: DEFAULT_RHYME_MIN_SCORE,
   rhymeText: '',
   rhymes: { kind: 'idle' } as Remote<BankRhymesResponse>,
+  rhymesOrder: 'rhyme' as RhymeOrder,
   related: { kind: 'idle' } as RelatedState,
 };
 
@@ -111,8 +116,9 @@ export const useWordBankQueryStore = create<WordBankQueryState>((set, get) => ({
       set({ rhymes: { kind: 'idle' } });
       return;
     }
-    set({ rhymes: { kind: 'loading' } });
-    const body = rhymesBody(anchor, useWordBankStore.getState().filter, get().rhymeMinScore);
+    const order = currentRhymeOrder();
+    set({ rhymes: { kind: 'loading' }, rhymesOrder: order });
+    const body = rhymesBody(anchor, useWordBankStore.getState().filter, get().rhymeMinScore, order);
     try {
       const value = await wordBankApi.rhymes(body);
       if (seq === rhymesSeq) set({ rhymes: { kind: 'ready', value } });

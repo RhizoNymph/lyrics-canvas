@@ -30,6 +30,7 @@ from app.models.snippet import GridMode, Snippet, SnippetType
 from app.models.word_bank import BankWord
 from app.schemas.phonetics import SnippetPhonetics
 from app.services.placements.queries import placed_by_placement_id, placed_snippet
+from app.services.placements.ranks import top_rank
 from app.services.placements.view import PlacedSnippet
 from app.services.snippet_content import content_for, derive_new_content
 from app.services.sync.bump import bump
@@ -188,6 +189,7 @@ async def create_snippet_with_recording(
         position_y=position_y,
         width=content.width,
         height=content.height,
+        list_rank=await top_rank(db, canvas_id),
     )
     try:
         db.add(snippet)

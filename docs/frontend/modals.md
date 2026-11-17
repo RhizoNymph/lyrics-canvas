@@ -40,6 +40,13 @@ Opened by the canvas list page's "Voice dataset" header button. Shows the stats 
 fetches the export with the bearer token into a blob and saves it under the server's file name. Escape,
 Close or a backdrop press close it and abort pending requests.
 
+## ApiTokensDialog
+
+**Files:** `src/components/account/ApiTokensDialog.tsx`, `ApiTokensView.tsx`
+
+Opened by the canvas list page's "API tokens" header button: lists, creates (secret shown once with a copy
+button) and revokes personal API tokens. See [web_api_tokens.md](../features/web_api_tokens.md).
+
 The former `SearchModal` (Ctrl+F, `GET /api/canvases/{id}/search`) is gone: the in-canvas search box replaces
 it ([web_rests_and_search.md](../features/web_rests_and_search.md)). The backend endpoint stays.
 
