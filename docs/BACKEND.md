@@ -9,6 +9,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | Module | Scope | Key Files |
 |--------|-------|-----------|
 | [Authentication](./backend/auth.md) | JWT tokens, bcrypt hashing, user model, login/register | `auth_service.py`, `deps.py`, `auth.py` |
+| [Personal API Tokens](./features/api_tokens.md) | `api_tokens` (migration 011), create / list / revoke, `lct_` bearer auth, login-only token management | `services/api_tokens/`, `api/tokens.py`, `models/api_token.py`, `deps.py` |
 | [Database & Models](./backend/database.md) | Async PostgreSQL, ORM models, Alembic migrations | `database.py`, `models/`, `alembic/` |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippet operations, sharing, forking | `canvas_service.py`, `canvases.py` |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, user-wide tag labels, snippet-tag associations, tag presets ([tag_expressions](./features/tag_expressions.md)) | `group_service.py`, `tag_service.py`, `tag_preset_service.py`, `tag_expr/` |
@@ -79,7 +80,7 @@ app/
     rest_marks.py                   `_` rest rule: tokenize, word tokens, display text, rebuild
     search/                         Search across canvases: query, matching, ILIKE prefilter, excerpt, service
   api/
-    deps.py                         Auth dependency injection
+    deps.py                         Auth dependency injection (JWT or lct_ API token)
     auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py / search.py
     tag_presets.py / tag_errors.py  Preset routes; tag error envelope
 scripts/
@@ -102,6 +103,7 @@ scripts/
 | Export | 1 | Bearer |
 | Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
 | Sync | 1 (snapshot) | Bearer |
+| API tokens | 3 (create, list, revoke) | Bearer login JWT only |
 | Health | 1 | Public |
 
 Every route the clients call declares a pydantic `response_model`; the generated OpenAPI document is

@@ -9,6 +9,7 @@ from app.models.tag_preset import TagPreset
 from app.models.word_bank import BankWord, bank_word_tags
 from app.models.embedding import SnippetEmbedding
 from app.models.recording import SnippetRecording, SplitMode
+from app.models.api_token import ApiToken
 
 __all__ = [
     "Base",
@@ -27,4 +28,5 @@ __all__ = [
     "SnippetEmbedding",
     "SnippetRecording",
     "SplitMode",
+    "ApiToken",
 ]

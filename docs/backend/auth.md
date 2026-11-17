@@ -67,11 +67,16 @@ async def get_current_user(
 ) -> User
 ```
 
-Flow:
+Flow (`get_auth`; `get_current_user` returns its user):
 1. `HTTPBearer` extracts token from `Authorization: Bearer <token>` header
-2. `decode_access_token(token)` extracts user_id from JWT
-3. `get_user_by_id(db, user_id)` fetches User from database
-4. Returns User or raises HTTP 401
+2. A token starting with `lct_` is a personal API token: looked up by sha256, valid while not revoked
+   or expired, else 401 (see [api_tokens.md](../features/api_tokens.md#authentication))
+3. Otherwise `decode_access_token(token)` extracts user_id from JWT
+4. `get_user_by_id(db, user_id)` fetches User from database
+5. Returns User or raises HTTP 401
+
+`require_login` is `get_current_user` for login JWTs only (403 `token_management_forbidden` for an API
+token); the `/api/tokens` routes use it.
 
 ## Schemas
 
