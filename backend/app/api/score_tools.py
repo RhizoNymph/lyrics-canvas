@@ -20,9 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.user import User
+from app.schemas.score import ScoreInvalidResponse
 from app.schemas.score_tools import (
     GridDraftRequest,
-    InvalidScoreResponse,
     RecordingDraftRequest,
     ScoreDraftRequest,
     ScoreDraftResponse,
@@ -65,7 +65,7 @@ def _request(body: GridDraftRequest | RecordingDraftRequest) -> service.DraftReq
 @router.post(
     "/api/snippets/{snippet_id}/score/draft",
     response_model=ScoreDraftResponse,
-    responses=_errors({404: ScoreToolErrorResponse, 422: ScoreToolErrorResponse | InvalidScoreResponse}),
+    responses=_errors({404: ScoreToolErrorResponse, 422: ScoreToolErrorResponse | ScoreInvalidResponse}),
 )
 async def draft_score(
     snippet_id: uuid.UUID,

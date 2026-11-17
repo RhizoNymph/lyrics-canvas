@@ -348,7 +348,7 @@ bytes`, `score.export.stored_invalid snippet_id reason` (error). Lyrics text is 
 | File | Role | Key exports |
 |------|------|-------------|
 | `backend/app/api/score_tools.py` | Routes, error mapping | `router`, `draft_score`, `export_score`, `tool_http_error`, `invalid_score_http_error` |
-| `backend/app/schemas/score_tools.py` | Wire shapes | `DraftMeter`, `GridDraftRequest`, `RecordingDraftRequest`, `ScoreDraftRequest`, `ScoreDraftResponse`, `ScoreToolErrorBody`/`Response`, `InvalidScoreBody`/`Response` |
+| `backend/app/schemas/score_tools.py` | Wire shapes | `DraftMeter`, `GridDraftRequest`, `RecordingDraftRequest`, `ScoreDraftRequest`, `ScoreDraftResponse`, `ScoreToolErrorBody`/`Response` (the invalid_score body is score-backend's `ScoreInvalidResponse`) |
 | `backend/app/services/score_tools/errors.py` | Typed errors | `ScoreToolErrorCode`, `ScoreToolError` (code, status, message), `SnippetNotFoundError`, `RecordingNotFoundError`, `RecordingHasNoTimingsError`, `DraftEmptyError`, `ScoreNotFoundError`, `StoredScoreInvalidError` |
 | `backend/app/services/score_tools/service.py` | DB lookups, ownership, orchestration | `ExportFormat`, `SnippetContent`, `GridDraft`, `RecordingDraft`, `DraftRequest`, `ExportFile`, `load_snippet`, `load_timings`, `draft`, `stored_score`, `render`, `export` |
 | `backend/app/services/score_tools/draft/types.py` | Draft value types | `DraftResult`, `GridWord`, `TakeWord`, `PairKind`, `WordPair`, `Alignment`, `SyllableTime`, `Grid` (lattice, `step`), `QuantizedNote`, `Quantized` |

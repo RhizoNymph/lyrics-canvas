@@ -68,14 +68,3 @@ class ScoreToolErrorBody(BaseModel):
 
 class ScoreToolErrorResponse(BaseModel):
     detail: ScoreToolErrorBody
-
-
-class InvalidScoreBody(BaseModel):
-    error: Literal["invalid_score"]
-    reason: str
-    line: int | None = None
-    note: int | None = None
-
-
-class InvalidScoreResponse(BaseModel):
-    detail: InvalidScoreBody
