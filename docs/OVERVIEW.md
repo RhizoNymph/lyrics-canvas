@@ -58,7 +58,11 @@ ripple right, removals clamp). A text edit keeps the notes of the words that sur
 LCS over normalized keys), and a draft can be laid out from the grid. The algorithms are defined in
 `spec/score_format.md`, implemented in Python (`backend/app/services/score/`), and pinned by
 `spec/score_vectors.json` for the web and Android ports; TS and Kotlin wire types exist. See
-[score_format.md](./features/score_format.md).
+[score_format.md](./features/score_format.md). Rhyme suggest's "Fit rhythm" (`rhythm_fit`) reads the
+anchor snippet's score: the slot syllables' onset metric weights and accents become per-syllable
+targets, only candidates with the slot's syllable count are kept, and each gets a deterministic
+`rhythm_fit` in [0, 1] comparing its stress to those targets; the list is ordered band, then rhythm
+fit, then similarity or rhyme order ([rhyme_rhythm_fit.md](./features/rhyme_rhythm_fit.md)).
 
 ### Groups & Tags
 **Groups** are named containers that visually wrap related snippets with a bounding box. Moving a group moves all its snippets. **Tags** are user-wide color labels (one list per user, shared by all canvases) attached to snippets. On web they are assigned from the right-click context menu's tag picker: a searchable checklist that links and unlinks immediately (on the whole multi-selection when the menu is opened on one of its members, with a mixed state), creates a tag from the search text, and edits (name, color) or deletes tags. Assigned tags appear as colored pill labels in the snippet header. Snippets are filtered with a **tag expression** (`love & !draft | type:chorus`; `!` > `&` > `|`, juxtaposition is AND, `type:` addresses the snippet type) typed into the filter bar under the toolbar, with autocomplete at the caret and tag pills that insert at the caret. An invalid expression keeps the last valid filter applied. The filter text is remembered per canvas per browser. Expressions can be saved as named **presets** (server-side, per user, shared with Android); renaming a tag rewrites the user's presets. The rhyme sidebar's "Only my lines matching" restricts the notes source with the same kind of expression. Android has the same tag picker (from the selection bar and the editor), filter bar, presets and rhyme filter. See [tag_expressions.md](./features/tag_expressions.md), [web_tag_expressions.md](./features/web_tag_expressions.md) and [android_tag_expressions.md](./features/android_tag_expressions.md).
@@ -216,6 +220,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Homelab Deploy](./features/homelab_deploy.md) | `deploy/homelab/deploy.sh`: build SHA-tagged images on node0, push to the microk8s registry, helm upgrade + test |
 | [Homelab TLS](./features/homelab_tls.md) | HTTPS for the web app on the home cluster (microphone needs a secure context): local CA + server cert script (`deploy/homelab/tls`), host-less Ingress on the microk8s addon, ingress default certificate for IP URLs, 26 MB upload limits, CA install on Linux/Android |
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
+| [Rhyme Rhythm Fit](./features/rhyme_rhythm_fit.md) | Rhyme-suggest `rhythm_fit`: slot rhythm from the anchor snippet's score (metric weight + accent per slot syllable), syllable-count filter, rhythm-fit score, band -> fit -> similarity / rhyme order, `rhythm_applied` / `rhythm_unavailable_reason` |
 | [Score Format](./features/score_format.md) | Musical mode phase 1: score format v1, validate (24 reasons), bars / beat unit / metric weight / tick-to-ms, rest link both ways, reconcile, draft from grid, text splice; Python reference, generated vectors, TS and Kotlin wire types |
 | [Rest Marks](./features/rest_marks.md) | `_` as a rest in snippet text: tokenize, word indexes, display text, canonical text, shared vectors, every backend consumer |
 | [Search Across Canvases](./features/global_search.md) | `GET /api/search` (canvases by title, snippets by display text, excerpts, typed `invalid_search_query`) and the per-canvas search rule |
@@ -362,6 +367,14 @@ Features Index:
       - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/score/
     depends_on: [rest_marks, grid_rearrange]
     doc: docs/features/score_format.md
+  rhyme_rhythm_fit:
+    description: 'Rhyme-suggest "Fit rhythm". Request rhythm_fit bool (default false); response rhythm_applied bool and rhythm_unavailable_reason "no_score" | "slot_unplaced" | null; RhymeSuggestCandidateModel.rhythm_fit number | null (pattern candidates unchanged). The first anchor gives the slot - text anchor or a snippet without a (valid) score -> no_score; the anchor line / word range syllable cells must all have notes else slot_unplaced; then per syllable SlotBeat(onset, metric_weight(onset), accent). Applied - candidates with exactly the slot syllable count (rest marks are not syllables) are kept before the note-suffix dedupe, paging and total; fit = mean of 1 - |prominence - target| where prominence is 1 / 0.5 / 0 for stress 1 / 2 / 0 and target is the slot level max(weight, {0:0,1:2,2:3}[accent]) min-max normalized within the slot (level / 3 when the levels are equal), exact rationals rounded to 4 decimals; order band -> fit desc -> similarity (meaning) -> rhyme order (stable sort over apply_order). Not applied -> rhythm_fit null everywhere and the plain result.'
+    entry_points:
+      - backend/app/services/rhythm_fit/ (types, fit, slot, order, errors)
+      - backend/app/services/rhyme_suggest_service.py (rhythm_plan, suggest_candidate_model, SnippetRecord.score)
+      - backend/app/schemas/rhyme.py (RhymeSuggestRequest.rhythm_fit, RhymeSuggestCandidateModel, response fields)
+    depends_on: [rhyme_view, rhyme_meaning_order, score_format]
+    doc: docs/features/rhyme_rhythm_fit.md
   rest_marks:
     description: "_" in snippet text is an intentional rest. Tokenize a line by replacing each _ with " _ " and splitting on whitespace (punctuation stays in its word); word_index counts word tokens only, so phonetics overrides keyed by (line, word) stay valid with no migration. syllabify_text emits {"rest": true} for each _ (syllable_count excludes rests; a line of only rests is a line of rest cells; raw_text is the trimmed line). Display text (each line's words joined by single spaces, lines with rests and no words dropped, stanza breaks kept) is what export, similarity, t-SNE embeddings, legacy snippet rhymes, rhyme-suggest text anchors and search read; phonetics, rhyme-suggest grid slices and the merge word count read word tokens. Canonical text from a grid line (rest -> _, each word once at its first syllable) is the clients' rebuildRawText. Shared vectors v1 (tokenize, word_indexes, rebuild, display, match) at backend/tests/fixtures/rest_mark_vectors.json, copied byte for byte by web and Android.
     entry_points:
