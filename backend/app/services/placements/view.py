@@ -70,6 +70,14 @@ class PlacedSnippet:
         return self.snippet.raw_text
 
     @property
+    def score(self) -> dict | None:
+        return self.snippet.score
+
+    @property
+    def score_view(self) -> bool:
+        return self.snippet.score_view
+
+    @property
     def tags(self) -> list:
         return self.snippet.tags
 

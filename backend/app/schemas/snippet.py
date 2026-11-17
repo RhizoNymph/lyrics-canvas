@@ -6,6 +6,7 @@ from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 from app.schemas.tag import SnippetTagResponse
 from app.schemas.versioning import BaseVersion, ClientId
+from app.services.score.wire import ScoreModel
 
 
 class FaithfulModel(BaseModel):
@@ -126,6 +127,10 @@ class SnippetResponse(BaseModel):
     beats_per_line: int | None = None
     grid_data: GridDataModel | None = None
     raw_text: str
+    # Score format v1 (spec/score_format.md); null = no score. Always valid for grid_data.
+    score: ScoreModel | None = None
+    # True = the snippet shows its staff; always false when score is null.
+    score_view: bool = False
     position_x: float
     position_y: float
     width: float
@@ -138,9 +143,9 @@ class SnippetResponse(BaseModel):
     derived_from: DerivedFromModel | None = None
     created_at: str
     updated_at: str
-    # Last content edit (text, type, grid); moves, resizes and tags do not change it.
+    # Last content edit (text, type, grid, score, score view); moves, resizes and tags do not change it.
     content_updated_at: str
-    # Content version: +1 per change of text, type, grid mode, beats, grid or tags (not layout).
+    # Content version: +1 per change of text, type, grid mode, beats, grid, score, score view or tags (not layout).
     version: int
     canvases: list[SnippetCanvasRef] = []
 
