@@ -5,6 +5,7 @@ Skipped unless TAG_TEST_DATABASE_URL points at a throwaway database whose name c
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 import xml.etree.ElementTree as ET
 from types import SimpleNamespace
@@ -91,7 +92,7 @@ async def make_world(db: AsyncSession) -> SimpleNamespace:
     db.add_all([timed, untimed, malformed, elsewhere, foreign_take])
     await db.commit()
     return SimpleNamespace(
-        user=user.id, stranger=stranger.id, snippet=snippet.id, bare=bare.id, foreign=foreign.id,
+        canvas=canvas.id, user=user.id, stranger=stranger.id, snippet=snippet.id, bare=bare.id, foreign=foreign.id,
         timed=timed.id, untimed=untimed.id, malformed=malformed.id, elsewhere=elsewhere.id, foreign_take=foreign_take.id,
     )
 
@@ -142,8 +143,6 @@ async def test_export_from_the_database(db):
 
 @pytest.fixture
 def world():
-    import asyncio
-
     async def build():
         engine = create_async_engine(DB_URL, poolclass=NullPool)
         async with async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)() as session:
@@ -187,3 +186,26 @@ def test_routes_end_to_end(client, world):
     assert response.status_code == 404 and response.json()["detail"]["error"] == "snippet_not_found"
     response = client.get(f"/api/snippets/{world.bare}/score/export", params={"format": "midi"})
     assert response.status_code == 404 and response.json()["detail"]["error"] == "score_not_found"
+
+
+def test_a_saved_recording_draft_writes_its_gaps_as_rests(client, world):
+    # "night" and "is" sung a beat apart: the save flow writes one rest between them
+    gap_take = steady(["the", "night", "is", "young"], [0, 1, 7, 8], [1, 2, 1, 4])
+    async def retake():
+        engine = create_async_engine(DB_URL, poolclass=NullPool)
+        async with async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)() as session:
+            row = await session.get(SnippetRecording, world.timed)
+            row.words = words_json(gap_take)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(retake())
+    drafted = client.post(
+        f"/api/snippets/{world.snippet}/score/draft",
+        json={"source": "recording", "recording_id": str(world.timed), "meter": {"num": 4, "den": 4}, "bpm": 90},
+    ).json()["score"]
+    saved = client.put(f"/api/snippets/{world.snippet}", params={"canvas_id": str(world.canvas)}, json={"score": drafted})
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["score"] == drafted
+    assert body["raw_text"] == "the night _ is young"
