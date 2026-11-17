@@ -456,9 +456,9 @@ syllables that still exist. Precondition: `score` is valid against `old_grid` (e
    unplaced.
 4. **Order.** Each new line's candidates are sorted by `s` (no two share an `s`). Then, walking the new
    lines in order and each line's candidates in `s` order, a candidate is kept when `t >= prev_end`
-   (the end of the last kept note, 0 at first) and dropped otherwise. Dropping only happens when words
-   were interleaved and reordered (e.g. after a chunk drag across a syllable); for every other edit the
-   mapped notes are already in time order.
+   (the end of the last kept note, 0 at first) and dropped otherwise. Dropping only happens when
+   syllables of different words changed order (a chunk drag across another syllable, interleaved
+   words); for every other edit the mapped notes are already in time order.
 5. `meters`, `tempos`, `pickup`, `snap` are copied. The result has one line per new grid line and is
    valid against `new_grid` (by construction; implementations assert it).
 
@@ -474,8 +474,9 @@ notes move to s 0, 1, 3 with the same t/d/a; `big` is unplaced. If the new text 
 `draft_from_grid(grid, meter, bpm, note) -> score` with `meter = {num, den}`, `bpm` a number and
 `note` one of the snap strings.
 
-Argument checks in order: `meter.num` / `meter.den` as for a meter entry (`meter_invalid`), `bpm`
-as for a tempo (`tempo_invalid`), `note` a snap value (`snap_invalid`); raised as `ScoreInvalid`.
+Argument checks in order, raised as `ScoreInvalid`: `meter.num` and `meter.den` present, integers
+(section 2) and allowed values, else `meter_invalid`; `bpm` a number in range with at most 2 decimals,
+else `tempo_invalid`; `note` one of the snap strings, else `snap_invalid`.
 
 ```
 len  = SNAP_TICKS[note]
