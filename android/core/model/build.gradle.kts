@@ -12,4 +12,11 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-tasks.test { useJUnitPlatform() }
+/** The shared score vectors (repo root; read in place, never copied): the wire model must read them. */
+val scoreVectors: File = rootProject.file("../spec/score_vectors.json")
+
+tasks.test {
+    useJUnitPlatform()
+    inputs.file(scoreVectors)
+    systemProperty("scoreVectors", scoreVectors.path)
+}
