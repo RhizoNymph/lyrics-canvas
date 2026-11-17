@@ -5,6 +5,7 @@ import dev.nymph.lyrics.model.DEFAULT_LIST_RANK
 import dev.nymph.lyrics.model.PlacementId
 import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
+import dev.nymph.lyrics.model.score.ScoreChange
 import dev.nymph.lyrics.model.TagLinkOp
 import dev.nymph.lyrics.sync.outbox.ContentPatch
 import dev.nymph.lyrics.sync.outbox.EntityRef
@@ -129,7 +130,14 @@ class Resolver(private val newId: () -> String, private val now: () -> String) {
                 val mine = d.snippet(copy.snippet.id) ?: return null
                 val canvas = (op as? SyncOp.EditSnippet)?.canvasId?.takeIf { d.placement(mine.id, it) != null }
                     ?: d.placementsOf(mine.id).firstOrNull()?.canvasId ?: copy.snippet.canvasId
-                val patch = checkNotNull(ContentPatch.of(mine.snippetType, mine.gridMode, mine.beatsPerLine, mine.gridData, mine.rawText))
+                val patch = checkNotNull(
+                    ContentPatch.of(
+                        mine.snippetType, mine.gridMode, mine.beatsPerLine, mine.gridData, mine.rawText,
+                        // The score only when either side has one (mine wins, a removal included).
+                        score = ScoreChange(mine.score).takeIf { mine.score != null || copy.snippet.score != null },
+                        scoreView = mine.scoreView.takeIf { mine.score != null || it != copy.snippet.scoreView },
+                    ),
+                )
                 val server = copy.snippet.tags.mapTo(HashSet()) { it.id }
                 listOf(SyncOp.EditSnippet(mine.id, canvas, patch, v)) +
                     mine.tagIds.filter { it !in server }.map { SyncOp.SnippetTag(mine.id, it, true, v) } +
@@ -185,6 +193,8 @@ class Resolver(private val newId: () -> String, private val now: () -> String) {
             gridMode = mine.gridMode,
             beatsPerLine = mine.beatsPerLine,
             gridData = mine.gridData,
+            score = mine.score,
+            scoreView = mine.scoreView.takeIf { mine.score != null },
             width = placement.width,
             height = placement.height,
             listRank = rank,

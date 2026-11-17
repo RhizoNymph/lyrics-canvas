@@ -125,5 +125,7 @@ object Views {
         contentUpdatedAt = s.contentUpdatedAt,
         canvases = canvases,
         version = s.version,
+        score = s.score,
+        scoreView = s.score != null && s.scoreView,
     )
 }

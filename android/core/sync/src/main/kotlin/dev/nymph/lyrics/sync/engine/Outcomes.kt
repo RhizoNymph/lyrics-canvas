@@ -223,7 +223,8 @@ object Outcomes {
             val p = op.patch
             (p.rawText == null || p.rawText == s.rawText) && (p.snippetType == null || p.snippetType == s.snippetType) &&
                 (p.gridMode == null || p.gridMode == s.gridMode) && (p.beatsPerLine == null || p.beatsPerLine == s.beatsPerLine) &&
-                (p.gridData == null || p.gridData == s.gridData)
+                (p.gridData == null || p.gridData == s.gridData) &&
+                (p.score == null || p.score.score == s.score) && (p.scoreView == null || p.scoreView == s.scoreView)
         }
         op is SyncOp.SnippetTag && copy is ServerCopy.OfSnippet -> copy.snippet.tags.any { it.id == op.tagId } == op.link
         op is SyncOp.RenameCanvas && copy is ServerCopy.OfCanvas -> copy.canvas.title == op.title

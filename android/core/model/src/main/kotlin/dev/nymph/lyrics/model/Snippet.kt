@@ -2,6 +2,9 @@ package dev.nymph.lyrics.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import dev.nymph.lyrics.model.score.Score
+import dev.nymph.lyrics.model.score.ScoreChange
+import dev.nymph.lyrics.model.score.ScoreChangeWireSerializer
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
@@ -79,6 +82,10 @@ data class Snippet(
      * content). Ascending, ties by [placementId]. Defaults to [DEFAULT_LIST_RANK] when absent.
      */
     @SerialName("list_rank") val listRank: String = DEFAULT_LIST_RANK,
+    /** The rhythm score ("musical mode", spec/score_format.md); null = grid only. Content. */
+    val score: Score? = null,
+    /** Which view the snippet shows: true = the staff. Only meaningful with a [score] (the server forces false without one). */
+    @SerialName("score_view") val scoreView: Boolean = false,
 )
 
 /**
@@ -109,6 +116,9 @@ data class SnippetCreateRequest(
     val height: Double? = null,
     /** The new placement's custom-order key; null lets the server put it on top of the canvas's order. */
     @SerialName("list_rank") val listRank: String? = null,
+    /** A score for the new snippet (validated against its grid); null = none. */
+    val score: Score? = null,
+    @SerialName("score_view") val scoreView: Boolean? = null,
 )
 
 /**
@@ -131,6 +141,10 @@ data class SnippetUpdateRequest(
     @SerialName("group_id") val groupId: GroupId? = null,
     /** Layout: the placement's custom-order key on `cid` (last write wins, never version-checked). */
     @SerialName("list_rank") val listRank: String? = null,
+    /** Content: a new score, or [ScoreChange.REMOVE] (sent as an explicit `null`, "Remove score"); null = unchanged. */
+    @Serializable(with = ScoreChangeWireSerializer::class) val score: ScoreChange? = null,
+    /** Content: show the staff (true) or the grid; the server forces false when the snippet has no score. */
+    @SerialName("score_view") val scoreView: Boolean? = null,
     /** Checked only when a content field is present: 409 `version_conflict` when the snippet changed since. */
     @SerialName("base_version") val baseVersion: Int? = null,
 )
