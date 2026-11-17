@@ -116,6 +116,7 @@ object Views {
         height = p.height,
         zIndex = p.zIndex,
         groupId = p.groupId,
+        listRank = p.listRank,
         tags = embedded(s.tagIds, tags),
         phonetics = s.phonetics,
         derivedFrom = s.derivedFrom,

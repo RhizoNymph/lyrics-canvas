@@ -32,6 +32,8 @@ data class SnapshotPlacement(
     val height: Double,
     @SerialName("z_index") val zIndex: Int,
     @SerialName("group_id") val groupId: GroupId? = null,
+    /** Custom list-order key on [canvasId] ([Snippet.listRank]). */
+    @SerialName("list_rank") val listRank: String = DEFAULT_LIST_RANK,
 )
 
 /** A snippet's shared content (the [Snippet] fields that are not per canvas), with its tag ids. */

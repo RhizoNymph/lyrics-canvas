@@ -114,6 +114,7 @@ class HttpOpSender(private val api: ApiClient) : OpSender {
                 height = op.layout.height,
                 zIndex = op.layout.zIndex,
                 groupId = op.layout.groupId,
+                listRank = op.layout.listRank,
             ),
             op.canvasId.value,
             op.id.value,

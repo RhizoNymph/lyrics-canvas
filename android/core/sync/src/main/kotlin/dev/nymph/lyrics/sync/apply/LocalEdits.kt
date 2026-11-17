@@ -1,11 +1,15 @@
 package dev.nymph.lyrics.sync.apply
 
 import dev.nymph.lyrics.logic.grid.localSyllabifyLine
+import dev.nymph.lyrics.logic.list.ListRank
+import dev.nymph.lyrics.logic.list.topRank
+import dev.nymph.lyrics.logic.list.topRanks
 import dev.nymph.lyrics.model.BankWord
 import dev.nymph.lyrics.model.BankWordId
 import dev.nymph.lyrics.model.BatchPositionResponse
 import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.DEFAULT_LIST_RANK
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridMode
 import dev.nymph.lyrics.model.MergeRequest
@@ -70,6 +74,13 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
 
     private fun notFound(code: String?, what: String) = ApiError.NotFound("$what not found", code)
 
+    /** The server's 422 for a `list_rank` it would not store. */
+    private fun invalidRank(rank: String) =
+        ApiError.Validation(422, "Invalid list rank: $rank", PlacementErrorCode.INVALID_LIST_RANK.wire)
+
+    /** The first given rank the server would refuse, if any. */
+    private fun firstInvalidRank(ranks: List<String?>): String? = ranks.firstOrNull { it != null && ListRank.parse(it) == null }
+
     // ---- Canvases ----
 
     fun createCanvas(d: LocalData, title: String): Edited<Canvas> {
@@ -103,8 +114,17 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
     private fun estimatedGrid(text: String): GridData =
         GridData(text.split("\n").filter { it.isNotBlank() }.map { localSyllabifyLine(it.trim()) })
 
+    /**
+     * A new snippet goes on top of the canvas's custom order: a given `list_rank` is used (after
+     * the server's validation), otherwise `keyBetween(null, local minimum)` is chosen here for the
+     * local placement; the engine sends the placement's key with the create
+     * ([withLocalRanks][dev.nymph.lyrics.sync.engine.withLocalRanks]), so the order shows offline
+     * and matches once synced.
+     */
     fun createSnippet(d: LocalData, canvasId: CanvasId, body: SnippetCreateRequest): Edited<Snippet> {
         if (d.canvas(canvasId) == null) return fail(d, notFound(PlacementErrorCode.CANVAS_NOT_FOUND.wire, "Canvas"))
+        firstInvalidRank(listOf(body.listRank))?.let { return fail(d, invalidRank(it)) }
+        val rank = body.listRank ?: topRank(d.listRanksOn(canvasId))?.value
         val id = body.id ?: SnippetId(newId())
         val at = now()
         val text = body.rawText ?: ""
@@ -124,6 +144,7 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         val placement = LocalPlacement(
             id, canvasId, PlacementId(newId()), body.positionX, body.positionY,
             body.width ?: DEFAULT_SNIPPET_WIDTH, body.height ?: DEFAULT_SNIPPET_HEIGHT, 0, body.groupId,
+            rank ?: DEFAULT_LIST_RANK,
         )
         val next = d.withSnippet(content).withPlacement(placement).enqueue(SyncOp.CreateSnippet(id, canvasId, body.copy(id = null)))
         return ok(next, checkNotNull(Views.snippet(next, id, canvasId)))
@@ -133,6 +154,7 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
     fun updateSnippet(d: LocalData, canvasId: CanvasId, id: SnippetId, body: SnippetUpdateRequest): Edited<Snippet> {
         val content = d.snippet(id) ?: return fail(d, notFound(null, "Snippet"))
         val placement = d.placement(id, canvasId) ?: return fail(d, notFound(PlacementErrorCode.PLACEMENT_NOT_FOUND.wire, "Placement"))
+        firstInvalidRank(listOf(body.listRank))?.let { return fail(d, invalidRank(it)) }
         var next = d
         ContentPatch.of(body)?.let { patch ->
             val at = now()
@@ -160,6 +182,7 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
                 height = layout.height ?: placement.height,
                 zIndex = layout.zIndex ?: placement.zIndex,
                 groupId = layout.groupId ?: placement.groupId,
+                listRank = layout.listRank ?: placement.listRank,
             )
             next = next.withPlacement(moved).enqueue(SyncOp.MoveSnippet(id, canvasId, layout))
         }
@@ -182,13 +205,24 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         return ok(d.withoutSnippet(id).enqueue(SyncOp.DeleteSnippet(id, content.version)), Unit)
     }
 
+    /**
+     * Positions and / or custom-order keys of many placements (a whole-canvas re-rank is one
+     * call). Queued as one layout operation per placement (coalescing with earlier moves of the
+     * same placement); an invalid rank refuses the whole batch, as the server does.
+     */
     fun batchPosition(d: LocalData, canvasId: CanvasId, updates: List<PositionUpdate>): Edited<BatchPositionResponse> {
+        firstInvalidRank(updates.map { it.listRank })?.let { return fail(d, invalidRank(it)) }
         var next = d
         var updated = 0
         for (u in updates) {
             val placement = next.placement(u.id, canvasId) ?: continue
-            val layout = checkNotNull(LayoutPatch.of(positionX = u.positionX, positionY = u.positionY))
-            next = next.withPlacement(placement.copy(positionX = u.positionX, positionY = u.positionY)).enqueue(SyncOp.MoveSnippet(u.id, canvasId, layout))
+            val layout = LayoutPatch.of(positionX = u.positionX, positionY = u.positionY, listRank = u.listRank) ?: continue
+            val moved = placement.copy(
+                positionX = u.positionX ?: placement.positionX,
+                positionY = u.positionY ?: placement.positionY,
+                listRank = u.listRank ?: placement.listRank,
+            )
+            next = next.withPlacement(moved).enqueue(SyncOp.MoveSnippet(u.id, canvasId, layout))
             updated++
         }
         return ok(next, BatchPositionResponse(updated))
@@ -208,6 +242,8 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         ) ?: return fail(d, ApiError.Validation(422, "Merge needs at least two distinct snippets"))
         val mergedId = SnippetId(newId())
         val at = now()
+        // The merged snippet keeps the first block's place in the custom order.
+        val firstRank = sources.firstOrNull { (c, _) -> c.id == merged.sourceIds.first() }?.second?.listRank ?: DEFAULT_LIST_RANK
         var next = d
         for ((c, _) in sources) {
             next = if (next.placementsOf(c.id).size == 1) next.withoutSnippet(c.id) else next.withoutPlacement(c.id, canvasId)
@@ -220,7 +256,10 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
                 ),
             )
             .withPlacement(
-                LocalPlacement(mergedId, canvasId, PlacementId(newId()), merged.positionX, merged.positionY, DEFAULT_SNIPPET_WIDTH, DEFAULT_SNIPPET_HEIGHT, 0, merged.groupId),
+                LocalPlacement(
+                    mergedId, canvasId, PlacementId(newId()), merged.positionX, merged.positionY,
+                    DEFAULT_SNIPPET_WIDTH, DEFAULT_SNIPPET_HEIGHT, 0, merged.groupId, firstRank,
+                ),
             )
             .enqueue(SyncOp.Merge(canvasId, mergedId, request.mode, sources.map { (c, _) -> SnippetVersion(c.id, c.version) }))
         return ok(next, MergeResponse(checkNotNull(Views.snippet(next, mergedId, canvasId)), merged.sourceIds))
@@ -228,7 +267,8 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
 
     /**
      * The server's transfer: new target placements keep position and size, stack above the
-     * target's top card in source z order (ties by id), ungrouped; a move then removes the sources.
+     * target's top card in source z order (ties by id), ungrouped, on top of the target's custom
+     * list order; a move then removes the sources.
      */
     fun transfer(d: LocalData, sourceCanvasId: CanvasId, request: TransferRequest): Edited<TransferResponse> {
         val target = request.targetCanvasId
@@ -240,9 +280,17 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         val onTarget = request.snippetIds.filterTo(HashSet()) { d.placement(it, target) != null }
         val toPlace = found.filter { it.snippetId !in onTarget }
         val base = (d.placements.filter { it.canvasId == target }.maxOfOrNull { it.zIndex } ?: -1) + 1
+        val stacked = toPlace.sortedWith(compareBy({ it.zIndex }, { it.snippetId.value }))
+        // On top of the target's custom order, in stacking order; the snapshot brings the server's keys.
+        val ranks = topRanks(d.listRanksOn(target), stacked.size)?.map { it.value }
         var next = d
-        toPlace.sortedWith(compareBy({ it.zIndex }, { it.snippetId.value })).forEachIndexed { rank, p ->
-            next = next.withPlacement(p.copy(canvasId = target, placementId = PlacementId(newId()), zIndex = base + rank, groupId = null))
+        stacked.forEachIndexed { rank, p ->
+            next = next.withPlacement(
+                p.copy(
+                    canvasId = target, placementId = PlacementId(newId()), zIndex = base + rank, groupId = null,
+                    listRank = ranks?.get(rank) ?: DEFAULT_LIST_RANK,
+                ),
+            )
         }
         val removed = request.mode == TransferMode.MOVE
         if (removed) request.snippetIds.forEach { next = next.withoutPlacement(it, sourceCanvasId) }

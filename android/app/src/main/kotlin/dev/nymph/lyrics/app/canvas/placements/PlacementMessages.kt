@@ -15,6 +15,7 @@ fun PlacementError.userMessage(): String = when (this) {
         PlacementErrorCode.PLACEMENT_NOT_FOUND -> "A snippet is no longer on this canvas. Reload to see the latest."
         PlacementErrorCode.CANVAS_NOT_FOUND -> "That canvas no longer exists."
         PlacementErrorCode.SAME_CANVAS -> "Pick a different canvas: the snippets are already here."
+        PlacementErrorCode.INVALID_LIST_RANK -> "The server refused the new list order. Try again."
     }
     PlacementError.SessionExpired -> SESSION_EXPIRED
     is PlacementError.Http -> message

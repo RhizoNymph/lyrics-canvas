@@ -33,6 +33,8 @@ import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
 import dev.nymph.lyrics.data.repository.TagPresetRepository
 import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
+import dev.nymph.lyrics.app.canvas.list.DataStoreListSortStore
+import dev.nymph.lyrics.app.canvas.list.ListSortStore
 import dev.nymph.lyrics.app.tags.FilterTextStore
 import dev.nymph.lyrics.app.wordbank.DataStoreWordBankFilterStore
 import dev.nymph.lyrics.data.repository.HttpWordBankRepository
@@ -57,6 +59,7 @@ import okhttp3.OkHttpClient
 private val Context.authDataStore by preferencesDataStore(name = "auth")
 private val Context.voiceDataStore by preferencesDataStore(name = "voice")
 private val Context.tagFilterDataStore by preferencesDataStore(name = "tag_filters")
+private val Context.listViewDataStore by preferencesDataStore(name = "list_view")
 
 /**
  * Manual dependency graph, one per process (see [dev.nymph.lyrics.app.LyricsApp]). ViewModels
@@ -141,6 +144,9 @@ class AppContainer(
         .build()
 
     val voice: VoiceRepository = GatedVoiceRepository(HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health)), sync.gate, sync.local)
+
+    /** The list-mode sort, per device (DataStore `list_view`). */
+    val listSorts: ListSortStore = DataStoreListSortStore(appContext.listViewDataStore)
 
     /** Silence auto-stop, "Use word bank as hints" and other per-device voice settings (DataStore `voice`). */
     val voiceSettings: VoiceSettingsStore = DataStoreVoiceSettings(appContext.voiceDataStore)

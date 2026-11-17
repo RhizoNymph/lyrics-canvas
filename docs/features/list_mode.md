@@ -179,8 +179,10 @@ Tests: `lib/canvas/visibility.test.ts`, `lib/listMode/{order,selection,viewMode}
 - The snippets the filter bar's tag expression matches are listed (`Ready.listRows` arranges
   `Ready.visibleSnippets`; see [android_tag_expressions.md](./android_tag_expressions.md)); with an
   empty filter, every snippet. An empty result reads "No snippets match the filter".
-- Order: `sortForList` (`content_updated_at` desc, `created_at` desc, `id` asc), compared as parsed
-  instants, not strings.
+- Order: the device's list sort (Last edited by default: `content_updated_at` desc, `created_at`
+  desc, `id` asc, compared as parsed instants, not strings; also Created, A-Z and Custom from the
+  "Sort" row above the list), and rows reorder by a drag handle. See
+  [android_list_order.md](./android_list_order.md).
 - Rows are the canvas card (`cardLayout` + `drawCard`), resized for the row: the full grid width plus
   the count gutter (scaled down to fit the row, at most to 0.5×; past that the row scrolls
   horizontally), the full grid height, or the measured raw text for snippets without grid lines.
@@ -194,8 +196,10 @@ Tests: `lib/canvas/visibility.test.ts`, `lib/listMode/{order,selection,viewMode}
 
 ### Non-scope
 
-- Search, or any other ordering. (The tag filter is [android_tag_expressions.md](./android_tag_expressions.md).)
-- Moving, resizing or reordering snippets from the list (long-press does not start a move).
+- Search. (The tag filter is [android_tag_expressions.md](./android_tag_expressions.md); sorts and
+  drag reordering are [android_list_order.md](./android_list_order.md).)
+- Moving or resizing snippets from the list (long-press does not start a move; only the drag
+  handle reorders, and it changes `list_rank` only).
 - Remembering the mode across app launches (it lives in the back-stack entry's saved state only).
 - Live re-sorting: rows that change in place keep their position until the next capture.
 
@@ -205,7 +209,7 @@ Tests: `lib/canvas/visibility.test.ts`, `lib/listMode/{order,selection,viewMode}
 GET /api/canvases/{id} -> CanvasViewModel.reload
   -> Ready(mode = modeFor(saved kind, snippets))       saved kind = SavedStateHandle["canvas_mode"]
        CANVAS -> CanvasMode.Canvas
-       LIST   -> CanvasMode.SnippetList(ListOrder.of(snippets))      (sortForList, ids captured)
+       LIST   -> CanvasMode.SnippetList(ListOrder.of(snippets, listSort))   (sorted by the device's sort, ids captured)
 Top bar "List" / "Canvas" -> setMode(kind)
   -> SavedStateHandle["canvas_mode"] = kind.name (also before the canvas has loaded)
   -> Ready.mode = modeFor(kind, current snippets)                  (showing the list sorts afresh)
@@ -235,7 +239,7 @@ the selection border when the row is selected. The `LazyColumn` items are keyed 
 | File | Role / key exports |
 |---|---|
 | `android/core/model/.../model/Snippet.kt` | `Snippet.contentUpdatedAt` (`content_updated_at`, non-null string like `updated_at`) |
-| `android/core/logic/.../logic/list/ListOrder.kt` | `parseServerTimestamp` (ISO-8601 and the backend's `str(datetime)` form; no offset = UTC; null if unreadable), `sortForList`, `ListOrder` (private constructor; `of`, `ids`, `arrange`) |
+| `android/core/logic/.../logic/list/ListOrder.kt` | `parseServerTimestamp` (ISO-8601 and the backend's `str(datetime)` form; no offset = UTC; null if unreadable), `sortForList`, `ListOrder` (private constructor; `of(snippets, sort)`, `ids`, `sort`, `arrange`); sorts and reordering in [android_list_order.md](./android_list_order.md) |
 | `android/app/.../app/canvas/CanvasUiState.kt` | `CanvasModeKind` (`CANVAS`, `LIST`, `parse`), sealed `CanvasMode` (`Canvas`, `SnippetList(order)`), `Ready.mode`, `Ready.listRows` |
 | `android/app/.../app/canvas/CanvasViewModel.kt` | `CANVAS_MODE_KEY`, `setMode`, `onListLongPress`, `replaceSnippet` (re-sorts the list), `savedState` constructor parameter |
 | `android/app/.../app/canvas/CanvasScreen.kt` | Picks `SnippetCanvas` or `SnippetList` by `Ready.mode`; `canvasViewModel` passes `createSavedStateHandle()` |
@@ -252,12 +256,12 @@ long-press, shared selection, merge and delete from the list).
 
 - A `CanvasMode.SnippetList` always carries a captured `ListOrder`; a `ListOrder` only comes from
   `ListOrder.of` (sorted), so the list can never be shown unsorted.
-- The order is captured only when the list is shown (toggle, load / reload, restore) and on an editor
-  save; no other state change reorders existing rows.
+- The order is captured only when the list is shown (toggle, load / reload, restore), on an editor
+  save, on a sort change and after a drag drop; no other state change reorders existing rows.
 - `listRows` is exactly the current `snippets` (each id once, current copies): new ids first, then the
   captured order minus deleted ids.
 - Sorting is total and deterministic: equal timestamps fall back to `created_at`, then `id`; an
   unreadable timestamp sorts after every readable one.
 - List mode never changes snippet geometry: rows draw a resized copy that is never sent, and a list
-  long-press records no move origin, so no batch-position request can come from the list.
+  long-press records no move origin. The only layout the list sends is `list_rank` (a drag drop).
 - Selection is one `Selection` for both modes; switching modes neither clears nor changes it.

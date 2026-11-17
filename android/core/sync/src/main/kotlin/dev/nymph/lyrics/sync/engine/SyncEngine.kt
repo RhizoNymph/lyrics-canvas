@@ -167,7 +167,7 @@ class SyncEngine(
         var refresh = false
         while (true) {
             val batch = store.update { d ->
-                val b = d.outbox.nextBatch()
+                val b = d.outbox.nextBatch()?.withLocalRanks(d)
                 if (b == null) d to null else d.withOutbox(d.outbox.markInFlight(b.ids)) to b
             } ?: return Drained(sent, refresh)
             val outcome = sendOrRequeue(batch)

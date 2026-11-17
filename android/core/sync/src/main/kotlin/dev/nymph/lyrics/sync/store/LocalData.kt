@@ -4,6 +4,7 @@ import dev.nymph.lyrics.model.BankWord
 import dev.nymph.lyrics.model.BankWordId
 import dev.nymph.lyrics.model.Canvas
 import dev.nymph.lyrics.model.CanvasId
+import dev.nymph.lyrics.model.DEFAULT_LIST_RANK
 import dev.nymph.lyrics.model.DerivedFrom
 import dev.nymph.lyrics.model.GridData
 import dev.nymph.lyrics.model.GridMode
@@ -66,14 +67,16 @@ data class LocalPlacement(
     val height: Double,
     @SerialName("z_index") val zIndex: Int,
     @SerialName("group_id") val groupId: GroupId? = null,
+    /** Custom list-order key on [canvasId] (layout, last write wins); a store written before ranks existed reads [DEFAULT_LIST_RANK]. */
+    @SerialName("list_rank") val listRank: String = DEFAULT_LIST_RANK,
 ) {
     companion object {
         fun of(p: SnapshotPlacement): LocalPlacement =
-            LocalPlacement(p.snippetId, p.canvasId, p.placementId, p.positionX, p.positionY, p.width, p.height, p.zIndex, p.groupId)
+            LocalPlacement(p.snippetId, p.canvasId, p.placementId, p.positionX, p.positionY, p.width, p.height, p.zIndex, p.groupId, p.listRank)
 
         /** The placement part of a snippet response (in its canvas's context). */
         fun of(s: Snippet): LocalPlacement =
-            LocalPlacement(s.id, s.canvasId, s.placementId, s.positionX, s.positionY, s.width, s.height, s.zIndex, s.groupId)
+            LocalPlacement(s.id, s.canvasId, s.placementId, s.positionX, s.positionY, s.width, s.height, s.zIndex, s.groupId, s.listRank)
     }
 }
 
@@ -136,6 +139,9 @@ data class LocalData(
         placements.firstOrNull { it.snippetId == snippet && it.canvasId == canvas }
 
     fun placementsOf(snippet: SnippetId): List<LocalPlacement> = placements.filter { it.snippetId == snippet }
+
+    /** The custom-order keys of every placement on [canvas]. */
+    fun listRanksOn(canvas: CanvasId): List<String> = placements.filter { it.canvasId == canvas }.map { it.listRank }
 
     fun tag(id: TagId): LocalTag? = tags.firstOrNull { it.id == id }
 

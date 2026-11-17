@@ -71,6 +71,9 @@ enum class PlacementErrorCode(val wire: String) {
 
     /** 422: a transfer whose target is its source. */
     SAME_CANVAS("same_canvas"),
+
+    /** 422: a `list_rank` that is not a valid fractional index key of at most 64 characters. */
+    INVALID_LIST_RANK("invalid_list_rank"),
     ;
 
     companion object {
