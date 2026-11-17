@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.placement import SnippetPlacement
 from app.services.placements.errors import CanvasNotFoundError, PlacementNotFoundError, SameCanvasError
+from app.services.placements.list_rank import n_keys_between
+from app.services.placements.ranks import min_rank
 from app.services.placements.queries import owned_canvas, placed_snippets
 from app.services.placements.removal import lock_snippets, remove_placements
 from app.services.placements.view import PlacedSnippet
@@ -42,10 +44,26 @@ def stacking_order(sources: Sequence[PlacedSnippet]) -> list[PlacedSnippet]:
     return sorted(sources, key=lambda s: (s.z_index, str(s.id)))
 
 
-def target_placements(sources: Sequence[PlacedSnippet], target_id: uuid.UUID, target_max_z: int | None) -> list[SnippetPlacement]:
+def list_order(sources: Sequence[PlacedSnippet]) -> list[PlacedSnippet]:
+    """Source custom list order: rank, then placement id."""
+    return sorted(sources, key=lambda s: (s.list_rank, str(s.placement_id)))
+
+
+def target_ranks(sources: Sequence[PlacedSnippet], target_min_rank: str | None) -> dict[uuid.UUID, str]:
+    """Ranks above everything on the target, keeping the sources' own list order among them."""
+    ordered = list_order(sources)
+    keys = n_keys_between(None, target_min_rank, len(ordered))
+    return {source.id: key for source, key in zip(ordered, keys)}
+
+
+def target_placements(
+    sources: Sequence[PlacedSnippet], target_id: uuid.UUID, target_max_z: int | None, target_min_rank: str | None = None
+) -> list[SnippetPlacement]:
     """New target placements: same position and size (the selection keeps its relative layout),
-    stacked above everything on the target in source z order, ungrouped."""
+    stacked above everything on the target in source z order, ungrouped, at the top of the target's
+    custom list order in source list order."""
     base = (target_max_z if target_max_z is not None else -1) + 1
+    ranks = target_ranks(sources, target_min_rank)
     return [
         SnippetPlacement(
             snippet_id=source.id,
@@ -56,6 +74,7 @@ def target_placements(sources: Sequence[PlacedSnippet], target_id: uuid.UUID, ta
             height=source.height,
             z_index=base + rank,
             group_id=None,
+            list_rank=ranks[source.id],
         )
         for rank, source in enumerate(stacking_order(sources))
     ]
@@ -92,7 +111,7 @@ async def transfer(
     max_z = (await db.execute(
         select(func.max(SnippetPlacement.z_index)).where(SnippetPlacement.canvas_id == target_id)
     )).scalar_one_or_none()
-    for placement in target_placements(to_place, target_id, max_z):
+    for placement in target_placements(to_place, target_id, max_z, await min_rank(db, target_id)):
         db.add(placement)
     await db.flush()
     removed = mode == TransferMode.move

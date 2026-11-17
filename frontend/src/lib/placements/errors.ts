@@ -10,6 +10,7 @@ export const PLACEMENT_SERVER_ERROR_CODES = [
   'placement_not_found',
   'canvas_not_found',
   'same_canvas',
+  'invalid_list_rank',
 ] as const;
 
 export type PlacementServerErrorCode = (typeof PLACEMENT_SERVER_ERROR_CODES)[number];
@@ -41,7 +42,8 @@ export type PlacementOperation =
   | 'save_positions'
   | 'remove_from_canvas'
   | 'delete_everywhere'
-  | 'transfer';
+  | 'transfer'
+  | 'save_list_order';
 
 export function isPlacementServerErrorCode(value: unknown): value is PlacementServerErrorCode {
   return typeof value === 'string' && (PLACEMENT_SERVER_ERROR_CODES as readonly string[]).includes(value);
@@ -87,6 +89,7 @@ const MESSAGES: Record<PlacementErrorKind, string> = {
   placement_not_found: 'That snippet is no longer on this canvas; reload the canvas',
   canvas_not_found: 'That canvas no longer exists',
   same_canvas: 'The snippets are already on this canvas; pick another one',
+  invalid_list_rank: 'The server rejected the new list order',
   no_canvas: 'No canvas is open',
   nothing_selected: 'Select at least one snippet',
   too_many_snippets: 'Move or show at most 500 snippets at a time',

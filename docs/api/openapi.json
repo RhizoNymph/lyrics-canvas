@@ -1,6 +1,133 @@
 {
   "components": {
     "schemas": {
+      "ApiTokenCreate": {
+        "properties": {
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 90,
+            "title": "Expires In Days"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ApiTokenCreate",
+        "type": "object"
+      },
+      "ApiTokenCreatedResponse": {
+        "properties": {
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "token": {
+            "$ref": "#/components/schemas/ApiTokenResponse"
+          }
+        },
+        "required": [
+          "token",
+          "secret"
+        ],
+        "title": "ApiTokenCreatedResponse",
+        "type": "object"
+      },
+      "ApiTokenErrorBody": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "ApiTokenErrorBody",
+        "type": "object"
+      },
+      "ApiTokenErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ApiTokenErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ApiTokenErrorResponse",
+        "type": "object"
+      },
+      "ApiTokenResponse": {
+        "description": "A token without its secret. Timestamps are ``str(datetime)`` like the rest of the API.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "created_at",
+          "last_used_at",
+          "expires_at"
+        ],
+        "title": "ApiTokenResponse",
+        "type": "object"
+      },
       "BankFamiliesRequest": {
         "properties": {
           "k": {
@@ -118,6 +245,16 @@
       },
       "BankRhymeMatch": {
         "properties": {
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "match_depth": {
             "title": "Match Depth",
             "type": "integer"
@@ -126,6 +263,17 @@
             "title": "Score",
             "type": "number"
           },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
           "word": {
             "$ref": "#/components/schemas/BankWordResponse"
           }
@@ -133,7 +281,9 @@
         "required": [
           "word",
           "score",
-          "match_depth"
+          "match_depth",
+          "band",
+          "similarity"
         ],
         "title": "BankRhymeMatch",
         "type": "object"
@@ -161,6 +311,15 @@
             "minimum": 0.0,
             "title": "Min Score",
             "type": "number"
+          },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
           },
           "tag_filter": {
             "anyOf": [
@@ -210,11 +369,20 @@
             },
             "title": "Matches",
             "type": "array"
+          },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
           }
         },
         "required": [
           "anchor",
-          "matches"
+          "matches",
+          "order_applied"
         ],
         "title": "BankRhymesResponse",
         "type": "object"
@@ -471,11 +639,23 @@
         "type": "object"
       },
       "BatchPositionItem": {
+        "description": "Any of the fields may be omitted; an item with only ``list_rank`` re-ranks without moving.",
         "properties": {
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
           },
           "position_x": {
             "anyOf": [
@@ -520,7 +700,7 @@
         "type": "object"
       },
       "BatchPositionUpdate": {
-        "description": "Positions of placements on ``canvas_id`` (required; applies to every update).",
+        "description": "Positions and list ranks of placements on ``canvas_id`` (required; applies to every update).\nOne invalid rank fails the whole call (422 ``invalid_list_rank``) before anything changes.",
         "properties": {
           "canvas_id": {
             "format": "uuid",
@@ -1455,6 +1635,16 @@
             "title": "Alignment",
             "type": "array"
           },
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "best_anchor_id": {
             "title": "Best Anchor Id",
             "type": "string"
@@ -1516,6 +1706,17 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
           },
           "snippet_id": {
             "anyOf": [
@@ -1601,6 +1802,8 @@
           "fits_slot",
           "alignment",
           "source",
+          "band",
+          "similarity",
           "member_scores"
         ],
         "title": "PatternCandidateModel",
@@ -1942,6 +2145,15 @@
             "title": "Offsets",
             "type": "object"
           },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/SlotSpec"
@@ -2017,6 +2229,14 @@
             "title": "Line Matches",
             "type": "array"
           },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/PatternSlotResult"
@@ -2029,7 +2249,8 @@
           "slots",
           "line_matches",
           "line_match_total",
-          "elapsed_ms"
+          "elapsed_ms",
+          "order_applied"
         ],
         "title": "PatternSuggestResponse",
         "type": "object"
@@ -2388,6 +2609,16 @@
             "title": "Alignment",
             "type": "array"
           },
+          "band": {
+            "enum": [
+              "perfect",
+              "strong",
+              "near",
+              "loose"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
           "best_anchor_id": {
             "title": "Best Anchor Id",
             "type": "string"
@@ -2442,6 +2673,17 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
           },
           "snippet_id": {
             "anyOf": [
@@ -2526,7 +2768,9 @@
           "best_anchor_id",
           "fits_slot",
           "alignment",
-          "source"
+          "source",
+          "band",
+          "similarity"
         ],
         "title": "RhymeCandidateModel",
         "type": "object"
@@ -2708,6 +2952,15 @@
             "title": "Offset",
             "type": "integer"
           },
+          "order": {
+            "default": "rhyme",
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order",
+            "type": "string"
+          },
           "slot": {
             "anyOf": [
               {
@@ -2779,6 +3032,14 @@
             "title": "Elapsed Ms",
             "type": "number"
           },
+          "order_applied": {
+            "enum": [
+              "rhyme",
+              "meaning"
+            ],
+            "title": "Order Applied",
+            "type": "string"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -2788,7 +3049,8 @@
           "anchors",
           "candidates",
           "total",
-          "elapsed_ms"
+          "elapsed_ms",
+          "order_applied"
         ],
         "title": "RhymeSuggestResponse",
         "type": "object"
@@ -3300,6 +3562,17 @@
             ],
             "title": "Id"
           },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
+          },
           "position_x": {
             "default": 0.0,
             "title": "Position X",
@@ -3356,7 +3629,7 @@
         "type": "object"
       },
       "SnippetResponse": {
-        "description": "A snippet in the context of one canvas: content is shared by every canvas holding it;\n``canvas_id, position_x, position_y, width, height, z_index, group_id`` and ``placement_id``\nare that canvas's placement. ``canvases`` lists every canvas holding the snippet (including\nthis one), sorted by lower-cased title, then id.",
+        "description": "A snippet in the context of one canvas: content is shared by every canvas holding it;\n``canvas_id, position_x, position_y, width, height, z_index, group_id, list_rank`` and\n``placement_id`` are that canvas's placement (``list_rank``: the custom list order key, sorted\nby byte order, ties by ``placement_id``). ``canvases`` lists every canvas holding the snippet (including\nthis one), sorted by lower-cased title, then id.",
         "properties": {
           "beats_per_line": {
             "anyOf": [
@@ -3431,6 +3704,10 @@
             "title": "Id",
             "type": "string"
           },
+          "list_rank": {
+            "title": "List Rank",
+            "type": "string"
+          },
           "phonetics": {
             "anyOf": [
               {
@@ -3500,6 +3777,7 @@
           "height",
           "z_index",
           "group_id",
+          "list_rank",
           "tags",
           "phonetics",
           "derived_from",
@@ -3614,6 +3892,17 @@
               }
             ],
             "title": "Height"
+          },
+          "list_rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Rank"
           },
           "position_x": {
             "anyOf": [
@@ -3935,6 +4224,10 @@
             "title": "Height",
             "type": "number"
           },
+          "list_rank": {
+            "title": "List Rank",
+            "type": "string"
+          },
           "placement_id": {
             "title": "Placement Id",
             "type": "string"
@@ -3969,7 +4262,8 @@
           "width",
           "height",
           "z_index",
-          "group_id"
+          "group_id",
+          "list_rank"
         ],
         "title": "SyncPlacement",
         "type": "object"
@@ -4036,7 +4330,7 @@
         "type": "object"
       },
       "SyncSnippet": {
-        "description": "A snippet's shared content: ``SnippetResponse`` without the per-canvas fields\n(``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,\ncanvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``.",
+        "description": "A snippet's shared content: ``SnippetResponse`` without the per-canvas fields\n(``placement_id, canvas_id, position_x, position_y, width, height, z_index, group_id,\nlist_rank, canvases``) and with ``tag_ids`` (sorted by lower-cased tag name, then id) for ``tags``.",
         "properties": {
           "beats_per_line": {
             "anyOf": [
@@ -5730,7 +6024,7 @@
     },
     "/api/canvases/{canvas_id}/snippets": {
       "post": {
-        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``.",
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without\n``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is\n422 ``invalid_list_rank``.",
         "operationId": "create_snippet_api_canvases__canvas_id__snippets_post",
         "parameters": [
           {
@@ -5788,11 +6082,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -6913,6 +7207,7 @@
     },
     "/api/snippets/batch-position": {
       "patch": {
+        "description": "Positions and/or list ranks of placements on ``canvas_id``; a whole-canvas re-rank is one\ncall. One invalid ``list_rank`` is 422 ``invalid_list_rank`` and nothing changes.",
         "operationId": "batch_position_api_snippets_batch_position_patch",
         "requestBody": {
           "content": {
@@ -6939,11 +7234,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -7028,7 +7323,7 @@
         ]
       },
       "put": {
-        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id) update the placement on ``canvas_id``. ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
+        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422\n``invalid_list_rank``). ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
         "operationId": "update_snippet_api_snippets__snippet_id__put",
         "parameters": [
           {
@@ -7098,11 +7393,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PlacementErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           }
         },
         "security": [
@@ -7959,6 +8254,164 @@
         ]
       }
     },
+    "/api/tokens": {
+      "get": {
+        "description": "The caller's tokens that are not revoked (expired ones included), newest first; no secrets.",
+        "operationId": "list_tokens_api_tokens_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiTokenResponse"
+                  },
+                  "title": "Response List Tokens Api Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tokens",
+        "tags": [
+          "tokens"
+        ]
+      },
+      "post": {
+        "description": "A new token; ``secret`` is the only time the full token is returned.",
+        "operationId": "create_token_api_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiTokenCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenCreatedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Token",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
+    "/api/tokens/{token_id}": {
+      "delete": {
+        "description": "Revoke: the token stops working at once and leaves the list. 404 ``token_not_found`` when it is\nnot the caller's or already revoked.",
+        "operationId": "revoke_token_api_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokenErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Token",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
     "/api/word-bank": {
       "get": {
         "description": "The whole bank, newest first. Clients filter locally with the shared tag expression evaluator.",
@@ -8224,7 +8677,7 @@
     },
     "/api/word-bank/rhymes": {
       "post": {
-        "description": "Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text.",
+        "description": "Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text;\n``order=\"meaning\"`` sorts by score band, then meaning similarity to the anchor text.",
         "operationId": "rhymes_api_word_bank_rhymes_post",
         "requestBody": {
           "content": {

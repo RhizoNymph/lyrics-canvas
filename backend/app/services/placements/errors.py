@@ -16,6 +16,7 @@ class PlacementErrorCode(StrEnum):
     canvas_not_found = "canvas_not_found"
     same_canvas = "same_canvas"
     group_not_found = "group_not_found"
+    invalid_list_rank = "invalid_list_rank"
 
 
 class PlacementError(Exception):
@@ -58,3 +59,11 @@ class GroupNotFoundError(PlacementError):
 
     code = PlacementErrorCode.group_not_found
     status = 404
+
+
+class InvalidListRankError(PlacementError):
+    """A ``list_rank`` that is not a valid fractional index key of at most 64 chars
+    (app/services/placements/list_rank.py)."""
+
+    code = PlacementErrorCode.invalid_list_rank
+    status = 422

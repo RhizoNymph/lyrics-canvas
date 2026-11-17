@@ -30,6 +30,8 @@ import {
   withCanvasRef,
 } from '@/lib/placements';
 import type { HistorySnapshot, PlacementResult, RemovalSummary } from '@/lib/placements';
+import { patchRanks } from '@/lib/listMode/rankPatch';
+import type { RankPatch } from '@/lib/listMode/rankPatch';
 
 export type { RemovalSummary } from '@/lib/placements';
 
@@ -91,6 +93,12 @@ interface CanvasState {
   ) => Promise<Snippet | null>;
   /** PUT with the open canvas's id: content is shared, layout fields go to this canvas's placement. */
   updateSnippet: (id: string, data: SnippetUpdateBody) => Promise<void>;
+  /**
+   * Set custom list ranks locally (list reorder: optimistic apply, server echo, rollback), in the live map and
+   * in every undo/redo snapshot, so undo never reverts the list order. No history entry: a reorder is not
+   * undoable (docs/features/web_list_order.md).
+   */
+  applyListRanks: (patches: ReadonlyArray<RankPatch>) => void;
   /** Insert or replace a snippet the server returned (e.g. a voice take), with an undo snapshot. */
   applySnippet: (snippet: Snippet) => void;
   /**
@@ -302,6 +310,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     next.set(id, updated);
     get().pushUndoState();
     set({ snippets: next });
+  },
+
+  applyListRanks: (patches) => {
+    const { snippets, past, future } = get();
+    const patchSnapshot = (snap: HistorySnapshot) => {
+      const patched = patchRanks(snap.snippets, patches);
+      return patched === snap.snippets ? snap : { ...snap, snippets: patched };
+    };
+    const patchStack = (stack: HistorySnapshot[]) => {
+      const next = stack.map(patchSnapshot);
+      return next.every((snap, i) => snap === stack[i]) ? stack : next;
+    };
+    const next = patchRanks(snippets, patches);
+    const nextPast = patchStack(past);
+    const nextFuture = patchStack(future);
+    if (next === snippets && nextPast === past && nextFuture === future) return;
+    set({ snippets: next, past: nextPast, future: nextFuture });
   },
 
   applySnippet: (snippet) => {

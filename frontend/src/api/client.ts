@@ -76,6 +76,8 @@ export interface SnippetCreateBody {
   group_id?: string | null;
   /** Set only by rhyme-view promotion. */
   derived_from?: DerivedFrom;
+  /** Custom list rank on the canvas; omitted, the server puts the snippet at the top of the custom order. */
+  list_rank?: string;
 }
 
 export const snippetApi = {

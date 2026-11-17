@@ -32,6 +32,9 @@ from app.schemas.rhyme import (
     SyllableAlignmentModel,
     TextAnchor,
 )
+from app.services.meaning.order import apply_order
+from app.services.meaning.service import MeaningService, TargetPart, TextPart
+from app.services.meaning.store import NoStoredEmbeddings, SnippetEmbeddingStore, SnippetText, snippet_parts
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.phonetics import DEFAULT_DIALECT_MAP
 from app.services.phonetics.dialect import DialectMap, DialectRule, RuleKind
@@ -44,6 +47,7 @@ from app.services.phonetics.types import Unit
 from app.services.phonetics.units import unit_from_text
 from app.services.phonetics_service import compute_snippet_phonetics, note_unit
 from app.services.rest_marks import display_text, word_tokens
+from app.services.rhyme_order import band_of
 from app.services.tag_expr import Expr, SnippetFacts, matches, parse
 
 logger = logging.getLogger(__name__)
@@ -283,7 +287,9 @@ def unit_model(unit: Unit, grid_data: Mapping[str, object] | None = None) -> Rhy
     )
 
 
-def candidate_model(c: Candidate, slot: Slot | None, grid_data: Mapping[str, object] | None) -> RhymeCandidateModel:
+def candidate_model(
+    c: Candidate, slot: Slot | None, grid_data: Mapping[str, object] | None, similarity: float | None = None
+) -> RhymeCandidateModel:
     base = unit_model(c.unit, grid_data)
     return RhymeCandidateModel(
         **base.model_dump(),
@@ -298,6 +304,8 @@ def candidate_model(c: Candidate, slot: Slot | None, grid_data: Mapping[str, obj
             for a in c.score.alignment
         ],
         source=c.source,
+        band=band_of(c.score.score),
+        similarity=similarity,
     )
 
 
@@ -382,6 +390,18 @@ def note_units(
     return units, by_id
 
 
+async def meaning_target(
+    anchors: Sequence[Anchor], resolved: Sequence[ResolvedAnchor], store: SnippetEmbeddingStore
+) -> list[TargetPart]:
+    """The meaning target of a query: each distinct anchor snippet once (whole display text, or
+    its current stored embedding) and each distinct text anchor's text."""
+    snippets = [SnippetText(r.record.id, r.record.raw_text) for r in resolved if r.record is not None]
+    parts = await snippet_parts(snippets, store)
+    texts = [display_text(a.text).strip() for a in anchors if isinstance(a, TextAnchor)]
+    parts.extend(TextPart(t) for t in dict.fromkeys(texts) if t)
+    return parts
+
+
 DictionaryFactory = Callable[[DialectMap, ScoreWeights | None, bool], CandidateSource]
 
 
@@ -398,7 +418,11 @@ async def suggest(
     repo: SnippetRepository,
     *,
     dictionary: DictionaryFactory | None = None,
+    meaning: MeaningService | None = None,
+    embeddings: SnippetEmbeddingStore | None = None,
 ) -> RhymeSuggestResponse:
+    """Ranked candidates for the anchors. ``order="meaning"`` needs ``meaning``; without it (or
+    when the model is unavailable) the response is in today's order with ``order_applied="rhyme"``."""
     started = time.perf_counter()
     # an invalid filter is a request error before anything is looked up (TagExpressionError)
     tag_filter = parse(req.tag_filter) if req.tag_filter else None
@@ -434,20 +458,30 @@ async def suggest(
     candidates = [c for c in candidates if c.unit.text.lower() not in anchor_texts]
     candidates = dedupe_note_suffixes(candidates, req.slot)
     ranked = rank(candidates, tags)
-    page = ranked[req.offset : req.offset + req.limit]
+    target = await meaning_target(req.anchors, resolved, embeddings or NoStoredEmbeddings()) if req.order == "meaning" else []
+    ordered = await apply_order(
+        req.order, ranked, score=lambda c: c.score.score, text=lambda c: c.unit.text, target=target, meaning=meaning
+    )
+    page = ordered.items[req.offset : req.offset + req.limit]
 
     response = RhymeSuggestResponse(
         anchors=[unit_model(r.unit, r.record.grid_data if r.record else None) for r in resolved],
         candidates=[
-            candidate_model(c, req.slot, records_by_id[c.unit.snippet_id].grid_data if c.unit.snippet_id in records_by_id else None)
-            for c in page
+            candidate_model(
+                o.item,
+                req.slot,
+                records_by_id[o.item.unit.snippet_id].grid_data if o.item.unit.snippet_id in records_by_id else None,
+                o.similarity,
+            )
+            for o in page
         ],
         total=len(ranked),
         elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        order_applied=ordered.applied,
     )
     logger.info(
-        "rhyme_suggest.done anchors=%d sources=%s k=%d tag_filter=%s total=%d returned=%d elapsed_ms=%.1f",
-        len(anchors), ",".join(req.sources), req.k, tag_filter is not None, response.total, len(response.candidates),
-        response.elapsed_ms,
+        "rhyme_suggest.done anchors=%d sources=%s k=%d tag_filter=%s order=%s order_applied=%s total=%d returned=%d elapsed_ms=%.1f",
+        len(anchors), ",".join(req.sources), req.k, tag_filter is not None, req.order, ordered.applied, response.total,
+        len(response.candidates), response.elapsed_ms,
     )
     return response
