@@ -7,7 +7,8 @@ against the same contract; platform differences are noted per item.
 
 ## Shared contract
 
-- **Order**: descending by `content_updated_at` (set by the server; bumped only by content changes,
+- **Order** (web: the default **Last edited** sort; the sort menu adds Created, A-Z and Custom, see
+  [web_list_order.md](./web_list_order.md)): descending by `content_updated_at` (set by the server; bumped only by content changes,
   meaning text, type or grid, never by moves; see
   [snippet_content_timestamp.md](./snippet_content_timestamp.md)), ties broken by `created_at`
   descending and then `id` ascending. Timestamps compare as instants, not strings (the backend sends
@@ -64,7 +65,8 @@ against the same contract; platform differences are noted per item.
 
 - Creating snippets from the list by hand (use the canvas: double-click). Voice capture can create one
   from the list; it is selected and scrolled into view (see [web_voice_capture.md](./web_voice_capture.md)).
-- Reordering snippets by hand, and sort orders other than last-edited.
+- Reordering snippets by hand and the other sorts are now in scope on web: see
+  [web_list_order.md](./web_list_order.md) (sort menu, drag handle, Alt+Up / Alt+Down, `list_rank`).
 - Moving, resizing, grouping and t-SNE (canvas-only spatial features).
 - Virtualising long lists.
 
@@ -80,8 +82,8 @@ Toolbar "List" / Ctrl+Shift+L
 ListView render
   visibleSnippets(snippets, tagFilterStore.filter.applied, canvasSearchStore.query)
                                                    lib/canvas/visibility (also used by CanvasViewport)
-  -> sortForList(...)                              lib/listMode/order: content_updated_at desc,
-                                                   created_at desc, id asc
+  -> sortSnippets(listOrderStore.sort, ...)        lib/listMode/sort; Last edited = content_updated_at
+                                                   desc, created_at desc, id asc (web_list_order.md)
   -> useFrozenOrder(sortedIds, editingSnippetId !== null)
        captures the order when an editor opens; applyFrozenOrder keeps it while open
        (removed ids drop out, ids added since the freeze go on top)
@@ -135,6 +137,7 @@ is keyed by snippet id in both views, so switching straight from one snippet to 
 | `frontend/src/lib/listMode/order.ts` | Sort and freeze logic | `compareForList`, `sortForList`, `applyFrozenOrder` |
 | `frontend/src/lib/listMode/selection.ts` | Row click into a selection result | `listClick`, `ListClickModifiers`, `ListSelectionState`, `ListClickResult` |
 | `frontend/src/lib/listMode/viewMode.ts` | Mode type and guarded persistence | `ViewMode`, `VIEW_MODE_STORAGE_KEY`, `parseViewMode`, `browserStorage`, `loadViewMode`, `saveViewMode`, `ViewModeStorageError`, `SaveViewModeResult` |
+| `frontend/src/lib/listMode/{rank,sort,sortPref,reorder,rankPatch}.ts` | Sort menu and custom order (see web_list_order.md) | |
 | `frontend/src/lib/listMode/index.ts` | Barrel | |
 | `frontend/src/stores/uiStore.ts` | `viewMode`, `setViewMode`, `toggleViewMode`, `closeEditor(id)` | |
 | `frontend/src/stores/canvasStore.ts` | `setSelection(ids)` | |
