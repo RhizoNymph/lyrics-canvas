@@ -16,8 +16,9 @@ The server side (versions, `base_version`, client-chosen ids, `GET /api/sync/sna
 - **Offline-capable changes:**
   - Canvases: create, rename, delete. Delete is new on Android: it is in the canvas list's ⋮ menu,
     with a confirmation.
-  - Snippets: create, edit (text, type, grid, grid mode, beats), move, remove from this canvas,
-    delete everywhere.
+  - Snippets: create, edit (text, type, grid, grid mode, beats, score and score view), move, remove
+    from this canvas, delete everywhere. A score edit runs the server's save flow locally (rest link,
+    reconcile, text splice; [android_score_editor.md](./android_score_editor.md)).
   - Tags: link and unlink; create, rename, recolour and delete tags.
   - Word bank: add, rename, delete and tag words.
   - Merge, plus Move to / Also show on another canvas.
@@ -344,6 +345,11 @@ this phone").
    `batch-position`, so each move gets its placement back.
 9. **No snapshot after a pass that only parked or failed.** After a drain it is fetched only when
    something was sent, the wake was a refresh, or there is no snapshot yet.
+11. **The score is content.** `LocalSnippet.score` / `scoreView` default to none, so older store
+    files load unchanged. `ContentPatch.score` is a `ScoreChange` (Remove score is `ScoreChange(null)`,
+    sent as an explicit `null`). A content edit involving a score queues the locally stored result.
+    The review shows "Cadence changed" when mine and the server's scores differ. See
+    [android_score_editor.md](./android_score_editor.md).
 10. **The custom list order is layout.** `list_rank` is a `LayoutPatch` field, stored on the local
     placement and decoded from the snapshot. Offline creates take a key on top of the canvas's
     order, and a re-rank is queued as one layout operation per placement. See

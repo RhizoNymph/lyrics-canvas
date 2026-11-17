@@ -158,6 +158,20 @@ changes and a quiet "≈NN%" per row, or "Meaning order unavailable" when the se
 order. Changing it refetches from the first page. See
 [android_rhyme_meaning_order.md](./features/android_rhyme_meaning_order.md).
 
+### Score Editor (Android)
+Musical mode in the Android editor, offline like the rest of the content. The Kotlin port of the score
+algorithms (`:core:logic` `logic.score`, every vector of `spec/score_vectors.json`) runs the server's
+save flow locally. A rest-only grid edit moves the notes, any other edit reconciles them, then the rest
+link writes the gaps into the grid and the text, so the phone's copy equals what the server stores.
+`score` / `score_view` live in the local copy and the outbox (Remove score is an explicit `null`), and a
+conflict review notes "Cadence changed". The editor has "Make score" (from the grid offline, or from a
+recording through the score tools' sheet) and a Grid / Staff toggle. The touch staff wraps bars into
+rows: tap selects a note, dragging moves it, dragging its right end changes its length, and syllables
+come from a tray. There are also accent, nudge and length controls, meter / tempo changes at a bar, a
+pickup, a snap picker, Remove score (confirmed), and AudioTrack playback with a playhead. Canvas cards
+and list rows draw a compact staff when the snippet is in the staff view. See
+[android_score_editor.md](./features/android_score_editor.md).
+
 ### Score Tools (Android)
 Musical mode's server-side tools on Android. A "Make score" draft sheet asks the server for a draft
 score (`POST /api/snippets/{id}/score/draft`), either from the grid (note length, meter, tempo) or from
@@ -218,6 +232,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Rests and Search](./features/android_rests_and_search.md) | Android rest marks (`_` in text ↔ grid rests, display text consumers), ▶ nudge inserting a rest at the end of a line, in-canvas search filter, search across canvases with focus on a snippet |
 | [Android Rhyme Order](./features/android_rhyme_meaning_order.md) | "Rhyme" / "Rhyme, then meaning" toggle (per device) for the rhyme sheet, pattern columns and word bank rhymes; band headers, similarity labels, "Meaning order unavailable" |
+| [Android Score Editor](./features/android_score_editor.md) | Musical mode on Android: Kotlin port of the score algorithms (vectors), score / score_view offline (store, outbox, snapshot, "Cadence changed" review), local save flow, Grid / Staff toggle, touch staff editor, meter / tempo / pickup / snap, Make score from grid, Remove score, AudioTrack playback, compact staff on cards and rows |
 | [Android Score Tools](./features/android_score_tools.md) | Musical mode on Android, server side: score draft sheet (from grid / from a take, estimate and counts), MIDI / MusicXML export via share sheet or SAF save, rhyme sheet "Fit rhythm" switch (per device, reason when unavailable, ♩NN% per row) |
 | [Android Rhyme Patterns](./features/android_rhyme_patterns.md) | Android rhyme-sheet pattern mode: line-range picking, detected and edited slots (pure reducer), one paged list per slot, tuple tray, whole-line matches |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
@@ -880,6 +895,17 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/wordbank/WordBankViewModel.kt (setRhymesOrder)
     depends_on: [android_app, android_rhyme_patterns, android_word_bank, rhyme_view, rhyme_patterns, word_bank]
     doc: docs/features/android_rhyme_meaning_order.md
+  android_score_editor:
+    description: Android musical mode (feat/android-score-editor). Kotlin port in core/logic logic.score (checkScore raw JSON / validateScore typed, timing incl. msToTick, metricWeight, applyRestLink, isRestOnlyEdit, applyGridRestEdit, reconcile, draftFromGrid, splice/changedLineTexts, applyScoreSave = the server save flow, scoreViewAfter) passing every case of spec/score_vectors.json read in place (scoreVectors property). Staff edits (logic.score.edit - snapTick per bar / backwards in the pickup, noteWindow single voice, place/move/resize/step/nudge/accent/unplace, setMeter/removeMeter, setTempo/removeTempo, setPickup moving notes with bar 0, setSnap) and playback (logic.score.play - playbackPlan clicks per beat or dotted beat + notes with accent gain, synthesize 16-bit PCM). Offline content - Snippet/SnapshotSnippet/create/update score + score_view, ScoreChange (explicit null = Remove score on the wire, {} / {score} in the store), LocalSnippet fields (file store, defaults, no migration), ContentPatch score/scoreView (text-only later drops earlier grid and score), LocalEdits.updateSnippet runs applyScoreSave and queues the stored result (linked grid, spliced text, score), 422 invalid_score locally, self-conflict and review (cadenceChanged, "Cadence changed", Score summary), Overwrite / Save as new carry the score. Editor - ScoreLayer (committed score + its grid; reconcile on read; rest-only edits commit), withLinkedGrid writes rest-linked grids into the rows, ScoreModeBar (Make score dialog from grid, From a recording via ScoreDraftSheet, Grid/Staff, Remove score confirmed), StaffEditor/StaffCanvas/StaffGeometry (wrapped bars, beats, line marks, tap/drag/edge, tray tap or drag, bar dialog, pickup stepper, snap picker), ScorePlayer (static AudioTrack, playhead), ScoreExportMenu in the top bar. Cards and list rows draw compactStaff when score_view.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/score/ (port, SaveFlow, edit/, play/)
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/editor/EditorRowsState.kt (withLinkedGrid)
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/score/ScoreChange.kt
+      - android/core/sync/src/main/kotlin/dev/nymph/lyrics/sync/apply/LocalEdits.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/editor/score/ (ScoreLayer, ScoreActions, ScoreStateEdits, ui/)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/render/CompactStaff.kt
+    depends_on: [score_format, android_app, android_offline_sync, android_rests_and_search, android_score_tools]
+    doc: docs/features/android_score_editor.md
   android_score_tools:
     description: Android musical-mode tools that need the server (feat/android-score-tools). API - ScoreToolsRepository draft (POST /api/snippets/{id}/score/draft, grid {note, meter, bpm} or recording {recording_id, meter, bpm|null explicit}) and export (GET .../score/export?format=midi|musicxml via ApiClient.downloadAttachment, Content-Disposition name), gated online and on LocalFirst.awaitSettled(snippet) (SCORE_NOT_SYNCED_YET, code not_synced); typed ScoreToolErrorKind (score_not_found, recording_not_found, recording_has_no_timings, draft_empty, invalid_score, snippet_not_found, needs connection, not synced...). ScoreDraftSheet(container, snippetId, onDraft, onDismiss) - From grid / From a recording (newest take with timings default, others disabled), meter presets + beats/den, tempo 20..400 two decimals (blank = estimate for takes), Make draft -> summary (estimated tempo, unplaced, unmatched), Use this draft -> onDraft(Score); online only with an offline message. ScoreExportMenu(container, snippetId, hasScore, onMessage) - Share / Save MIDI and MusicXML; cache/score-exports/<id>/ (last export only), FileProvider ${applicationId}.scoreexports, SAF CreateTypedDocument. Rhyme sheet "Fit rhythm" - RhythmFitStore (DataStore rhyme_order key rhyme_rhythm_fit), shown only with a snippet anchor, rhythm_fit sent only then (omitted otherwise), RhythmOutcome (NotAsked / Applied / Unavailable(no_score, slot_unplaced, OTHER)) with a note, applied bands rows (ResultOrdering.rhythm; meaningUnavailable note independent), ♩NN% per row, paging keeps the field and the first page's outcome. Editor hooks (sheet, export menu) are mounted by feat/android-score-editor.
     entry_points:

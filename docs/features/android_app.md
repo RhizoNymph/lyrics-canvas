@@ -409,6 +409,11 @@ E6. **Rows are a scrolling `Column`, not a `LazyColumn`**: row bounds for drag-t
 E7. **A syllabify failure is shown** in the hint line ("local estimates"); the web only logs it.
 E8. **One ViewModel per editor visit** (`viewModel` key = snippet id + a `rememberSaveable` UUID), so it
     survives rotation but never leaks a previous visit's unsaved state into a reopened editor.
+E9. **Musical mode** (feat/android-score-editor). A bar above the rows offers "Make score", or Grid /
+    Staff and Remove score. The staff view replaces the rows with the touch staff editor. The score is
+    a layer on top of the rows: rest-only grid edits move its notes, text edits reconcile it, and staff
+    edits write their gaps back into the rows as rests. Saving sends the score with the grid. See
+    [android_score_editor.md](./android_score_editor.md).
 
 ## Device verification (2026-10-01, emulator, live backend)
 

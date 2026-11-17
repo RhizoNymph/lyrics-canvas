@@ -186,3 +186,10 @@ no-op): `RawTextTest`, `EditorRowsStateTest`, `GridEditorViewModelTest`.
   never selected.
 - No search request is sent for a blank or over-200-code-point query, or with a limit outside 1..200.
 - Nothing throws: failures are `SearchError` state or snackbar text.
+
+## Rests and the score
+
+When a snippet has a score ([android_score_editor.md](./android_score_editor.md)), its rests are linked
+to the staff. A gap between two placed syllables becomes `floor(gap / beat unit)` rest cells, and `_` in
+the text. Adding or removing rests between two placed syllables in the grid moves the later notes.
+Rests next to unplaced syllables and at line edges are left alone.
