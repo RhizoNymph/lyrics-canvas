@@ -76,7 +76,7 @@ already pinned.
 | File | Role / key exports |
 |---|---|
 | `outbox/EntityRef.kt` | `EntityRef` = `Snippet` \| `Canvas` \| `Tag` \| `Word`: the unit of ordering, conflicts and badges. A snippet's placements belong to it. |
-| `outbox/Patches.kt` | `ContentPatch`, `LayoutPatch`. Each is never empty (built by `of`) and merges with `then`. Text sent without a grid drops an earlier grid. |
+| `outbox/Patches.kt` | `ContentPatch`, `LayoutPatch` (position, size, z, group and `list_rank`). Each is never empty (built by `of`) and merges with `then`. Text sent without a grid drops an earlier grid. |
 | `outbox/SyncOp.kt` | Sealed `SyncOp`, one class per change kind. Each says what it `touches`, `creates`, `references` and `deletes`, and its `bases` (version per entity). It also has `rebased` and `remapped`. `IdRemap` and `SnippetVersion` live here too. |
 | `outbox/OutboxEntry.kt` | `OpId`, `OpState` (`Pending`, `InFlight`, `Failed(attempts, reason)`, `Parked(conflict)`), `OutboxEntry` |
 | `outbox/Outbox.kt` | The immutable `Outbox`: `enqueue` with coalescing, `nextBatch` (ordering plus word batching), `markInFlight`, `complete`, `fail`, `requeue`, `park`, `rebase`, `remap`, `insertAfter`, `recovered`. Also `waitsFor`, `Batch` and `MAX_WORD_BATCH`. |
@@ -90,6 +90,7 @@ already pinned.
 | `snapshot/SnapshotMerge.kt` | `SnapshotMerge.merge(local, snapshot)` |
 | `engine/SendOutcome.kt` | `OpResult` (successes by kind, including `TagMatched`) and `SendOutcome` (`Ok`, `VersionConflict(current)`, `NotFound(code)`, `Refused`, `Transient`, `Unreadable`) |
 | `engine/OpSender.kt` | `OpSender` and `HttpOpSender` (each op as its API call), plus `classify` |
+| `engine/LocalRanks.kt` | `Batch.withLocalRanks`: a snippet create without `list_rank` is sent with its local placement's key ([android_list_order.md](./android_list_order.md)) |
 | `engine/Outcomes.kt` | `Outcomes.apply(data, batch, outcome) -> Applied(data, alerts, refresh, transient)`, and the `absorb*` and `remapTag` helpers |
 | `engine/SyncEngine.kt` | `SyncEngine` (`run`, `wake`, `alerts`, `activity`, `snapshotAttempts`), `Wake`, `SyncPolicy`, `EngineActivity`, `SnapshotAttempt`, `SyncTrigger` |
 | `conflict/Conflict.kt` | `ServerCopy`, `Conflict` (`Changed`, `DeletedOnServer`, `MergeChanged`, `Rejected`), `Resolution`, `resolutionsFor` |
@@ -180,8 +181,8 @@ only, and InFlight and Failed entries never, since the server may already have a
 - Content edits of one snippet, a canvas title, a tag (field by field) or a word text merge into
   the latest edit of the same entity, which keeps the first base version. Layout operations on the
   same entity are skipped over.
-- Layout updates per (snippet, canvas) and a canvas viewport keep the last value. Content
-  operations on the same entity are skipped over.
+- Layout updates per (snippet, canvas) and a canvas viewport keep the last value, field by field
+  (a custom-order `list_rank` included). Content operations on the same entity are skipped over.
 - A create, delete, remove, tag link, merge or transfer on the entity stops the search, so nothing
   coalesces across it.
 
@@ -343,6 +344,10 @@ this phone").
    `batch-position`, so each move gets its placement back.
 9. **No snapshot after a pass that only parked or failed.** After a drain it is fetched only when
    something was sent, the wake was a refresh, or there is no snapshot yet.
+10. **The custom list order is layout.** `list_rank` is a `LayoutPatch` field, stored on the local
+    placement and decoded from the snapshot. Offline creates take a key on top of the canvas's
+    order, and a re-rank is queued as one layout operation per placement. See
+    [android_list_order.md](./android_list_order.md).
 
 ## Tests
 

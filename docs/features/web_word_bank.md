@@ -130,8 +130,12 @@ Rhymes with - RhymesWithPane
     typed text -> {text}; exactly one selected word -> {word_id} (pinned);
     the pinned word while it stays selected (so selecting matches keeps the anchor); else none
   debounced on anchor | revision | appliedText | rhymeMinScore (default 0.5)
-  -> loadRhymes: POST /api/word-bank/rhymes {word_id | text, min_score, tag_filter?}
+  -> loadRhymes: POST /api/word-bank/rhymes {word_id | text, min_score, tag_filter?, order?}
   matches with score bars and depth; click toggles selection; "Select all"
+  order toggle ("Rhyme" / "Rhyme, then meaning", shared with the rhyme sidebar via rhymeOrderStore):
+    in the debounce key; meaning sends order "meaning", rhymesOrder keeps what was asked;
+    order_applied meaning -> band headers + ≈NN% similarity; meaning asked, rhyme applied -> "Meaning order unavailable"
+    (see web_rhyme_meaning_order.md)
 ```
 
 ### Related tab

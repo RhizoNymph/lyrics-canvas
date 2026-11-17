@@ -42,7 +42,7 @@ Lyrics Canvas is a web application for songwriters and lyricists to compose, org
 ## Core Concepts
 
 ### Canvas & Snippets
-A **canvas** is a user's titled workspace (1-255 characters after trimming; `invalid_canvas_title` otherwise; a new canvas without a title is "Untitled Canvas"), created and renamed from the canvas list and from inside the canvas. A **snippet** is a rectangular card holding lyrics text, owned by its user. Its **content** (text, type, grid mode, beats, grid, phonetics, tags, recordings) is shared, and its **layout** lives on a **placement** per canvas (`snippet_placements`: position, size, stacking order, group), so one snippet can be on several canvases with an independent layout on each. Every snippet has at least one placement. A snippet can be **moved** to another canvas or **also shown** on one (`POST /api/canvases/{id}/snippets/transfer`: same position and size, stacked on top, ungrouped). Plain delete removes it from the current canvas only, deleting it for good when that was its last canvas; **delete everywhere** removes it from all of them; deleting a canvas keeps its snippets that are also on other canvases. Each snippet in a canvas response carries its `placement_id` and the `canvases` holding it. Layout saves (PUT, batch-position) name the canvas (`canvas_id`, required). Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves, resizes and placements do not count), for "last edited" ordering. See [snippet_placements.md](./features/snippet_placements.md). On web, a canvas is renamed from the pencil on its list card or by clicking the header title, and the right-click menu moves snippets to another canvas or also shows them there (canvas picker with "New canvas…", result toast with Open), removes them from this canvas or deletes them everywhere (confirmed); a "⧉ N" badge on cards and list rows lists the other canvases holding a snippet (see [web_snippet_placements.md](./features/web_snippet_placements.md)). On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
+A **canvas** is a user's titled workspace (1-255 characters after trimming; `invalid_canvas_title` otherwise; a new canvas without a title is "Untitled Canvas"), created and renamed from the canvas list and from inside the canvas. A **snippet** is a rectangular card holding lyrics text, owned by its user. Its **content** (text, type, grid mode, beats, grid, phonetics, tags, recordings) is shared, and its **layout** lives on a **placement** per canvas (`snippet_placements`: position, size, stacking order, group), so one snippet can be on several canvases with an independent layout on each. Every snippet has at least one placement. A snippet can be **moved** to another canvas or **also shown** on one (`POST /api/canvases/{id}/snippets/transfer`: same position and size, stacked on top, ungrouped). Plain delete removes it from the current canvas only, deleting it for good when that was its last canvas; **delete everywhere** removes it from all of them; deleting a canvas keeps its snippets that are also on other canvases. Each snippet in a canvas response carries its `placement_id` and the `canvases` holding it. Layout saves (PUT, batch-position) name the canvas (`canvas_id`, required). Snippets have a type (verse, chorus, bridge, hook, freestyle) displayed as a color-coded header. Users create snippets by double-clicking the canvas and arrange them freely by dragging. Each snippet records `content_updated_at`, the time its text, type or grid last changed (moves, resizes and placements do not count), for "last edited" ordering. Each placement also has a `list_rank` (migration 010), a fractional index key (port of fractional-indexing 3.2.0, base-62, compared by bytes, shared vectors in `spec/list_rank_vectors.json`) giving the canvas's custom list order (`list_rank`, then `placement_id`): new placements go to the top, merge keeps the first block's rank, transfer puts snippets at the top of the target, fork copies ranks, and clients set ranks as layout through PUT (`list_rank` only) or one batch-position call (`invalid_list_rank` for a bad key). See [snippet_placements.md](./features/snippet_placements.md). On web, a canvas is renamed from the pencil on its list card or by clicking the header title, and the right-click menu moves snippets to another canvas or also shows them there (canvas picker with "New canvas…", result toast with Open), removes them from this canvas or deletes them everywhere (confirmed); a "⧉ N" badge on cards and list rows lists the other canvases holding a snippet (see [web_snippet_placements.md](./features/web_snippet_placements.md)). On Android a canvas is renamed from the list (long-press or ⋮) or by tapping the canvas title, and the selection bar's ⋮ menu moves or also shows snippets on another canvas (picker with "New canvas…", snackbar with Open), separates "Remove from this canvas" from "Delete everywhere", and lists the other canvases of a snippet carrying the "⧉ N" badge; the editor shows "Also on: …" ([android_snippet_placements.md](./features/android_snippet_placements.md)).
 
 ### Beat Grid
 Each snippet's text is **syllabified** using the CMU Pronouncing Dictionary. The result is a grid where each cell is one syllable with stress markers (0=unstressed, 1=primary, 2=secondary). Users can insert "rests" (silence beats) and choose between auto-expanding or fixed-beat grid modes. Rests live in the text as `_`: every `_` is one rest cell and also separates words, `word_index` counts words only, and rests made in the grid are written back as `_`, so the text always matches the grid; export, rhyme, phonetics, similarity, embeddings and search read the display text with the marks removed (see [rest_marks.md](./features/rest_marks.md)). Syllable counts are displayed per line. In the inline editor the grid can be corrected by hand: syllable chunks drag along their line, rests are inserted or removed, and lines move up or down (see [Grid Rearrange](./features/grid_rearrange.md)). Line breaks are fixed from the keyboard on web and Android: Enter splits a line at the caret, Backspace at its start joins it onto the line above (see [Editor Line Split / Join](./features/editor_line_split_join.md)). On web, `_` typed in the editor is a rest cell, rests made in the grid are written back as `_`, and → on a selection at the end of a line inserts a rest before it ([web_rests_and_search.md](./features/web_rests_and_search.md)). On Android, `_` typed in a line makes a rest cell in the local estimate, grid rests are written back as `_`, the ▶ nudge at the end of a line inserts a rest before the selection, and rhyme ranges, chips and word-bank adds read the display text ([android_rests_and_search.md](./features/android_rests_and_search.md)).
@@ -56,7 +56,9 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 ### NLP Features
 - **Syllabification**: CMU dict phoneme-based syllable splitting with heuristic fallback
 - **Rhyme sidebar**: a phonetic engine (CMU dict + g2p_en + heuristic pronunciation, user-editable dialect map, articulatory near-rhyme scoring, hash-bucket rhyme index) powers `POST /api/nlp/rhyme-suggest` (ranked, slot-checked candidates from the dictionary and the user's own lines) and the legacy `GET /api/nlp/rhymes` lookup; every snippet stores `phonetics` reconciled with its beat grid
+- **Rhyme, then meaning**: rhyme-suggest, rhyme-pattern suggest (per slot column) and word bank rhymes take `order: "rhyme" | "meaning"`. Every candidate carries a score `band` (perfect >= 0.95, strong >= 0.85, near >= 0.75, loose); `"meaning"` keeps the bands in rhyme order and sorts inside each band by cosine similarity (all-MiniLM-L6-v2) to the anchor snippet(s) or text, over the first 1500 candidates and before paging. Dictionary words reuse the related-word index rows, other texts are embedded in one batch off the event loop and cached in a bounded LRU; without the model the response says `order_applied: "rhyme"` (see [rhyme_view.md](./features/rhyme_view.md#rhyme-then-meaning))
 - **Rhyme patterns**: select 2..16 consecutive lines of a snippet; `POST /api/nlp/rhyme-pattern/detect` finds the ordered slots where the lines rhyme with each other (order-preserving progressive alignment of word spans), and `POST /api/nlp/rhyme-pattern/suggest` lists, per slot, dictionary words and spans of the user's own lines that rhyme with every member, plus whole lines that already hit 2+ slots in order (see [rhyme_patterns.md](./features/rhyme_patterns.md))
+- **Rhyme order (web)**: an order toggle, "Rhyme" or "Rhyme, then meaning", in the rhyme sidebar, above the pattern columns and in the word bank's "Rhymes with" view, one choice remembered per viewer. In meaning order the server groups candidates into fixed rhyme bands (Perfect >= 0.95, Strong >= 0.85, Near >= 0.75, Loose) and sorts each band by embedding similarity to the anchor; the lists show band headers where the band changes (paging continues the band) and a quiet similarity percent, or "Meaning order unavailable" when the server fell back to rhyme order; see [web_rhyme_meaning_order.md](./features/web_rhyme_meaning_order.md)
 - **Rhyme patterns across lines (web)**: picking a range of 2+ lines of one snippet in the rhyme sidebar (two line numbers on the anchor chip, or "Pattern (last N lines)") switches it to Pattern mode: the places where those lines rhyme with each other become editable slots, each on slot gets its own scrollable list of words and lines rhyming with every member, picks build a tuple that can become a snippet or go to the word bank, and the user's own lines that already hit 2+ slots are listed; see [web_rhyme_patterns.md](./features/web_rhyme_patterns.md)
 - **Semantic Similarity**: TF-IDF vectorization + cosine similarity to find related snippets
 - **t-SNE Layout**: Sentence embeddings (all-MiniLM-L6-v2, 384-dim) reduced to 2D for spatial clustering
@@ -71,7 +73,8 @@ The **word bank** is a per-user list of words and short phrases (1-64 code point
 - **Search in a canvas (web)**: The search box at the start of the filter row filters the canvas and list mode live by display text, AND the tag filter, with "N of M", × / Escape to clear and Ctrl/Cmd+F to focus; it lasts per canvas for the session. The canvas list page's header search finds canvases (by title) and snippets across all canvases, and opening a snippet hit focuses it (`/canvas/:id?snippet=<sid>`); see [web_rests_and_search.md](./features/web_rests_and_search.md)
 - **Tag filter**: The bar under the toolbar takes a tag expression with autocomplete, tag pills that insert at the caret, presets (apply, save, rename, overwrite, delete) and clear; it filters both the canvas and list mode; see [web_tag_expressions.md](./features/web_tag_expressions.md)
 - **Merge**: With 2+ snippets selected, merge them vertically (Ctrl/Cmd+Shift+V) or horizontally (Ctrl/Cmd+Shift+H) from the context menu, toolbar, or keyboard; the server merges and replaces the originals in one transaction; see [merge_blocks.md](./features/merge_blocks.md)
-- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md). On Android a "Sort" row above the list picks Last edited, Created, A-Z or Custom (remembered per device), and a drag handle on each row reorders it: in Custom the row takes a fractional-index key between its neighbours, in another sort the shown order becomes the canvas's custom order (`list_rank`, saved per canvas on the server, offline as a layout field); see [android_list_order.md](./features/android_list_order.md)
+- **List mode**: The toolbar `List` toggle (or Ctrl/Cmd+Shift+L) swaps the canvas for a scrollable list of the snippets, last edited first (`content_updated_at`). It follows the tag expression filter and shows each snippet's type header, tags and beat grid. Clicking a row opens the inline editor in place. Ctrl/Cmd-click and Shift-click multi-select into the same selection the canvas uses, so merge, delete and undo work unchanged. The choice is remembered per viewer. The Android canvas screen has the same toggle in its top bar (tap opens the editor, long-press selects); see [list_mode.md](./features/list_mode.md). On web a sort menu (Last edited, Created, A-Z, Custom, remembered per device) and a drag handle / Alt+Up / Alt+Down reorder rows into the canvas's custom order (`list_rank`, saved on the server, optimistic with rollback); see [web_list_order.md](./features/web_list_order.md)
 - **Voice capture (web)**: The toolbar `Record` button, the `Rec` button in the open editor, or Alt+Shift+R opens a full-screen recorder. A tap or Space/Enter starts the next line, a double tap stops, and auto-stop after N seconds of silence is optional. The take is uploaded and transcribed server-side. It becomes a new snippet at the viewport centre, or is appended to the snippet open in the editor (whose pending edits are saved first). The audio is kept and can be played or deleted from the editor's Recordings section. Needs HTTPS. See [web_voice_capture.md](./features/web_voice_capture.md) and the cross-cutting [voice_capture.md](./features/voice_capture.md)
 - **Word bank (web)**: The toolbar `Words` toggle (Ctrl/Cmd+Shift+W, or Alt+Shift+W where the browser reserves the former) opens the word bank sidebar in place of the rhyme sidebar; see [web_word_bank.md](./features/web_word_bank.md)
 - **Search (Android)**: a search box above the tag filter bar filters the canvas and list mode live (display text, ANDed with the tag filter, "N of M", ×); the canvas list searches every canvas (`GET /api/search`: Canvases and Snippets sections, highlighted excerpts) and opens a canvas focused on a snippet hit; see [android_rests_and_search.md](./features/android_rests_and_search.md)
@@ -118,7 +121,8 @@ works from it, online or not: every edit is saved on the phone first, queued, an
 server is reachable (versions and `base_version` from [sync_versions.md](./features/sync_versions.md),
 client-chosen ids, `GET /api/sync/snapshot`). A content change the server also changed is parked: a
 snackbar, a "N not synced" indicator and "Not synced" badges point to a review of mine next to the
-server's (Keep server's / Overwrite with mine / Save mine as new). Layout is last-write-wins. Rhymes, voice,
+server's (Keep server's / Overwrite with mine / Save mine as new). Layout is last-write-wins (the
+custom list order's `list_rank` included). Rhymes, voice,
 related words and preset saves say "Needs connection" while the server is down. See
 [android_offline_sync.md](./features/android_offline_sync.md).
 
@@ -140,6 +144,20 @@ order and sorts each band by meaning similarity to the anchor. The lists show a 
 changes and a quiet "≈NN%" per row, or "Meaning order unavailable" when the server answered in rhyme
 order. Changing it refetches from the first page. See
 [android_rhyme_meaning_order.md](./features/android_rhyme_meaning_order.md).
+### API Tokens (web)
+The canvas list page header has an "API tokens" button (next to "Voice dataset") that opens a dialog for
+the user's personal API tokens: the list (name, prefix, created, last used, expires), create (name and an
+expiry of 30 days, 90 days, 1 year or never; default 90 days) with the secret shown once, a copy button and
+a warning, and revoke with a confirmation. Scripts and agents use these tokens as a bearer. See
+[web_api_tokens.md](./features/web_api_tokens.md).
+### Personal API Tokens (backend)
+A user can create revocable personal API tokens (`POST /api/tokens {name, expires_in_days}`: 1..365
+days, default 90, null = never) for scripts and agents. A token is `lct_` + 43 URL-safe chars, shown
+once; only its sha256 is stored (`api_tokens`, migration 011), with a 12-char prefix for display.
+`GET /api/tokens` lists the live (not revoked) ones newest first, `DELETE /api/tokens/{id}` revokes. A
+bearer starting with `lct_` authenticates as its user on every route while not revoked or expired
+(`last_used_at` written at most once a minute); the token routes themselves need a login JWT (403
+`token_management_forbidden`). See [api_tokens.md](./features/api_tokens.md).
 
 ### Health Banner
 The web app watches its own backend: it polls `GET /api/health` (every 15 s while visible, with backoff
@@ -148,6 +166,17 @@ server is down (nginx answered 502/503/504) or unreachable (offline, network err
 not be saving; "Back online" shows briefly on recovery. It also polls `GET /_status/alerts` (nginx in front
 of Alertmanager) and lists firing cluster alerts, critical first; a deployment without that endpoint stays
 quiet. Cards are dismissible per incident. See [health_banner.md](./features/health_banner.md).
+
+### Agent Access (lcx)
+An agent such as Claude Code can work on the account with `tools/agent/lcx.py` (stdlib Python CLI,
+personal API token from `~/.config/lyrics-canvas/agent.env`, never printed): read commands print the
+API's JSON (canvases, one canvas in list order, tags, presets, word bank, search, the sync snapshot),
+and changes go through a typed plan file (create/rename canvases, create tags, tag snippets and words,
+move / also show / remove snippets across canvases, set layout, reorder a list, add bank words, edit
+text with `base_version`). `lcx plan check` resolves ids, titles and `$refs`, simulates the plan and
+prints a diff without writing; `lcx plan apply --yes` re-checks and applies in order, stopping at the
+first error. The skill in `tools/agent/skill/lyrics-canvas` makes the agent show that diff and wait for
+the user's approval before applying. See [agent_skill.md](./features/agent_skill.md).
 
 ## Module Documentation
 
@@ -159,6 +188,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Android Release](./features/android_release.md) | Tagged GitHub Release with a verified, optionally keystore-signed APK |
 | [Android Voice Capture](./features/android_voice_capture.md) | Record a take on Android (tap = next line, double-tap = stop, silence auto-stop, word-bank hints switch), transcribed by the server into a new snippet or appended lines; recordings played back, deleted and checked (Check transcript screen) in the editor; dataset stats in the canvas list |
 | [Android Health Banner](./features/android_health_banner.md) | App-wide banner for backend outages (`/api/health` + passive call signals) and firing cluster alerts (`/_status/alerts`) |
+| [Android List Order](./features/android_list_order.md) | List-mode sort menu (Last edited, Created, A-Z, Custom; per device), drag-handle reorder into the canvas's custom order (`list_rank`, fractional-indexing 3.2.0 port, shared vectors), offline as a layout field |
 | [Android Offline Sync](./features/android_offline_sync.md) | Local copy of the account (file store), local-first repositories, outbox with coalescing and per-entity ordering, sync engine (versions, `base_version`, client ids, snapshot merge), parked conflicts with a review screen, sync status indicator, "Not synced" badges, "Needs connection" on server-only actions |
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
@@ -175,17 +205,19 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | [Cluster Alerts Endpoint](./features/cluster_alerts_endpoint.md) | `GET /_status/alerts` on the frontend nginx: this namespace's firing Alertmanager alerts, served without the backend |
 | [Rest Marks](./features/rest_marks.md) | `_` as a rest in snippet text: tokenize, word indexes, display text, canonical text, shared vectors, every backend consumer |
 | [Search Across Canvases](./features/global_search.md) | `GET /api/search` (canvases by title, snippets by display text, excerpts, typed `invalid_search_query`) and the per-canvas search rule |
-| [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: `snippet_placements` and `snippets.owner_id` (migration 008, both directions), the at-least-one-placement invariant, PUT / batch-position with `canvas_id`, remove from canvas, delete everywhere, transfer (move / show), merge, voice, groups, fork, readers, canvas title validation, typed errors |
+| [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: `snippet_placements` and `snippets.owner_id` (migration 008, both directions), the at-least-one-placement invariant, PUT / batch-position with `canvas_id`, remove from canvas, delete everywhere, transfer (move / show), merge, voice, groups, fork, readers, canvas title validation, custom list order (`list_rank`, migration 010, fractional-index port and shared vectors), typed errors |
 | [Voice Capture](./features/voice_capture.md) | Voice takes end to end: clients, `POST /api/canvases/{id}/voice-takes`, line assembly (taps / auto split), STT client, `snippet_recordings` storage |
 | [Voice Dataset](./features/voice_dataset.md) | Word-bank vocabulary hints (Whisper `initial_prompt`), stored STT words / line spans (migration 007), transcript verification, recording stats and the zip dataset export format, fine-tuning outline |
 | [Tag Expressions](./features/tag_expressions.md) | User-wide tags, the tag expression language (spec + shared vectors), saved presets, rhyme `tag_filter`, migration 005 |
 | [Web Tag Expressions](./features/web_tag_expressions.md) | Web client of user-wide tags, tag expressions and presets: typed TS expression language (vectors), tag picker, filter bar, presets, rhyme notes filter |
 | [Web Snippet Placements](./features/web_snippet_placements.md) | Web canvas rename (list card pencil, header title) and snippet placements: typed placement API with `canvas_id` on every layout save, Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and canvases popover, editor "Also on", undo/redo rule for non-undoable cross-canvas operations |
 | [Web Rhyme Patterns](./features/web_rhyme_patterns.md) | Rhyme sidebar Pattern mode: line-range picking, typed detect/suggest API, slot-edit reducer with order invariants, per-slot columns with paging, tuple tray (make snippet, word bank), whole-line matches |
+| [Web Rhyme Order](./features/web_rhyme_meaning_order.md) | "Rhyme" / "Rhyme, then meaning" toggle shared by the rhyme sidebar, pattern columns and word bank rhymes: per-viewer persistence, `order` request field, band headers, similarity percent, fallback note |
 | [Web Word Bank](./features/web_word_bank.md) | Web word bank sidebar: add box, local tag-expression filter (typeless evaluator, vectors v2), multi-select list, rename/delete/tagging, rhyme families and rhymes-with, related words with warming retry, draft to snippet, "+ bank" and editor "Add to word bank" |
 | [Web Voice Capture](./features/web_voice_capture.md) | Web recorder modal (taps = line breaks, double tap = stop, silence auto-stop, word bank hints switch), upload to voice-takes, editor recordings list with Check transcript, Voice dataset stats and zip export |
 | [Sync Versions](./features/sync_versions.md) | Offline sync backend: content versions (migration 009), `base_version` checks and 409 `version_conflict` with `current`, client-chosen ids on creates and 409 `id_conflict`, `GET /api/sync/snapshot` |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words and phrases: migration 006, text rules, `/api/word-bank` (batch add, rename, delete, tag, rhymes, families, related words), `TagResponse.word_count`, related-word index and its cache/warmup settings |
+| [Agent Skill](./features/agent_skill.md) | `tools/agent/lcx.py` CLI (token config, read commands, typed plan v1, check diff, ordered apply stopping on the first error, rank port) and the lyrics-canvas Claude Code skill |
 | [DESIGN.md](./DESIGN.md) | Original feature requirements and design intent |
 
 ### Frontend Modules
@@ -206,6 +238,7 @@ quiet. Cards are dismissible per incident. See [health_banner.md](./features/hea
 | Module | Scope |
 |--------|-------|
 | [Authentication](./backend/auth.md) | JWT, bcrypt, user model, login/register |
+| [Personal API Tokens](./features/api_tokens.md) | `api_tokens` (migration 011), `/api/tokens` create / list / revoke, `lct_` bearer auth, login-only token management |
 | [Database & Models](./backend/database.md) | PostgreSQL, ORM models, Alembic migrations |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippets, sharing, forking |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, user-wide tag labels, associations, tag presets |
@@ -275,8 +308,11 @@ Snippet, Canvas, Tag, BankWord: version (content version, +1 per content change;
 | Voice | 8 (voice-takes, list recordings, recording audio, delete recording, put/delete verification, stats, export) | Bearer |
 | Word bank | 8 (list, add, rename, delete, tags, rhymes, families, related) | Bearer |
 | Sync | 1 (snapshot) | Bearer |
+| API tokens | 3 (create, list, revoke) | Bearer login JWT only |
 | Health | 1 | Public |
-| **Total** | **58 endpoints** | |
+| **Total** | **61 endpoints** | |
+
+Bearer is a login JWT or a personal API token (`lct_…`, [api_tokens.md](./features/api_tokens.md)).
 
 The routes the clients use declare typed pydantic response models; the generated OpenAPI document is
 committed at `docs/api/openapi.json` (see [api/README.md](./api/README.md)) and is the contract the
@@ -321,9 +357,13 @@ Features Index:
     depends_on: [rest_marks, snippet_placements, snippet_content_timestamp]
     doc: docs/features/global_search.md
   snippet_placements:
-    description: Snippet content separated from per-canvas layout so one snippet can be on several canvases. Migration 008 adds snippet_placements (snippet_id, canvas_id, position_x/y, width/height, z_index, group_id ON DELETE SET NULL, created_at; unique (snippet_id, canvas_id)) and snippets.owner_id, copying one placement per snippet and dropping the layout columns; the downgrade restores them from the oldest placement and splits every other placement into a duplicated snippet (content and tag links copied, recordings not). Invariant - every snippet has at least one placement - enforced (row locks + delete of snippets left with none, same transaction) on canvas delete, remove from canvas, move and merge. SnippetResponse gains placement_id and canvases [{id, title}] (lower(title), id; only the shared canvas in the shared view); layout fields come from the placement on the canvas in context. PUT /api/snippets/{id}?canvas_id= and PATCH batch-position {canvas_id, updates} require canvas_id; DELETE /api/canvases/{cid}/snippets/{sid} -> {snippet_deleted}; DELETE /api/snippets/{id} deletes everywhere; POST /api/canvases/{cid}/snippets/transfer {snippet_ids 1..500, target_canvas_id, mode move|show} -> {target_canvas_id, placed, already_on_target, removed_from_source}, all or nothing, same layout, z = target max + 1 + source z rank, ungrouped. Merge removes originals from this canvas only (shared ones keep their recordings). Voice append needs a placement on the take's canvas. Groups hold placements of their canvas. Fork copies content into new snippets of the forker. Search, similarity (optional canvas_id), t-SNE (read only), export and the shared view read the canvas's placements; rhyme notes read owner_id once per snippet. Canvas titles stripped, 1-255 code points (invalid_canvas_title). Typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas, group_not_found.
+    description: Snippet content separated from per-canvas layout so one snippet can be on several canvases. Migration 008 adds snippet_placements (snippet_id, canvas_id, position_x/y, width/height, z_index, group_id ON DELETE SET NULL, created_at; unique (snippet_id, canvas_id)) and snippets.owner_id, copying one placement per snippet and dropping the layout columns; the downgrade restores them from the oldest placement and splits every other placement into a duplicated snippet (content and tag links copied, recordings not). Invariant - every snippet has at least one placement - enforced (row locks + delete of snippets left with none, same transaction) on canvas delete, remove from canvas, move and merge. SnippetResponse gains placement_id and canvases [{id, title}] (lower(title), id; only the shared canvas in the shared view); layout fields come from the placement on the canvas in context. PUT /api/snippets/{id}?canvas_id= and PATCH batch-position {canvas_id, updates} require canvas_id; DELETE /api/canvases/{cid}/snippets/{sid} -> {snippet_deleted}; DELETE /api/snippets/{id} deletes everywhere; POST /api/canvases/{cid}/snippets/transfer {snippet_ids 1..500, target_canvas_id, mode move|show} -> {target_canvas_id, placed, already_on_target, removed_from_source}, all or nothing, same layout, z = target max + 1 + source z rank, ungrouped. Merge removes originals from this canvas only (shared ones keep their recordings). Voice append needs a placement on the take's canvas. Groups hold placements of their canvas. Fork copies content into new snippets of the forker. Search, similarity (optional canvas_id), t-SNE (read only), export and the shared view read the canvas's placements; rhyme notes read owner_id once per snippet. Canvas titles stripped, 1-255 code points (invalid_canvas_title). Custom list order - snippet_placements.list_rank varchar(64) COLLATE "C" not null, index (canvas_id, list_rank) (migration 010, backfilled per canvas in content_updated_at desc, created_at desc, id order as a0, a1, ...); exact Python port of fractional-indexing 3.2.0 generateKeyBetween / generateNKeysBetween (base-62, keys restricted to base-62 chars, at most 64) with shared vectors spec/list_rank_vectors.json for the web and Android ports; server puts new placements at the top (key_between(None, min rank)) on create (unless list_rank is given), voice take and transfer (source list order kept), merge keeps the first block's rank, fork copies ranks; list_rank on SnippetResponse and SyncPlacement, SnippetCreate / SnippetUpdate / BatchPositionItem.list_rank as last-write-wins layout. Typed errors invalid_canvas_title, placement_not_found, canvas_not_found, same_canvas, group_not_found, invalid_list_rank.
     entry_points:
       - backend/alembic/versions/008_snippet_placements.py
+      - backend/alembic/versions/010_placement_list_rank.py
+      - backend/app/services/placements/list_rank.py (key_between, n_keys_between, validate_rank)
+      - backend/app/services/placements/ranks.py (top_rank, rank_for_new)
+      - backend/scripts/export_list_rank_vectors.py -> spec/list_rank_vectors.json
       - backend/app/models/placement.py
       - backend/app/services/placements/ (errors, view, queries, removal, transfer)
       - backend/app/services/canvas_title.py
@@ -383,6 +423,17 @@ Features Index:
       - frontend/src/hooks/useRhymeQuery.ts
     depends_on: [beat_grid, canvas_rendering, snippet_crud]
     doc: docs/features/rhyme_view.md
+  rhyme_meaning_order:
+    description: 'Order "Rhyme, then meaning" for POST /api/nlp/rhyme-suggest, POST /api/nlp/rhyme-pattern/suggest (per slot column; line matches unchanged) and POST /api/word-bank/rhymes. Request order rhyme (default, unchanged) | meaning; every candidate / match gets band from its score (perfect >= 0.95, strong >= 0.85, near >= 0.75, loose; app/services/rhyme_order.py) and similarity (cosine to the meaning target, 4 decimals, null unless applied); responses carry order_applied. Meaning sorts the first MEANING_POOL = 1500 candidates of today''s order by band, similarity, score, rhyme position (the rest follow in today''s order), before paging. Target - rhyme-suggest: mean of the distinct anchor snippets (whole display text or current snippet_embeddings row) and text anchors; pattern: the request snippet; word bank: the anchor text. MeaningService - injectable Embedder, model loaded once in a worker thread, rows from a 20 000-entry LRU, then the related-word vocabulary matrix (dictionary words), then one batched encode in asyncio.to_thread; model unavailable -> today''s order, order_applied rhyme, one warning.'
+    entry_points:
+      - backend/app/services/rhyme_order.py
+      - backend/app/services/meaning/ (service, embedder, cache, store, order, errors)
+      - backend/app/api/embeddings.py (meaning_service, related_words, get_meaning_service)
+      - backend/app/services/rhyme_suggest_service.py (suggest meaning=, embeddings=)
+      - backend/app/services/rhyme_pattern_service.py, backend/app/services/rhyme_pattern/suggest.py (rank_slots, page_slots)
+      - backend/app/api/word_bank.py (POST /api/word-bank/rhymes)
+    depends_on: [rhyme_view, rhyme_patterns, word_bank]
+    doc: docs/features/rhyme_view.md#rhyme-then-meaning
   rhyme_patterns:
     description: Rhyme patterns across 2..16 consecutive lines of one snippet. Detect finds ordered slots (at most one span of 1..2 words per line; every member pair scores >= min_score, default 0.75, at min(k_a, k_b); same slot order as word order on every line; coverage >= 2; at most 8) by progressive alignment (pairwise Needleman-Wunsch, seed with the best line pair, fold in the rest, open new slots), with k, cohesion, rhyme-tail shape, full and default_on. Suggest takes client-edited slots and returns per-slot candidates that score >= min_score against every member (score = min(member_scores), best_anchor_id pattern:<sid>:<line>:<start>-<end>) from the shared dictionary index and a per-request index over spans of the user's other lines (tag_filter), paged per slot by offsets, plus note lines hitting 2+ slots in order. Typed 422 pattern_range_invalid / pattern_span_invalid / pattern_slot_order.
     entry_points:
@@ -448,7 +499,7 @@ Features Index:
     depends_on: [snippet_crud, typed_api]
     doc: docs/features/snippet_content_timestamp.md
   list_mode:
-    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle; rows follow the filter bar's tag expression (android_tag_expressions).
+    description: Toggle on the canvas page/screen that swaps the canvas for a vertically scrollable list of the canvas's snippets, ordered by last content edit (content_updated_at desc, created_at desc, id); on web that is the default of a sort menu with Created, A-Z and Custom (web_list_order). Web - follows the canvas tag filter and shows the type header, tags and a DOM beat grid per row. Clicking a row opens the inline editor in place. Multi-select shares the canvas selection, so merge, delete, context menu and undo are reused. Row order freezes while an editor is open. The mode is persisted per viewer in localStorage. Android - top-bar List / Canvas toggle, LazyColumn of the canvas cards, tap opens the editor, long-press selects, mode kept in the canvas ViewModel's SavedStateHandle; rows follow the filter bar's tag expression (android_tag_expressions).
     entry_points:
       - frontend/src/components/list/ (ListView, ListRow, GridPreview, useFrozenOrder)
       - frontend/src/lib/listMode/ (sortForList, applyFrozenOrder, listClick, view-mode persistence)
@@ -463,6 +514,17 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setMode, onListLongPress)
     depends_on: [snippet_content_timestamp, merge_blocks, grid_rearrange, canvas_rendering, snippet_crud, android_app]
     doc: docs/features/list_mode.md
+  android_list_order:
+    description: Android list-mode sorts and custom order. A Sort row above the list picks Last edited, Created, A-Z (Collator base strength on the display text) or Custom (list_rank asc in character order, then placement_id), remembered per device in DataStore. A drag handle per row reorders (long-press still selects); in Custom the drop sets keyBetween(above, below) with one list_rank layout PUT, in another sort (or when no key fits) the shown order with the moved row becomes the custom order of every placement on the canvas (keysBetween(null, null, n), one batch-position) and the sort switches to Custom. Optimistic with rollback. list_rank is an offline layout field (LayoutPatch, local placement, snapshot); offline creates take a key on top of the canvas and send it, merges keep the first block's key, transfers go on top of the target. ListRank is a Kotlin port of fractional-indexing 3.2.0 tested against spec/list_rank_vectors.json.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/list/ (ListRank, ListSort, ListOrder, ListReorder)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/list/ (ListSortStore, ListSortMenu, ListDrag, SnippetList)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/canvas/CanvasViewModel.kt (setListSort, moveListRow)
+      - android/core/sync/src/main/kotlin/dev/nymph/lyrics/sync/apply/LocalEdits.kt (ranks on create, update, batch, merge, transfer)
+      - android/core/sync/src/main/kotlin/dev/nymph/lyrics/sync/engine/LocalRanks.kt
+      - spec/list_rank_vectors.json
+    depends_on: [list_mode, android_offline_sync, android_snippet_placements, snippet_placements, android_app]
+    doc: docs/features/android_list_order.md
   android_app:
     description: Native Android client (Kotlin, Jetpack Compose) for the same features as the web client, redesigned for touch; uses the FastAPI backend as its engine. Pure-Kotlin core modules hold the API DTOs, the ported grid/rhyme/editor logic plus canvas geometry, and a typed OkHttp client. The app module has login/register, the canvas list, a Compose-drawn canvas (pan, pinch zoom, long-press selection and moves, merge, delete, list mode) and the rhyme sheet with materialize (docs/android/canvas.md).
     entry_points:
@@ -710,6 +772,18 @@ Features Index:
       - frontend/src/components/pages/CanvasListPage.tsx
     depends_on: [snippet_placements, web_tag_expressions, list_mode, merge_blocks, typed_api]
     doc: docs/features/web_snippet_placements.md
+  web_api_tokens:
+    description: Web client of personal API tokens. Canvas list header "API tokens" button opens ApiTokensDialog. Typed api/apiTokens.ts (GET/POST /api/tokens, DELETE /api/tokens/{id}) rejecting only with ApiTokenError (invalid_token_name, token_not_found, token_management_forbidden, validation, network, aborted, server, http). apiTokenStore holds the list (newest first), create state, the one-time secret (memory only, never logged or persisted, dropped on Done / close / revoking that token) and revoke state; one create and one revoke at a time; token_not_found on revoke counts as gone. Create validates the trimmed name (1..64 code points) locally and sends expires_in_days 30 / 90 / 365 / null (default 90). Revoke asks inline; copy uses the async Clipboard API.
+    entry_points:
+      - frontend/src/components/account/ApiTokensDialog.tsx
+      - frontend/src/components/account/ApiTokensView.tsx
+      - frontend/src/stores/apiTokenStore.ts
+      - frontend/src/lib/apiTokens/
+      - frontend/src/api/apiTokens.ts
+      - frontend/src/types/apiTokens.ts
+      - frontend/src/components/pages/CanvasListPage.tsx (API tokens button)
+    depends_on: [api_tokens]
+    doc: docs/features/web_api_tokens.md
 ```
   web_rests_and_search:
     description: Web client of rest marks and search. lib/grid/restMarks (tokenizeLine - every _ is a rest and a word separator, word_index counts words only; lineWords, displayText strip) passing spec/rest_mark_vectors.json; localSyllabifyLine emits {rest:true} per _, rebuildRawText writes _ per rest and each word at its first syllable, attachWords over word tokens; the editor keeps typed _, writes grid rests back as _, opens legacy rows (grid rests, no _) arranged by display-text match and saves canonical text; ArrowRight at the line end inserts a rest before the selection (nudgeSelection). Rhyme anchors, word bank add-from-selection, list/card text fallbacks and similarity previews use display text. In-canvas search box (canvasSearchStore, 150 ms debounce, session-only per canvas) filters canvas and list mode AND the tag filter, "N of M", ×/Esc clear, Ctrl/Cmd+F focus; SearchModal, its toolbar button and uiStore state removed. Canvas list header search over GET /api/search (typed SearchError incl. invalid_search_query and network, 250 ms debounce, latest-only), Canvases and Snippets sections with highlighted excerpts and canvas links; /canvas/:id?snippet=<sid> selects and centres (list mode scrolls), clears a hiding in-canvas search, toasts "Hidden by the tag filter".
@@ -806,3 +880,45 @@ Features Index:
       - frontend/src/components/sidebar/RhymeSidebar.tsx (mode switch)
     depends_on: [rhyme_patterns, rhyme_view, web_tag_expressions, web_word_bank, web_rests_and_search]
     doc: docs/features/web_rhyme_patterns.md
+  agent_skill:
+    description: tools/agent/lcx.py, a stdlib-only Python 3.11 CLI (code in tools/agent/lcxlib/) for agents. Config from env or ~/.config/lyrics-canvas/agent.env (LYRICS_API_TOKEN required, LYRICS_API_URL default http://10.1.1.69:32443, LYRICS_CA_FILE); the token only goes into the Bearer header. Reads print JSON (whoami, canvases, canvas <id|title> compact in list_rank order, tags, presets, bank, search, dump = GET /api/sync/snapshot). Plans (version 1, twelve ops, unknown ops/fields rejected) are checked against a fresh snapshot by simulating every op in order (canvas ids, exact titles or $refs; case-insensitive tag names; already-true ops are no-ops; remove_from a last canvas and stale edit_text base_version refused) into a text diff; plan apply --yes re-checks, then runs the steps in order through the real routes (tags, word-bank tags, transfer move/show, remove placement, layout PUT, batch-position re-rank with a fractional-indexing port, canvases, word bank, PUT raw_text with base_version) and stops at the first error, printing done / failed / not done. The lyrics-canvas skill (tools/agent/skill/lyrics-canvas/SKILL.md, symlinked into ~/.claude/skills) requires showing the diff and explicit user approval before apply --yes.
+    entry_points:
+      - tools/agent/lcx.py
+      - tools/agent/lcxlib/ (cli, config, client, errors, logs, rank, plan, world, checker, apply)
+      - tools/agent/skill/lyrics-canvas/SKILL.md
+      - tools/agent/tests/
+    depends_on: [sync_versions, snippet_placements, tag_expressions, word_bank, global_search]
+    doc: docs/features/agent_skill.md
+  web_rhyme_meaning_order:
+    description: Web client of the rhyme order toggle. One per-viewer choice (rhymeOrderStore, localStorage lyrics-canvas.rhymeOrder, default rhyme) shown as a "Rhyme" / "Rhyme, then meaning" radio group in the rhyme sidebar controls, above the pattern slot columns and in the word bank "Rhymes with" view; a change refetches each list from its first page. Meaning sends order "meaning" on POST /api/nlp/rhyme-suggest, /api/nlp/rhyme-pattern/suggest and /api/word-bank/rhymes (rhyme sends nothing). Each list keeps the order it asked for with the response's order_applied (ResultOrdering); later pages reuse the asked order. order_applied meaning -> band headers (Perfect / Strong / Near / Loose, from each row's band, fallback from score with the 0.95/0.85/0.75 edges in lib/rhyme/order.ts) where the band changes, appended pages continue the band; meaning asked but rhyme applied -> "Meaning order unavailable", no headers. Rows show the similarity as a quiet ≈NN%. Line matches in pattern mode are never banded.
+    entry_points:
+      - frontend/src/lib/rhyme/order.ts
+      - frontend/src/stores/rhymeOrderStore.ts
+      - frontend/src/components/rhyme/order/
+      - frontend/src/components/rhyme/CandidateList.tsx
+      - frontend/src/components/rhyme/pattern/SlotColumns.tsx
+      - frontend/src/components/wordBank/RhymesWithView.tsx
+    depends_on: [rhyme_meaning_order, rhyme_view, web_rhyme_patterns, web_word_bank]
+    doc: docs/features/web_rhyme_meaning_order.md
+  web_list_order:
+    description: Web client of custom list order. List mode's sort menu (Last edited, Created, A-Z, Custom; localStorage lyrics-canvas.listSort, per device) and manual reorder by a pointer-event drag handle or Alt+Up / Alt+Down on a focused row. Ranks are fractional index keys (port of fractional-indexing 3.2.0 in lib/listMode/rank.ts, passing spec/list_rank_vectors.json). In Custom a drop takes keyBetween(visible above, visible below) and sends one layout PUT with list_rank only; in another sort it adopts that sort for every placement on the canvas (filtered-out included), inserts the row, ranks with nKeysBetween(null, null, n), sends one batch-position call and switches to Custom. Optimistic with a serial send queue, conditional rollback and an error notice; no undo (the local undo stack has no layout ops; snapshots are patched with the ranks). No reorder while an editor is open.
+    entry_points:
+      - frontend/src/lib/listMode/ (rank, sort, sortPref, reorder, rankPatch)
+      - frontend/src/stores/listOrderStore.ts
+      - frontend/src/stores/canvasStore.ts (applyListRanks)
+      - frontend/src/api/placements.ts (setListRank, setListRanks, BatchPositionItem)
+      - frontend/src/components/list/ (ListSortMenu, useRowDrag, ListRow, ListView)
+      - spec/list_rank_vectors.json
+    depends_on: [list_mode, snippet_placements, typed_api]
+    doc: docs/features/web_list_order.md
+  api_tokens:
+    description: Revocable personal API tokens for scripts and agents. Migration 011 creates api_tokens (id, user_id FK users ON DELETE CASCADE indexed, name 1-64 after trim, token_hash char(64) unique sha256 hex, prefix first 12 chars, created_at, last_used_at, expires_at null = never, revoked_at). POST /api/tokens {name, expires_in_days 1..365 default 90 or null} -> 201 {token {id, name, prefix, created_at, last_used_at, expires_at}, secret lct_ + 43 chars shown once}; GET /api/tokens lists not revoked tokens newest first without secrets; DELETE /api/tokens/{id} -> 204 sets revoked_at. deps.get_auth treats a bearer starting with lct_ as an API token (sha256 lookup, valid while not revoked and not expired, last_used_at written at most once a minute by a conditional UPDATE, debug log auth.api_token user_id token_id, never the secret), anything else as the unchanged JWT path; get_current_user returns the user either way; require_login guards the token routes (403 token_management_forbidden for an API token). Typed errors invalid_token_name (422), token_not_found (404), token_management_forbidden (403).
+    entry_points:
+      - backend/alembic/versions/011_api_tokens.py
+      - backend/app/models/api_token.py
+      - backend/app/services/api_tokens/ (errors, secrets, values, service)
+      - backend/app/schemas/api_token.py
+      - backend/app/api/tokens.py (POST/GET /api/tokens, DELETE /api/tokens/{id})
+      - backend/app/api/deps.py (get_auth, get_current_user, require_login)
+    depends_on: [typed_api]
+    doc: docs/features/api_tokens.md

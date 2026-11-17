@@ -29,45 +29,31 @@ private inline fun parseOrNull(parse: () -> Instant): Instant? = try {
     null
 }
 
-/** A snippet with its parsed sort keys (each timestamp is parsed once per sort). */
-private class ListKey(val snippet: Snippet) {
-    val content: Instant? = parseServerTimestamp(snippet.contentUpdatedAt)
-    val created: Instant? = parseServerTimestamp(snippet.createdAt)
-}
-
-/** Newest first; an unreadable timestamp sorts after every readable one. */
-private val newestFirst: Comparator<Instant?> = nullsLast(reverseOrder())
-
-private val listKeyOrder: Comparator<ListKey> =
-    compareBy(newestFirst) { k: ListKey -> k.content }
-        .thenBy(newestFirst) { it.created }
-        .thenBy { it.snippet.id.value }
-
 /**
- * List-mode order: last content edit (`content_updated_at`) first, then newest `created_at`, then
- * id ascending, so equal timestamps still give one fixed order.
+ * The original list-mode order ([ListSort.LAST_EDITED]): last content edit (`content_updated_at`)
+ * first, then newest `created_at`, then id ascending, so equal timestamps still give one fixed order.
  */
-fun sortForList(snippets: List<Snippet>): List<Snippet> =
-    snippets.map(::ListKey).sortedWith(listKeyOrder).map { it.snippet }
+fun sortForList(snippets: List<Snippet>): List<Snippet> = sortForList(snippets, ListSort.LAST_EDITED)
 
 /**
  * A list-mode order captured at one moment (when the list is shown, or after an edit), so rows do
  * not jump while the user is looking at them. Only built by [of].
  */
 @ConsistentCopyVisibility
-data class ListOrder private constructor(val ids: List<SnippetId>) {
+data class ListOrder private constructor(val ids: List<SnippetId>, val sort: ListSort) {
     /**
      * The current [snippets] in this order: snippets this order has not seen (merged, created,
-     * materialized since) come first, sorted by [sortForList]; then the captured ids still present.
+     * materialized since) come first, sorted by [sort]; then the captured ids still present.
      */
     fun arrange(snippets: List<Snippet>): List<Snippet> {
         val byId = snippets.associateBy { it.id }
         val known = ids.toHashSet()
-        val unseen = sortForList(snippets.filter { it.id !in known })
+        val unseen = sortForList(snippets.filter { it.id !in known }, sort)
         return unseen + ids.mapNotNull(byId::get)
     }
 
     companion object {
-        fun of(snippets: List<Snippet>): ListOrder = ListOrder(sortForList(snippets).map { it.id })
+        fun of(snippets: List<Snippet>, sort: ListSort = ListSort.DEFAULT): ListOrder =
+            ListOrder(sortForList(snippets, sort).map { it.id }, sort)
     }
 }

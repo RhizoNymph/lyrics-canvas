@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.nymph.lyrics.app.canvas.gesture.CanvasGestureAction
+import dev.nymph.lyrics.app.canvas.list.ListSortBar
 import dev.nymph.lyrics.app.canvas.list.SnippetList
 import dev.nymph.lyrics.app.canvas.placements.TransferEvent
 import dev.nymph.lyrics.app.canvas.placements.TransferViewModel
@@ -102,6 +103,7 @@ fun canvasViewModel(
         savedState = createSavedStateHandle(),
         canvasUpdates = container.canvasUpdates,
         searchMemory = container.canvasSearches,
+        listSorts = container.listSorts,
     )
 }
 
@@ -277,15 +279,20 @@ fun CanvasScreen(
                                     onViewSize = vm::setViewSize,
                                     notSynced = LocalSyncUi.current.notSyncedSnippets,
                                 )
-                                is CanvasMode.SnippetList -> SnippetList(
-                                    rows = s.listRows,
-                                    selected = s.selection.ids,
-                                    onTap = { id -> vm.onTap(id) },
-                                    onLongPress = vm::onListLongPress,
-                                    listState = listState,
-                                    filtered = s.isFiltered,
-                                    notSynced = LocalSyncUi.current.notSyncedSnippets,
-                                )
+                                is CanvasMode.SnippetList -> Column(Modifier.fillMaxSize()) {
+                                    ListSortBar(sort = s.mode.order.sort, onSort = vm::setListSort)
+                                    SnippetList(
+                                        rows = s.listRows,
+                                        selected = s.selection.ids,
+                                        onTap = { id -> vm.onTap(id) },
+                                        onLongPress = vm::onListLongPress,
+                                        listState = listState,
+                                        filtered = s.isFiltered,
+                                        notSynced = LocalSyncUi.current.notSyncedSnippets,
+                                        onMove = if (s.busy) null else vm::moveListRow,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
                             }
                         }
                     }

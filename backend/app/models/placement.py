@@ -5,12 +5,17 @@ each canvas holding it lives here, one row per (snippet, canvas). ``group_id`` m
 the placement's own canvas; the services enforce that (app/services/placements/queries.py).
 Every snippet has at least one placement; the operations that remove placements delete a snippet
 left with none in the same transaction (app/services/placements/removal.py).
+
+``list_rank`` is the placement's place in the canvas's custom list order: a fractional index key
+(app/services/placements/list_rank.py) compared by byte order, hence ``COLLATE "C"``. Every service
+path that inserts a placement sets it (app/services/placements/ranks.py); the Python default
+``FALLBACK_RANK`` only covers direct ORM inserts (test fixtures).
 """
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, UniqueConstraint, func, text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,11 +23,17 @@ from app.models.base import Base, new_uuid
 
 DEFAULT_WIDTH = 300.0
 DEFAULT_HEIGHT = 200.0
+# key_between(None, None): the first key of an empty order.
+FALLBACK_RANK = "a0"
+LIST_RANK_INDEX = "ix_snippet_placements_canvas_list_rank"
 
 
 class SnippetPlacement(Base):
     __tablename__ = "snippet_placements"
-    __table_args__ = (UniqueConstraint("snippet_id", "canvas_id", name="uq_snippet_placements_snippet_canvas"),)
+    __table_args__ = (
+        UniqueConstraint("snippet_id", "canvas_id", name="uq_snippet_placements_snippet_canvas"),
+        Index(LIST_RANK_INDEX, "canvas_id", "list_rank"),
+    )
     # RETURNING the server-side created_at on insert, so a fresh row is usable without a reload.
     __mapper_args__ = {"eager_defaults": True}
 
@@ -41,7 +52,13 @@ class SnippetPlacement(Base):
     group_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("groups.id", ondelete="SET NULL"), nullable=True
     )
+    list_rank: Mapped[str] = mapped_column(String(64, collation="C"), nullable=False, default=FALLBACK_RANK)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def __init__(self, **kwargs: object) -> None:
+        # A placement always has a rank, also before its first flush.
+        kwargs.setdefault("list_rank", FALLBACK_RANK)
+        super().__init__(**kwargs)
 
     snippet = relationship("Snippet", back_populates="placements", lazy="raise")
     group = relationship("Group", back_populates="placements", lazy="raise")

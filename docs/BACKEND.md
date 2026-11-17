@@ -9,6 +9,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | Module | Scope | Key Files |
 |--------|-------|-----------|
 | [Authentication](./backend/auth.md) | JWT tokens, bcrypt hashing, user model, login/register | `auth_service.py`, `deps.py`, `auth.py` |
+| [Personal API Tokens](./features/api_tokens.md) | `api_tokens` (migration 011), create / list / revoke, `lct_` bearer auth, login-only token management | `services/api_tokens/`, `api/tokens.py`, `models/api_token.py`, `deps.py` |
 | [Database & Models](./backend/database.md) | Async PostgreSQL, ORM models, Alembic migrations | `database.py`, `models/`, `alembic/` |
 | [Canvas & Snippet CRUD](./backend/canvas-crud.md) | Canvas lifecycle, snippet operations, sharing, forking | `canvas_service.py`, `canvases.py` |
 | [Groups & Tags](./backend/groups-tags.md) | Group containers, user-wide tag labels, snippet-tag associations, tag presets ([tag_expressions](./features/tag_expressions.md)) | `group_service.py`, `tag_service.py`, `tag_preset_service.py`, `tag_expr/` |
@@ -21,7 +22,7 @@ FastAPI REST API powering authentication, canvas CRUD, NLP analysis, and export.
 | [Search across canvases](./features/global_search.md) | `GET /api/search`: canvases by title, snippets by display text | `search/`, `api/search.py` |
 | [Rest marks](./features/rest_marks.md) | `_` rest rule: tokens, word indexes, display text, every text consumer | `rest_marks.py` |
 | [Export](./backend/export.md) | Markdown, plain text, PDF generation | `export_service.py`, `export.py` |
-| [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: placements, migration 008, transfer, remove / delete everywhere, canvas titles, typed placement errors | `services/placements/`, `models/placement.py`, `api/placements.py`, `canvas_title.py` |
+| [Snippet Placements](./features/snippet_placements.md) | Snippet content vs per-canvas layout: placements, migration 008, transfer, remove / delete everywhere, canvas titles, list ranks (migration 010), typed placement errors | `services/placements/`, `models/placement.py`, `api/placements.py`, `canvas_title.py` |
 | [Voice Capture](./features/voice_capture.md) | Voice takes: upload, STT client, line assembly, append, recordings storage | `api/voice.py`, `services/voice/`, `recording_service.py` |
 | [Word Bank](./features/word_bank.md) | Per-user tagged words: CRUD, bulk tagging, rhymes / families over the bank, related words by embedding | `api/word_bank.py`, `services/word_bank/`, `models/word_bank.py` |
 | [Sync Versions](./features/sync_versions.md) | Offline sync: content `version` (migration 009), `base_version` checks (409 `version_conflict` + `current`), client ids on creates (409 `id_conflict`), `GET /api/sync/snapshot` | `services/sync/`, `api/sync.py`, `api/sync_errors.py`, `models/versioned.py` |
@@ -79,7 +80,7 @@ app/
     rest_marks.py                   `_` rest rule: tokenize, word tokens, display text, rebuild
     search/                         Search across canvases: query, matching, ILIKE prefilter, excerpt, service
   api/
-    deps.py                         Auth dependency injection
+    deps.py                         Auth dependency injection (JWT or lct_ API token)
     auth.py / canvases.py / snippets.py / merge.py / groups.py / tags.py / nlp.py / export.py / voice.py / search.py
     tag_presets.py / tag_errors.py  Preset routes; tag error envelope
 scripts/
@@ -102,6 +103,7 @@ scripts/
 | Export | 1 | Bearer |
 | Voice | 4 (voice-takes, list recordings, recording audio, delete recording) | Bearer |
 | Sync | 1 (snapshot) | Bearer |
+| API tokens | 3 (create, list, revoke) | Bearer login JWT only |
 | Health | 1 | Public |
 
 Every route the clients call declares a pydantic `response_model`; the generated OpenAPI document is
@@ -117,5 +119,5 @@ committed at [docs/api/openapi.json](./api/README.md) and a test fails when it d
 - **Typed responses**: response models keep the historical wire shape (`tests/test_response_shapes.py`); grids are emitted exactly as stored
 - **Server-side merge**: `POST /api/canvases/{id}/merge` replaces 2+ snippets in one transaction ([merge_blocks.md](./features/merge_blocks.md))
 - **Content versions**: snippets, canvases, tags and words carry `version` (+1 per content change, never layout); mutations take an optional `base_version` (409 `version_conflict` with `current`), creates an optional client `id` (idempotent, 409 `id_conflict`); `GET /api/sync/snapshot` returns all of a user's data ([sync_versions.md](./features/sync_versions.md))
-- **Snippet placements**: a snippet's layout is per canvas; one snippet can be on several canvases, moved or also shown via `POST /api/canvases/{id}/snippets/transfer`; PUT and batch-position require `canvas_id` ([snippet_placements.md](./features/snippet_placements.md))
+- **Snippet placements**: a snippet's layout is per canvas; one snippet can be on several canvases, moved or also shown via `POST /api/canvases/{id}/snippets/transfer`; PUT and batch-position require `canvas_id`; each placement has a `list_rank` for the canvas's custom list order (migration 010) ([snippet_placements.md](./features/snippet_placements.md#list-order))
 - **Voice takes**: `POST /api/canvases/{id}/voice-takes` transcribes via the STT service (`STT_URL`) and creates or appends in one transaction; contract error codes in `detail.error` ([voice_capture.md](./features/voice_capture.md)); word-bank vocabulary hints as Whisper `initial_prompt`, stored STT words / line spans, transcript verification, stats and zip dataset export ([voice_dataset.md](./features/voice_dataset.md))

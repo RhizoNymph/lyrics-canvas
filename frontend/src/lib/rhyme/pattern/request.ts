@@ -2,6 +2,8 @@
 import { PATTERN_LINE_MATCH_PAGE_SIZE, PATTERN_PAGE_SIZE } from '@/types/rhymePattern';
 import type { PatternDetectRequest, PatternLines, PatternSuggestRequest, SlotSpec } from '@/types/rhymePattern';
 import type { SourceName } from '@/types/rhyme';
+import { orderField } from '@/lib/rhyme/order';
+import type { RhymeOrder } from '@/lib/rhyme/order';
 import type { PatternSession, SlotEditState } from './types';
 
 /** The shared rhyme controls, read from rhymeStore, plus the session's dismissed ids. */
@@ -12,6 +14,8 @@ export interface PatternParams {
   /** Normalized tag expression, or null for no restriction (an invalid one never reaches here). */
   readonly tagFilter: string | null;
   readonly excludeIds: readonly string[];
+  /** Slot column order; absent = "rhyme" (the server default, not sent). */
+  readonly order?: RhymeOrder;
 }
 
 /** Which page a suggest call fetches: the whole first page, one slot's next page, or more line matches. */
@@ -63,6 +67,7 @@ export function buildSuggestRequest(
     include_rare: params.includeRare,
     ...(params.tagFilter !== null ? { tag_filter: params.tagFilter } : {}),
     exclude_ids: [...params.excludeIds],
+    ...orderField(params.order ?? 'rhyme'),
     limit: PATTERN_PAGE_SIZE,
     offsets: page.kind === 'slot_more' ? { [page.slotId]: page.offset } : {},
     line_matches: page.kind !== 'slot_more',

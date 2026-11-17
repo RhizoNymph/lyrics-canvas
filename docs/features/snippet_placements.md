@@ -3,6 +3,8 @@
 A snippet's **content** is separated from its **layout on a canvas**. One snippet can be placed on
 several canvases, each with an independent position, size, stacking order and group. Snippets can be
 moved to another canvas or also shown on one. Canvas titles are validated on create and rename.
+Each placement also carries a **list rank**, its place in the canvas's custom list order
+([List order](#list-order)).
 
 Clients: [web_snippet_placements.md](./web_snippet_placements.md),
 [android_snippet_placements.md](./android_snippet_placements.md).
@@ -17,7 +19,10 @@ Clients: [web_snippet_placements.md](./web_snippet_placements.md),
   placements.
 - Canvas title validation (`invalid_canvas_title`) on `POST /api/canvases` and `PUT /api/canvases/{id}`.
 - Typed errors `invalid_canvas_title`, `placement_not_found`, `canvas_not_found`, `same_canvas`,
-  `group_not_found`.
+  `group_not_found`, `invalid_list_rank`.
+- The custom list order: `snippet_placements.list_rank` (migration 010), the fractional-index port and
+  its shared vectors, server-assigned ranks for new placements, client ranks on create / PUT /
+  batch-position ([List order](#list-order)).
 
 ## Non-scope
 
@@ -28,6 +33,12 @@ Clients: [web_snippet_placements.md](./web_snippet_placements.md),
 - Persisting t-SNE layouts (see [t-SNE](#canvas-scoped-readers)).
 - Backwards compatibility: `canvas_id` is now required on PUT and batch-position; old clients fail
   their layout saves with 422.
+- Sorting rows by rank on the server: responses keep their order (canvas detail is oldest placement
+  first); clients sort (list sort menu and drag reorder are client features, see
+  [list_mode.md](./list_mode.md)).
+- Rebalancing long keys: ranks grow only with repeated insertion between the same two neighbours;
+  the 64-char cap returns `invalid_list_rank` and the client re-ranks the whole canvas in one
+  batch-position call.
 
 ## Data model
 
@@ -52,9 +63,11 @@ User 1──N Canvas 1──N SnippetPlacement N──1 Snippet N──1 User (o
 | `width`, `height` | float not null | default 300 / 200 |
 | `z_index` | int not null | default 0 |
 | `group_id` | uuid fk groups ON DELETE SET NULL | must be a group of `canvas_id` (service-enforced) |
+| `list_rank` | varchar(64) `COLLATE "C"` not null | fractional index key, custom list order (migration 010) |
 | `created_at` | timestamptz not null | default now() |
 
-Unique `(snippet_id, canvas_id)` (`uq_snippet_placements_snippet_canvas`).
+Unique `(snippet_id, canvas_id)` (`uq_snippet_placements_snippet_canvas`); index `(canvas_id,
+list_rank)` (`ix_snippet_placements_canvas_list_rank`).
 
 ORM: `app/models/placement.py` (`SnippetPlacement`); `Snippet.placements`, `Canvas.placements` and
 `Group.placements` are `passive_deletes` relationships (the DB cascades); `Snippet.placements` and
@@ -176,6 +189,7 @@ document), from `app/services/placements/errors.py` via `app/api/placement_error
 | `canvas_not_found` | 404 | transfer source or target is not the caller's canvas |
 | `same_canvas` | 422 | transfer target is the source |
 | `group_not_found` | 404 | `group_id` is not a group of the placement's canvas (or not a uuid) |
+| `invalid_list_rank` | 422 | a `list_rank` on create, PUT or batch-position is not a valid key ([List order](#list-order)) |
 
 A missing or malformed `canvas_id` is pydantic's 422. Existing 404s (`Canvas not found`,
 `Snippet not found`) keep their string details.
@@ -201,9 +215,9 @@ removing one of several placements) never bump `version` and ignore `base_versio
 
 | method | path | behaviour |
 |---|---|---|
-| POST | `/api/canvases/{cid}/snippets` | body unchanged; creates the snippet (owner = caller) and its placement on `cid`; `group_id` must be a group of `cid` (404 `group_not_found`) |
-| PUT | `/api/snippets/{id}?canvas_id={cid}` | `canvas_id` **required**. Content fields update the shared snippet; layout fields (`position_x, position_y, width, height, z_index, group_id`) the placement on `cid`, including the size derived from a new grid. Response in `cid` context. Not placed on `cid` → 404 `placement_not_found` |
-| PATCH | `/api/snippets/batch-position` | `{canvas_id, updates: [{id, position_x?, position_y?}]}`; `canvas_id` **required**, applies to every update; ids not placed there are skipped; `{updated: n}` |
+| POST | `/api/canvases/{cid}/snippets` | creates the snippet (owner = caller) and its placement on `cid`; `group_id` must be a group of `cid` (404 `group_not_found`); optional `list_rank` (validated, 422 `invalid_list_rank`), else top of the custom order |
+| PUT | `/api/snippets/{id}?canvas_id={cid}` | `canvas_id` **required**. Content fields update the shared snippet; layout fields (`position_x, position_y, width, height, z_index, group_id, list_rank`) the placement on `cid`, including the size derived from a new grid. Response in `cid` context. Not placed on `cid` → 404 `placement_not_found`; invalid `list_rank` → 422 `invalid_list_rank` before anything changes |
+| PATCH | `/api/snippets/batch-position` | `{canvas_id, updates: [{id, position_x?, position_y?, list_rank?}]}`; `canvas_id` **required**, applies to every update; ids not placed there are skipped; every rank is validated first (one invalid → 422 `invalid_list_rank`, nothing changes); `{updated: n}` |
 | DELETE | `/api/canvases/{cid}/snippets/{sid}` | remove from this canvas: 200 `{"snippet_deleted": bool}` (true when it was the last placement and the snippet is gone, with its recordings); not placed there → 404 `placement_not_found` |
 | DELETE | `/api/snippets/{id}` | delete everywhere: 204; all placements and recordings go; 404 `Snippet not found` if not the caller's |
 | POST | `/api/canvases/{cid}/snippets/transfer` | see [Transfer](#transfer) |
@@ -238,7 +252,10 @@ width, height` as on `cid` (the selection keeps its relative layout), `group_id`
 placed snippets by their source `z_index`, ties by id. A snippet already on the target keeps its
 target placement. In `move` mode the `cid` placements of all requested snippets are then removed
 (each now has its target placement, so none is orphaned; `delete_orphans` runs all the same).
-Recordings, tags and content are untouched: they belong to the snippet.
+Recordings, tags and content are untouched: they belong to the snippet. The new target placements
+go to the top of the target's custom list order, keeping their source list order among themselves:
+`generateNKeysBetween(null, min rank on target, k)` assigned in source (`list_rank`, placement id)
+order.
 
 ### Merge
 
@@ -247,7 +264,7 @@ their `cid` placements with their rows locked (`snippet_service.get_canvas_snipp
 `canvases`. In one transaction (`snippet_service.replace_with_merged`):
 
 - the merged snippet (owner = the originals' owner) is inserted with its tags and its placement on
-  `cid` (first block's position and group, computed size, z 0);
+  `cid` (first block's position, group and list rank, computed size, z 0);
 - an original **also placed on other canvases** loses only its `cid` placement; it stays there
   unchanged and keeps its recordings;
 - an original **only on `cid`** is deleted, and its recordings move to the merged snippet first
@@ -258,7 +275,8 @@ the clients drop them from the canvas, as before. See [merge_blocks.md](./merge_
 
 ### Voice takes
 
-`POST /api/canvases/{cid}/voice-takes`: `kind: new` creates the snippet with a placement on `cid`;
+`POST /api/canvases/{cid}/voice-takes`: `kind: new` creates the snippet with a placement on `cid`
+(top of the custom list order);
 `kind: append` needs the target snippet placed on `cid` (otherwise 404 `snippet_not_found`, as
 before). The appended content is shared; the new size goes to the `cid` placement only. Recordings
 stay attached to the snippet, whatever canvas they were taken on. See [voice_capture.md](./voice_capture.md).
@@ -277,7 +295,7 @@ group.
 `"<title> (fork)"` (the original cut so the result fits 255 code points). Each snippet placed on the
 source becomes a **new** snippet owned by the forker with its content copied (`snippet_type,
 grid_mode, beats_per_line, grid_data, raw_text, phonetics, derived_from, content_updated_at`) and one
-placement on the new canvas at the same position, size and z. Tag links, recordings and groups are
+placement on the new canvas at the same position, size, z and list rank. Tag links, recordings and groups are
 not copied (as before; phonetics and `derived_from` are now copied too).
 
 ### Canvas-scoped readers
@@ -295,6 +313,72 @@ not copied (as before; phonetics and `derived_from` are now copied too).
   placements there (y, then x).
 - **Rhyme notes** (`POST /api/nlp/rhyme-suggest` `sources: notes`, and `GET /api/nlp/rhymes`): every
   snippet the user owns, read through `owner_id`, so a snippet on several canvases counts once.
+
+## List order
+
+The custom list order of a canvas is its placements sorted by `list_rank` ascending in **byte order**,
+then `placement_id` ascending. Ties are allowed (two offline devices may pick the same key).
+
+**Keys.** `app/services/placements/list_rank.py` is an exact port of `fractional-indexing` 3.2.0
+(rocicorp): `key_between(a, b)` = `generateKeyBetween`, `n_keys_between(a, b, n)` =
+`generateNKeysBetween`, base-62 digits `0-9A-Za-z`. A key is an integer part whose head letter gives
+its length (`a`..`z`: 2..27 chars, `Z`..`A`: 2..27 chars, all `Z`.. keys sort before `a`.. keys)
+followed by a fraction that never ends in `0`. `validate_rank` accepts what `validateOrderKey`
+accepts, **restricted to base-62 characters** (3.2.0 checks only the head and the trailing zero), and
+at most 64 chars; anything else raises `InvalidListRankError` (422 `invalid_list_rank`).
+Generation errors (`a >= b`, exhausted key space) are `RankGenerationError`, a subclass.
+
+**Shared vectors.** `spec/list_rank_vectors.json` (`between`, `n_between`, `invalid`) is generated
+from the port by `backend/scripts/export_list_rank_vectors.py`; `tests/placements/test_list_rank_vectors.py`
+fails when the file drifts. The web (`frontend/src/lib/listMode/rank.ts`) and Android
+(`core/logic/.../list/ListRank.kt`) ports must pass all of it. `tests/placements/test_list_rank.py`
+checks the port against values worked out by hand from the published algorithm.
+
+**Server-assigned ranks** (`app/services/placements/ranks.py`): a new placement goes to the top:
+`key_between(None, min(list_rank on the canvas))` (`"a0"` on an empty canvas). `min` runs in the
+column's `"C"` collation, so it agrees with Python string order.
+
+| path | rank |
+|---|---|
+| snippet create (`POST /api/canvases/{cid}/snippets`) | `list_rank` from the body (validated) or the top |
+| voice take `kind: new` | the top |
+| merge | the first block's rank (merge order) |
+| transfer move / show | top of the target, source list order kept among the moved |
+| fork | the source placement's rank |
+
+**Client-set ranks** are layout: last-write-wins, no `base_version`, no `version` or
+`content_updated_at` change: `SnippetUpdate.list_rank` on PUT, `BatchPositionItem.list_rank` on
+batch-position (an item may carry only `list_rank`, so a whole-canvas re-rank is one call).
+
+**Wire.** `list_rank: str` on `SnippetResponse` (canvas detail, shared view, create, PUT, merge,
+voice take, version conflicts) and `SyncPlacement` (snapshot). Search hits carry no layout and no rank.
+
+`SnippetPlacement.__init__` defaults `list_rank` to `FALLBACK_RANK` (`"a0"`, the first key of an
+empty order) so in-memory placements always have one; every service path sets it explicitly.
+`LAYOUT_FIELDS` stays the six geometry/group columns; `RANK_FIELDS = {"list_rank"}` and
+`PLACEMENT_FIELDS` (their union) decide what `split_fields` / `apply_update` put on the placement.
+
+### Migration 010
+
+`alembic/versions/010_placement_list_rank.py` (revises 009). Upgrade: add `list_rank varchar(64)
+COLLATE "C"` nullable; per canvas, in the list order clients showed until now (snippet
+`content_updated_at` desc, `created_at` desc, snippet id asc), set `generateNKeysBetween(null, null,
+n)` = `a0, a1, ..., az, b00, ...` (a frozen copy of `incrementInteger` in the migration, checked against
+the port by `tests/placements/test_migration_010_db.py`); then `NOT NULL` and the index. A snippet on
+several canvases is ranked on each independently. Downgrade drops the index and the column.
+
+### Decisions
+
+- **Base-62 only.** `validateOrderKey` 3.2.0 lets any character through in the fraction and the
+  integer digits; such keys make `indexOf` return -1 later and break generation. The server rejects
+  them (`invalid` vectors such as `"a0!"`), and the client ports must too.
+- **`COLLATE "C"`.** The database default collation (`en_US.utf8`) folds case, so `"b00"` would sort
+  before `"Zz"`; the column is byte-ordered so SQL `min` / `ORDER BY` agree with every client.
+- **Tolerant response builder.** `_snippet_response` reads `list_rank` with a fallback of `"a0"` for
+  hand-built test doubles that predate the field; real placements always carry one.
+- **Exact-shape tests updated.** The wire-shape assertions in `tests/test_response_shapes.py`,
+  `tests/test_merge_route.py` and `tests/sync/test_snapshot_db.py` and the shared fake in
+  `tests/route_fakes.py` list every response key; they gained `list_rank` because the contract adds it.
 
 ## Data and control flow
 
@@ -320,14 +404,19 @@ read it like the old ORM row. `CanvasDetail` does the same for canvas detail (`s
 | file | role |
 |---|---|
 | `backend/alembic/versions/008_snippet_placements.py` | the migration, both directions |
-| `backend/app/models/placement.py` | `SnippetPlacement`, `DEFAULT_WIDTH/HEIGHT` |
+| `backend/alembic/versions/010_placement_list_rank.py` | `list_rank` column, backfill, index; `sequential_keys` |
+| `backend/app/models/placement.py` | `SnippetPlacement`, `DEFAULT_WIDTH/HEIGHT`, `FALLBACK_RANK`, `LIST_RANK_INDEX` |
+| `backend/app/services/placements/list_rank.py` | fractional-indexing 3.2.0 port: `key_between`, `n_keys_between`, `validate_rank`, `DIGITS`, `MAX_RANK_LENGTH`, `RankGenerationError` |
+| `backend/app/services/placements/ranks.py` | `min_rank`, `top_rank`, `top_ranks`, `rank_for_new` |
+| `backend/scripts/export_list_rank_vectors.py` | writes `spec/list_rank_vectors.json` from the port |
+| `spec/list_rank_vectors.json` | shared vectors for the web and Android ports |
 | `backend/app/models/snippet.py` | `Snippet.owner_id`, `Snippet.placements`; layout columns removed |
 | `backend/app/models/canvas.py`, `group.py` | `Canvas.placements`, `Group.placements` |
-| `backend/app/services/placements/errors.py` | `PlacementErrorCode`, `PlacementError` and subclasses |
-| `backend/app/services/placements/view.py` | `PlacedSnippet`, `CanvasRef`, `sort_canvas_refs`, `LAYOUT_FIELDS` |
+| `backend/app/services/placements/errors.py` | `PlacementErrorCode`, `PlacementError` and subclasses (incl. `InvalidListRankError`) |
+| `backend/app/services/placements/view.py` | `PlacedSnippet` (incl. `list_rank`), `CanvasRef`, `sort_canvas_refs`, `LAYOUT_FIELDS`, `RANK_FIELDS`, `PLACEMENT_FIELDS` |
 | `backend/app/services/placements/queries.py` | `owned_canvas`, `canvas_refs`, `placed_on_canvas`, `placed_snippets`, `placed_snippet`, `placed_by_placement_id`, `ensure_group_on_canvas` |
 | `backend/app/services/placements/removal.py` | `lock_snippets`, `delete_orphans`, `remove_placements`, `remove_from_canvas`, `delete_everywhere` |
-| `backend/app/services/placements/transfer.py` | `TransferMode`, `TransferResult`, `stacking_order`, `target_placements`, `transfer` |
+| `backend/app/services/placements/transfer.py` | `TransferMode`, `TransferResult`, `stacking_order`, `list_order`, `target_ranks`, `target_placements`, `transfer` |
 | `backend/app/services/canvas_title.py` | `CanvasTitle`, `new_canvas_title`, `rename_title`, `fork_title`, `MAX_CANVAS_TITLE_LENGTH` |
 | `backend/app/services/snippet_service.py` | `create_snippet`, `update_snippet` (+ pure `apply_update`), `batch_update_positions`, `delete_snippet`, `get_canvas_snippets`, `replace_with_merged`, `split_fields` |
 | `backend/app/services/canvas_service.py` | `CanvasDetail`, `delete_canvas`, `get_canvas_by_share_token`, `fork_copy`, `fork_canvas` |
@@ -351,3 +440,8 @@ read it like the old ORM row. `CanvasDetail` does the same for canvas detail (`s
 - Transfer and merge are all or nothing with one commit; transfer never changes an existing target
   placement.
 - Placement and layout changes never change a snippet's `version` ([sync_versions.md](./sync_versions.md)).
+- Every placement has a valid `list_rank` (base-62 fractional index key, at most 64 chars); ranks
+  compare by bytes (`COLLATE "C"` in SQL, plain `str` order in Python); a canvas's custom order is
+  (`list_rank`, `placement_id`).
+- A new placement made by the server is at the top of its canvas's custom order, except merge (first
+  block's rank) and fork (source rank).

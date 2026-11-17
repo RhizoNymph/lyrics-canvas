@@ -2,8 +2,8 @@
 
 ``PlacedSnippet`` exposes the flat attribute names ``SnippetResponse`` has always had, so the
 response builder (app/api/canvases.py ``_snippet_response``) reads content from the snippet and
-layout (``canvas_id, position_x, position_y, width, height, z_index, group_id``) from the
-placement. ``canvases`` lists every canvas holding the snippet, sorted by ``title.lower()`` then id.
+layout (``canvas_id, position_x, position_y, width, height, z_index, group_id, list_rank``) from
+the placement. ``canvases`` lists every canvas holding the snippet, sorted by ``title.lower()`` then id.
 """
 
 from __future__ import annotations
@@ -17,6 +17,10 @@ from app.models.snippet import GridMode, Snippet, SnippetType
 
 # The per-canvas columns; everything else on a snippet is shared content.
 LAYOUT_FIELDS: frozenset[str] = frozenset({"position_x", "position_y", "width", "height", "z_index", "group_id"})
+# The placement's place in the canvas's custom list order. Per canvas and last-write-wins like the
+# layout above, but kept apart from it: a rank is validated and server-assigned on insert.
+RANK_FIELDS: frozenset[str] = frozenset({"list_rank"})
+PLACEMENT_FIELDS: frozenset[str] = LAYOUT_FIELDS | RANK_FIELDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,3 +130,7 @@ class PlacedSnippet:
     @property
     def group_id(self) -> uuid.UUID | None:
         return self.placement.group_id
+
+    @property
+    def list_rank(self) -> str:
+        return self.placement.list_rank

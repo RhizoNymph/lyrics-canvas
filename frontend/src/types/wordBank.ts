@@ -3,6 +3,7 @@
  * backend's pydantic models.
  */
 import type { SnippetTag } from './index';
+import type { RhymeBand, RhymeOrder } from '@/lib/rhyme/order';
 
 /** A word or short phrase in the user's bank. `tags` are sorted by lower(name). */
 export interface BankWord {
@@ -46,6 +47,8 @@ export interface BankRhymesBody {
   min_score: number;
   k?: number;
   limit?: number;
+  /** "meaning" = rhyme bands, then similarity to the anchor word. Omitted for the server default "rhyme". */
+  order?: 'meaning';
 }
 
 export interface BankRhymeAnchor {
@@ -58,12 +61,17 @@ export interface BankRhymeMatch {
   word: BankWord;
   score: number;
   match_depth: number;
+  /** Always sent by the server; optional so older fixtures type-check (`rowBand` derives it from `score`). */
+  band?: RhymeBand;
+  /** Similarity to the anchor when meaning order was applied; null otherwise. */
+  similarity?: number | null;
 }
 
-/** Matches sorted by score desc, match_depth desc, lower(text). */
+/** Matches sorted by score desc, match_depth desc, lower(text); in meaning order by band, then similarity. */
 export interface BankRhymesResponse {
   anchor: BankRhymeAnchor;
   matches: BankRhymeMatch[];
+  order_applied?: RhymeOrder;
 }
 
 export interface BankFamiliesBody {

@@ -15,6 +15,9 @@ import SlotColumns from './SlotColumns';
 import TupleTray from './TupleTray';
 import LineMatchList from './LineMatchList';
 import PatternControls, { DetectThreshold } from './PatternControls';
+import RhymeOrderToggle from '../order/RhymeOrderToggle';
+import { OrderNote } from '../order/orderParts';
+import { presentationOf } from '@/lib/rhyme/order';
 import { errorStyle, mutedStyle } from '../sidebarStyles';
 
 const LABEL_MAX = 24;
@@ -58,6 +61,7 @@ function ReadyBody({ view, suggest, paging, notice, actionError, actions }: Read
   const wordMenu = picked === null ? [] : wordActions(view.edit, picked.line, picked.word, (m) => memberText(view, m));
   const empty = patternEmptyMessage(views, suggest);
   const results = view.results;
+  const presentation = results === null ? 'plain' : presentationOf(results.ordering);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -80,8 +84,15 @@ function ReadyBody({ view, suggest, paging, notice, actionError, actions }: Read
       {views.length === 0 && <DetectThreshold />}
       {suggest.kind === 'failed' && <div style={errorStyle}>{describePatternError(suggest.error)}</div>}
       {actionError !== null && <div style={errorStyle}>{describePatternError(actionError)}</div>}
+      {onViews.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <RhymeOrderToggle />
+          {suggest.kind === 'done' && <OrderNote presentation={presentation} />}
+        </div>
+      )}
       {onViews.length > 0 && suggest.kind !== 'idle' && (
         <SlotColumns
+          presentation={presentation}
           slots={onViews}
           columns={results?.columns ?? null}
           picks={view.picks}

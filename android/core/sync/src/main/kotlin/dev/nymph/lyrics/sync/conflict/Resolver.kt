@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.sync.conflict
 
+import dev.nymph.lyrics.logic.list.topRank
+import dev.nymph.lyrics.model.DEFAULT_LIST_RANK
 import dev.nymph.lyrics.model.PlacementId
 import dev.nymph.lyrics.model.SnippetCreateRequest
 import dev.nymph.lyrics.model.SnippetId
@@ -169,7 +171,12 @@ class Resolver(private val newId: () -> String, private val now: () -> String) {
         val x = placement.positionX + placement.width + SAVE_AS_NEW_GAP
         val y = placement.positionY
         val copy = mine.copy(id = id, createdAt = at, updatedAt = at, contentUpdatedAt = at, version = 1, phonetics = null)
-        val newPlacement = LocalPlacement(id, placement.canvasId, PlacementId(newId()), x, y, placement.width, placement.height, placement.zIndex, null)
+        // On top of the canvas's custom order, like any new snippet.
+        val rank = topRank(d.listRanksOn(placement.canvasId))?.value
+        val newPlacement = LocalPlacement(
+            id, placement.canvasId, PlacementId(newId()), x, y, placement.width, placement.height, placement.zIndex, null,
+            rank ?: DEFAULT_LIST_RANK,
+        )
         val body = SnippetCreateRequest(
             positionX = x,
             positionY = y,
@@ -180,6 +187,7 @@ class Resolver(private val newId: () -> String, private val now: () -> String) {
             gridData = mine.gridData,
             width = placement.width,
             height = placement.height,
+            listRank = rank,
         )
         val ops = listOf(SyncOp.CreateSnippet(id, placement.canvasId, body)) + mine.tagIds.map { SyncOp.SnippetTag(id, it, true, 1) }
         val withCopy = d.withSnippet(copy).withPlacement(newPlacement).let { it.withOutbox(it.outbox.insertAfter(entry.id, ops)) }

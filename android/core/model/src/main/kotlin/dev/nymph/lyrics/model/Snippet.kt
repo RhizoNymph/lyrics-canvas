@@ -74,7 +74,18 @@ data class Snippet(
     val canvases: List<CanvasRef>,
     /** Content version (docs/features/sync_versions.md): +1 per content change, server-side only. */
     val version: Int = 1,
+    /**
+     * The placement's key in this canvas's custom list order (a fractional index key; layout, not
+     * content). Ascending, ties by [placementId]. Defaults to [DEFAULT_LIST_RANK] when absent.
+     */
+    @SerialName("list_rank") val listRank: String = DEFAULT_LIST_RANK,
 )
+
+/**
+ * The rank a placement decodes with when the payload has none (`generateKeyBetween(null, null)`):
+ * fixtures and a local copy stored before list ranks existed. The server always sends one.
+ */
+const val DEFAULT_LIST_RANK: String = "a0"
 
 /**
  * Body of `POST /api/canvases/{id}/snippets`. Null fields are omitted and take the server
@@ -96,6 +107,8 @@ data class SnippetCreateRequest(
     val id: SnippetId? = null,
     val width: Double? = null,
     val height: Double? = null,
+    /** The new placement's custom-order key; null lets the server put it on top of the canvas's order. */
+    @SerialName("list_rank") val listRank: String? = null,
 )
 
 /**
@@ -116,16 +129,19 @@ data class SnippetUpdateRequest(
     val height: Double? = null,
     @SerialName("z_index") val zIndex: Int? = null,
     @SerialName("group_id") val groupId: GroupId? = null,
+    /** Layout: the placement's custom-order key on `cid` (last write wins, never version-checked). */
+    @SerialName("list_rank") val listRank: String? = null,
     /** Checked only when a content field is present: 409 `version_conflict` when the snippet changed since. */
     @SerialName("base_version") val baseVersion: Int? = null,
 )
 
-/** One entry of a batch position update. */
+/** One entry of a batch position update: a new position, a new custom-order key, or both (null = unchanged). */
 @Serializable
 data class PositionUpdate(
     val id: SnippetId,
-    @SerialName("position_x") val positionX: Double,
-    @SerialName("position_y") val positionY: Double,
+    @SerialName("position_x") val positionX: Double? = null,
+    @SerialName("position_y") val positionY: Double? = null,
+    @SerialName("list_rank") val listRank: String? = null,
 )
 
 /** Body of `PATCH /api/snippets/batch-position`: [canvasId] names the placements every update moves. */

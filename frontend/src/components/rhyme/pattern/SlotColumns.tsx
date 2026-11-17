@@ -3,6 +3,9 @@ import { canLoadMoreSlot } from '@/lib/rhyme/pattern';
 import { slotColor } from '../rhymeColors';
 import { btnStyle, monoStyle, mutedStyle } from '../sidebarStyles';
 import PatternCandidateRow from './PatternCandidateRow';
+import { withBandHeaders } from '@/lib/rhyme/order';
+import type { OrderPresentation } from '@/lib/rhyme/order';
+import { BandHeader } from '../order/orderParts';
 import type { PatternCandidate } from '@/types/rhymePattern';
 
 /** Minimum column width; columns sit side by side and scroll horizontally when they do not fit. */
@@ -19,10 +22,12 @@ interface Props {
   onPick: (slotId: string, candidate: PatternCandidate) => void;
   onDismiss: (id: string) => void;
   onMore: (slotId: string) => void;
+  /** `bands`: a band header where the band changes in each column. Default plain. */
+  presentation?: OrderPresentation;
 }
 
 /** One independently scrollable list per on slot (no Cartesian product). */
-export default function SlotColumns({ slots, columns, picks, paging, loading, onPick, onDismiss, onMore }: Props) {
+export default function SlotColumns({ slots, columns, picks, paging, loading, onPick, onDismiss, onMore, presentation = 'plain' }: Props) {
   return (
     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
       {slots.map((s) => {
@@ -42,16 +47,20 @@ export default function SlotColumns({ slots, columns, picks, paging, loading, on
               ) : column.candidates.length === 0 ? (
                 <div style={{ ...mutedStyle, padding: 6 }}>Nothing rhymes with every member at this score.</div>
               ) : (
-                column.candidates.map((c) => (
-                  <PatternCandidateRow
-                    key={c.id}
-                    candidate={c}
-                    colour={colour}
-                    picked={picks.get(s.id)?.candidateId === c.id}
-                    onPick={() => onPick(s.id, c)}
-                    onDismiss={() => onDismiss(c.id)}
-                  />
-                ))
+                withBandHeaders(column.candidates, presentation).map((item) =>
+                  item.kind === 'header' ? (
+                    <BandHeader key={item.key} band={item.band} compact />
+                  ) : (
+                    <PatternCandidateRow
+                      key={item.row.id}
+                      candidate={item.row}
+                      colour={colour}
+                      picked={picks.get(s.id)?.candidateId === item.row.id}
+                      onPick={() => onPick(s.id, item.row)}
+                      onDismiss={() => onDismiss(item.row.id)}
+                    />
+                  ),
+                )
               )}
               {column !== undefined && canLoadMoreSlot(column) && (
                 <div style={{ padding: 6, textAlign: 'center' }}>

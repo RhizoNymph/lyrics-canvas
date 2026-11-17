@@ -35,6 +35,8 @@ import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
 import dev.nymph.lyrics.app.rhyme.order.DataStoreRhymeOrderStore
 import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
+import dev.nymph.lyrics.app.canvas.list.DataStoreListSortStore
+import dev.nymph.lyrics.app.canvas.list.ListSortStore
 import dev.nymph.lyrics.app.tags.FilterTextStore
 import dev.nymph.lyrics.app.wordbank.DataStoreWordBankFilterStore
 import dev.nymph.lyrics.data.repository.HttpWordBankRepository
@@ -60,6 +62,7 @@ private val Context.authDataStore by preferencesDataStore(name = "auth")
 private val Context.voiceDataStore by preferencesDataStore(name = "voice")
 private val Context.tagFilterDataStore by preferencesDataStore(name = "tag_filters")
 private val Context.rhymeOrderDataStore by preferencesDataStore(name = "rhyme_order")
+private val Context.listViewDataStore by preferencesDataStore(name = "list_view")
 
 /**
  * Manual dependency graph, one per process (see [dev.nymph.lyrics.app.LyricsApp]). ViewModels
@@ -147,6 +150,8 @@ class AppContainer(
 
     /** "Rhyme" / "Rhyme, then meaning" for every rhyme list, per device (DataStore `rhyme_order`). */
     val rhymeOrders: RhymeOrderStore = DataStoreRhymeOrderStore(appContext.rhymeOrderDataStore)
+    /** The list-mode sort, per device (DataStore `list_view`). */
+    val listSorts: ListSortStore = DataStoreListSortStore(appContext.listViewDataStore)
 
     /** Silence auto-stop, "Use word bank as hints" and other per-device voice settings (DataStore `voice`). */
     val voiceSettings: VoiceSettingsStore = DataStoreVoiceSettings(appContext.voiceDataStore)

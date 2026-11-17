@@ -110,6 +110,7 @@ class PatternSuggestRequest(PatternLines):
     line_matches: bool = True
     line_match_limit: int = 30       # 1..100
     line_match_offset: int = 0       # ge 0
+    order: Literal["rhyme", "meaning"] = "rhyme"   # per slot column; see rhyme_view.md#rhyme-then-meaning
 class PatternCandidateModel(RhymeCandidateModel):
     member_scores: list[float]       # member order
 class PatternSlotResult(BaseModel):
@@ -128,13 +129,24 @@ class PatternSuggestResponse(BaseModel):
     line_matches: list[LineMatchModel]
     line_match_total: int
     elapsed_ms: float
+    order_applied: Literal["rhyme", "meaning"]   # "rhyme" when meaning was asked but the model is unavailable
 ```
 
 Candidate fields (inherited from `RhymeCandidateModel`): `score = min(member_scores)`; `match_depth` and
 `alignment` are those against the weakest member (first on ties); `best_anchor_id =
 "pattern:<snippet_id>:<line>:<start>-<end>"` of that member; `fits_slot` against the slot's `stress`;
 note candidates have ids `note:<sid>:<line>:<start>-<end>` with `word_offset`/`word_end` set and the
-snippet grid line sliced to the span; dictionary candidates `dict:<word>`.
+snippet grid line sliced to the span; dictionary candidates `dict:<word>`. Every candidate also has
+`band` (from `score`: perfect / strong / near / loose) and `similarity` (null unless
+`order_applied == "meaning"`).
+
+**Order "Rhyme, then meaning"** (`order: "meaning"`, shared with rhyme-suggest and word bank rhymes,
+described in [rhyme_view.md](./rhyme_view.md#rhyme-then-meaning)): each slot column, ranked as
+below, is re-sorted by band, then cosine similarity to the request's snippet (its whole display
+text, or its current `snippet_embeddings` row), then score, then the rhyme position, over its first
+1500 candidates, before `offsets` / `limit` paging. All columns are embedded in one batch. Line
+matches keep their order. Without the model the columns keep today's order and `order_applied` is
+`"rhyme"`.
 
 ### Errors
 
@@ -229,13 +241,16 @@ PatternSuggestRequest
          member (limit 5000 each), keep units every query returned, scores per member
        rank_slot: drop units whose text is or ends with a member's text; notes: one span per
          (snippet, line) (best score, fits slot, longest, earliest); rank score desc, mean member score
-         desc, match_depth desc, notes before dictionary, id; page [offsets[id], +limit)
+         desc, match_depth desc, notes before dictionary, id   (rank_slots)
+  -> order="meaning": target = the request snippet (stored row or display text); apply_orders over
+     every column with one embedding batch (MeaningService); fallback order_applied="rhyme"
+  -> worker thread (page_slots): per slot page [offsets[id], +limit) of the ordered column
      line matches (from the note candidates of every slot, before the text drop and line dedupe):
        per note line with options for 2+ slots: best_hits DP over (slot, word position), most hits then
        summed score, in slot order and word order, no overlap; keep >= 2 hits; skip a line whose
        note:<sid>:<line>:0 id is excluded; rank slots_hit desc, score desc, id; page
   -> PatternSuggestResponse; info log rhyme_pattern.suggest snippet lines slots candidates line_matches
-     sources tag_filter elapsed_ms
+     sources tag_filter order order_applied elapsed_ms
 ```
 
 Detect: load, dialect / weights, range, `detect`, models; logs `rhyme_pattern.detect snippet lines
@@ -256,10 +271,12 @@ pattern_lines min_score slots coverage elapsed_ms`.
 | `backend/app/services/rhyme_pattern/errors.py` | Typed errors | `PatternErrorCode`, `PatternError`, `PatternRangeInvalidError`, `PatternSpanInvalidError`, `PatternSlotOrderError` |
 | `backend/app/services/rhyme_pattern/resolve.py` | Range loading and slot spec checks | `PatternLine`, `PatternRange`, `pattern_line`, `resolve_range`, `ResolvedSlot`, `slot_ids`, `resolve_slots` |
 | `backend/app/services/rhyme_pattern/models.py` | Engine -> response models | `line_model`, `span_model`, `slot_model`, `pattern_candidate_model`, `line_match_model`, `pattern_span_id` |
-| `backend/app/services/rhyme_pattern/suggest.py` | Note span index, ranking, line matches | `NoteSpans`, `build_note_spans`, `rank_slot`, `repeats_member`, `SlotRequest`, `SuggestParams`, `compute`, `line_matches` |
-| `backend/app/services/rhyme_pattern_service.py` | Entry points and data access | `detect`, `suggest`, `PatternRepository`, `DbPatternRepository` (adds `snippet_on_canvas`), `default_dictionary_index`, `DictionaryIndexFactory` |
+| `backend/app/services/rhyme_pattern/suggest.py` | Note span index, ranking, paging, line matches | `NoteSpans`, `build_note_spans`, `rank_slot`, `repeats_member`, `SlotRequest`, `SuggestParams`, `Ranked`, `RankedSlots`, `rank_slots`, `page_slots`, `compute` (rank + today's order + page), `line_matches` |
+| `backend/app/services/rhyme_pattern_service.py` | Entry points and data access | `detect`, `suggest(..., meaning=, embeddings=)`, `PatternRepository`, `DbPatternRepository` (adds `snippet_on_canvas`), `default_dictionary_index`, `DictionaryIndexFactory` |
+| `backend/app/services/rhyme_order.py`, `backend/app/services/meaning/` | Meaning order (see rhyme_view.md#rhyme-then-meaning) | `apply_orders`, `MeaningService`, `snippet_parts` |
 | `backend/app/api/nlp.py` | Routes and error mapping | `rhyme_pattern_detect`, `rhyme_pattern_suggest`, `pattern_http_error` |
 | `backend/app/services/rhyme_suggest_service.py` | Reused: records, repository, `resolve_dialect/weights` (now typed by `PhoneticsOptions`), `candidate_model`, `unit_model`, `fits_slot`, `matches_filter` | |
+| `backend/tests/meaning/test_pattern_meaning.py` | Meaning order per column, line matches unchanged, offsets, fallback | |
 | `backend/tests/rhyme_pattern/` | Spans, detection (example, partial, crossing, cap, timing), candidates, line matches, service, route, DB tests; `fakes.py` (`FakePatternRepository`, `fake_dictionary_index`, `pattern_repo`) | |
 | `docs/api/openapi.json` | Regenerated snapshot | |
 
@@ -283,6 +300,8 @@ pattern_lines min_score slots coverage elapsed_ms`.
 - The dictionary source is never tag-filtered. Notes and line matches use only snippets that match
   `tag_filter`.
 - rhyme-suggest behaviour is unchanged.
+- `order: "rhyme"` (the default) gives exactly the pre-meaning columns. `order: "meaning"` never changes
+  a column's candidates, `total` or the line matches, only the order inside each column.
 
 ## Decisions (deviations from the shared contract, 2026-11-12)
 

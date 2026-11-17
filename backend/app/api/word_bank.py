@@ -12,10 +12,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.embeddings import get_meaning_service, get_related_words
 from app.api.sync_errors import conflict_responses, id_conflict_http_error, version_conflict_http_error
 from app.api.tag_errors import expression_http_error, owner_id
 from app.api.word_bank_errors import word_bank_errors, word_bank_http_error
-from app.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.models.word_bank import BankWord
@@ -53,21 +53,17 @@ from app.services.word_bank import service
 from app.services.word_bank.errors import TooManyWordsError, WordNotFoundError
 from app.services.word_bank.families import FamiliesResult, rhyme_families
 from app.services.word_bank.phonetic import PairScorer, PhoneticWord, phonetic_words
-from app.services.word_bank.related import RelatedWords, default_builder
+from app.services.word_bank.related import RelatedWords
 from app.services.word_bank.rhymes import RhymeMatch, rank_rhymes
+from app.services.meaning.order import apply_order
+from app.services.meaning.service import MeaningService, TextPart
+from app.services.rhyme_order import band_of
 from app.services.word_bank.service import NewWord, TagOp
 from app.services.word_bank.text import related_query, word_text, word_texts
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/word-bank", tags=["word-bank"])
-
-# the process-wide related-word index (built once, off the event loop; see related.py)
-related_words = RelatedWords(default_builder(settings.related_words_cache_dir))
-
-
-def get_related_words() -> RelatedWords:
-    return related_words
 
 
 # ---- helpers ----
@@ -231,7 +227,8 @@ async def set_tag(req: BankWordTagsUpdate, user: User = Depends(get_current_user
 def _matches(
     anchor_text: str, anchor_id: str | None, candidates: list[tuple[str, str]], req: BankRhymesRequest
 ) -> tuple[BankRhymeAnchor, list[RhymeMatch]]:
-    """CPU work for /rhymes (runs in a worker thread)."""
+    """CPU work for /rhymes (runs in a worker thread). Meaning order re-sorts every match, so it
+    ranks them all and ``limit`` is applied after ordering."""
     try:
         unit = unit_from_text(anchor_text, DEFAULT_DIALECT_MAP)
     except PronunciationError:
@@ -242,7 +239,7 @@ def _matches(
         phonetic_words(candidates),
         PairScorer(req.k),
         min_score=req.min_score,
-        limit=req.limit,
+        limit=req.limit if req.order == "rhyme" else max(1, len(candidates)),
         exclude_id=anchor_id,
         exclude_text=anchor_text if anchor_id is None else None,
     )
@@ -250,8 +247,14 @@ def _matches(
 
 
 @router.post("/rhymes", response_model=BankRhymesResponse, responses=word_bank_errors(404, 422))
-async def rhymes(req: BankRhymesRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text."""
+async def rhymes(
+    req: BankRhymesRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    meaning: MeaningService = Depends(get_meaning_service),
+):
+    """Bank words (matching ``tag_filter``) ranked against one word of the bank or a typed text;
+    ``order="meaning"`` sorts by score band, then meaning similarity to the anchor text."""
     started = time.perf_counter()
     tag_filter = _tag_filter(req.tag_filter)
     owner = owner_id(user)
@@ -267,15 +270,28 @@ async def rhymes(req: BankRhymesRequest, user: User = Depends(get_current_user),
     words = await service.filtered_words(db, owner, tag_filter)
     by_id = {str(w.id): w for w in words}
     anchor, found = await asyncio.to_thread(_matches, anchor_text, anchor_id, _plain(words), req)
+    target = [TextPart(anchor_text)] if req.order == "meaning" and anchor_text.strip() else []
+    ordered = await apply_order(
+        req.order, found, score=lambda m: m.score, text=lambda m: m.word.text, target=target, meaning=meaning
+    )
+    page = ordered.items[: req.limit]
     logger.info(
-        "word_bank.rhymes user_id=%s candidates=%d matches=%d k=%d elapsed_ms=%.1f",
-        owner, len(words), len(found), req.k, (time.perf_counter() - started) * 1000,
+        "word_bank.rhymes user_id=%s candidates=%d matches=%d k=%d order=%s order_applied=%s elapsed_ms=%.1f",
+        owner, len(words), len(found), req.k, req.order, ordered.applied, (time.perf_counter() - started) * 1000,
     )
     return BankRhymesResponse(
         anchor=anchor,
         matches=[
-            BankRhymeMatch(word=word_response(by_id[m.word.id]), score=m.score, match_depth=m.match_depth) for m in found
+            BankRhymeMatch(
+                word=word_response(by_id[o.item.word.id]),
+                score=o.item.score,
+                match_depth=o.item.match_depth,
+                band=band_of(o.item.score),
+                similarity=o.similarity,
+            )
+            for o in page
         ],
+        order_applied=ordered.applied,
     )
 
 
