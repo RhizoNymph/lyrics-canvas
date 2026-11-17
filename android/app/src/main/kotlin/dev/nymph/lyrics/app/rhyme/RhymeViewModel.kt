@@ -6,6 +6,8 @@ import dev.nymph.lyrics.data.repository.NlpRepository
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.app.rhyme.order.InMemoryRhymeOrderStore
 import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.rhythm.InMemoryRhythmFitStore
+import dev.nymph.lyrics.app.rhyme.rhythm.RhythmFitStore
 import dev.nymph.lyrics.logic.rhyme.RangeClickState
 import dev.nymph.lyrics.logic.rhyme.ResultOrdering
 import dev.nymph.lyrics.logic.rhyme.RhymeOperation
@@ -17,6 +19,7 @@ import dev.nymph.lyrics.logic.rhyme.clickWord
 import dev.nymph.lyrics.logic.rhyme.materializePosition
 import dev.nymph.lyrics.logic.rhyme.materializeRequest
 import dev.nymph.lyrics.logic.rhyme.planRhymeQuery
+import dev.nymph.lyrics.logic.rhyme.rhythmOutcome
 import dev.nymph.lyrics.logic.rhyme.toAnchorRect
 import dev.nymph.lyrics.logic.rhyme.toRhymeError
 import dev.nymph.lyrics.logic.tags.Completion
@@ -83,6 +86,8 @@ private fun RhymeQueryPlan.identity(): Any = listOf(this::class, queryKey(), exc
  *
  * The order ("Rhyme" / "Rhyme, then meaning") is part of the query params, follows the device's
  * choice in [orders] and is saved there by [setOrder]; a change re-queries from the first page.
+ * "Fit rhythm" works the same way through [rhythm] and [setRhythmFit] (sent only with a snippet
+ * anchor; the outcome of the first page holds for later pages).
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class RhymeViewModel(
@@ -91,6 +96,7 @@ class RhymeViewModel(
     private val snippets: SnippetRepository,
     private val debounceMs: Long = RHYME_QUERY_DEBOUNCE_MS,
     private val orders: RhymeOrderStore = InMemoryRhymeOrderStore(),
+    private val rhythm: RhythmFitStore = InMemoryRhythmFitStore(),
 ) : ViewModel() {
     private val session = MutableStateFlow(RhymeUiState(canvas = port.currentRhymeView()))
     val state: StateFlow<RhymeUiState> = session.asStateFlow()
@@ -107,6 +113,16 @@ class RhymeViewModel(
                 .collect { view -> session.update { it.copy(canvas = view) } }
         }
         viewModelScope.launch { orders.order.collect(::applyOrder) }
+        viewModelScope.launch { rhythm.enabled.collect(::applyRhythmFit) }
+    }
+
+    private fun applyRhythmFit(on: Boolean) =
+        session.update { if (it.params.rhythmFit == on) it else it.copy(params = it.params.copy(rhythmFit = on)) }
+
+    /** The "Fit rhythm" switch: re-query (from the first page) and remember it on this device. */
+    fun setRhythmFit(on: Boolean) {
+        applyRhythmFit(on)
+        viewModelScope.launch { rhythm.save(on) }
     }
 
     private fun applyOrder(order: RhymeOrder) = session.update { if (it.params.order == order) it else it.copy(params = it.params.copy(order = order)) }
@@ -213,7 +229,11 @@ class RhymeViewModel(
                             loading = false,
                             error = null,
                             expandedRow = null,
-                            ordering = ResultOrdering(asked = request.order ?: RhymeOrder.RHYME, applied = result.value.orderApplied),
+                            ordering = ResultOrdering(
+                                asked = request.order ?: RhymeOrder.RHYME,
+                                applied = result.value.orderApplied,
+                                rhythm = rhythmOutcome(request.rhythmFit == true, result.value.rhythmApplied, result.value.rhythmUnavailableReason),
+                            ),
                         )
                     }
                     is ApiResult.Failure -> session.update { it.copy(loading = false, error = toRhymeError(result.error, RhymeOperation.QUERY)) }

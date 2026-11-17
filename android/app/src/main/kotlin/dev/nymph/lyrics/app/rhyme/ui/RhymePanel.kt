@@ -29,7 +29,7 @@ import dev.nymph.lyrics.app.rhyme.RhymeViewModel
 import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.rhyme.order.BandHeader
-import dev.nymph.lyrics.app.rhyme.order.OrderNote
+import dev.nymph.lyrics.logic.rhyme.MEANING_UNAVAILABLE_NOTE
 import dev.nymph.lyrics.app.rhyme.order.bandedKey
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.logic.rhyme.BandedItem
@@ -90,7 +90,10 @@ fun RhymePanel(
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             HorizontalDivider(color = Palette.Border)
             state.error?.let { Text(errorText(it), color = Palette.Error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-            OrderNote(state.presentation, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            // Rhythm fit bands the rows too, so the meaning note does not depend on the presentation here.
+            if (state.ordering.meaningUnavailable) {
+                Text(MEANING_UNAVAILABLE_NOTE, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            }
         }
         val entries = state.items
         items(entries.size, key = { i -> bandedKey(entries, i) { it.id } }) { i ->

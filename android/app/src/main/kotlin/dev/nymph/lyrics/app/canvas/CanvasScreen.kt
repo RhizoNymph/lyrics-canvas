@@ -126,7 +126,7 @@ fun CanvasScreen(
     val rename by vm.rename.collectAsStateWithLifecycle()
     val quickAdd = wordBankQuickAdd(container)
     QuickAddToasts(quickAdd)
-    val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets, orders = container.rhymeOrders) }
+    val rhymeVm: RhymeViewModel = viewModel { RhymeViewModel(vm, container.nlp, container.snippets, orders = container.rhymeOrders, rhythm = container.rhythmFit) }
     val patternVm: PatternViewModel = viewModel { PatternViewModel(vm, container.rhymePatterns, container.snippets, orders = container.rhymeOrders) }
     val pattern by patternVm.state.collectAsStateWithLifecycle()
     val tagsVm = tagsViewModel(container, canvasId, vm)
