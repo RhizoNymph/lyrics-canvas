@@ -345,15 +345,15 @@ this phone").
    `batch-position`, so each move gets its placement back.
 9. **No snapshot after a pass that only parked or failed.** After a drain it is fetched only when
    something was sent, the wake was a refresh, or there is no snapshot yet.
+10. **The custom list order is layout.** `list_rank` is a `LayoutPatch` field, stored on the local
+    placement and decoded from the snapshot. Offline creates take a key on top of the canvas's
+    order, and a re-rank is queued as one layout operation per placement. See
+    [android_list_order.md](./android_list_order.md).
 11. **The score is content.** `LocalSnippet.score` / `scoreView` default to none, so older store
     files load unchanged. `ContentPatch.score` is a `ScoreChange` (Remove score is `ScoreChange(null)`,
     sent as an explicit `null`). A content edit involving a score queues the locally stored result.
     The review shows "Cadence changed" when mine and the server's scores differ. See
     [android_score_editor.md](./android_score_editor.md).
-10. **The custom list order is layout.** `list_rank` is a `LayoutPatch` field, stored on the local
-    placement and decoded from the snapshot. Offline creates take a key on top of the canvas's
-    order, and a re-rank is queued as one layout operation per placement. See
-    [android_list_order.md](./android_list_order.md).
 
 ## Tests
 
