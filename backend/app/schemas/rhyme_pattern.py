@@ -19,6 +19,7 @@ from app.schemas.rhyme import (
     ScoreWeightsModel,
     SourceName,
 )
+from app.services.rhyme_order import OrderName
 
 MAX_PATTERN_LINES = 16
 MAX_PATTERN_SLOTS = 8
@@ -107,6 +108,8 @@ class PatternSuggestRequest(PatternLines):
     line_matches: bool = True
     line_match_limit: int = Field(30, ge=1, le=100)
     line_match_offset: int = Field(0, ge=0)
+    # per slot column; line matches keep their order (docs/features/rhyme_view.md#rhyme-then-meaning)
+    order: OrderName = "rhyme"
 
     @model_validator(mode="after")
     def _ids_unique_offsets_valid(self) -> "PatternSuggestRequest":
@@ -148,6 +151,7 @@ class PatternSuggestResponse(BaseModel):
     line_matches: list[LineMatchModel]
     line_match_total: int
     elapsed_ms: float
+    order_applied: OrderName
 
 
 class PatternErrorBody(BaseModel):

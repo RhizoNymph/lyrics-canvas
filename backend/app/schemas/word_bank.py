@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.tag import SnippetTagResponse, TagErrorBody
 from app.schemas.versioning import BaseVersion, BaseVersions, ClientId
+from app.services.rhyme_order import Band, OrderName
 
 _RESPONSE_CONFIG = {"from_attributes": True, "json_schema_serialization_defaults_required": True}
 
@@ -86,6 +87,8 @@ class BankRhymesRequest(BaseModel):
     min_score: float = Field(0.5, ge=0.0, le=1.0)
     k: int = Field(2, ge=1, le=MAX_RHYME_K)
     limit: int = Field(100, ge=1, le=200)
+    # "meaning": score bands, by meaning similarity to the anchor text within a band
+    order: OrderName = "rhyme"
 
     @model_validator(mode="after")
     def _one_anchor(self) -> BankRhymesRequest:
@@ -106,6 +109,8 @@ class BankRhymeMatch(BaseModel):
     word: BankWordResponse
     score: float
     match_depth: int
+    band: Band
+    similarity: float | None  # cosine to the anchor text (4 decimals); None unless meaning order was applied
 
     model_config = _RESPONSE_CONFIG
 
@@ -113,6 +118,7 @@ class BankRhymeMatch(BaseModel):
 class BankRhymesResponse(BaseModel):
     anchor: BankRhymeAnchor
     matches: list[BankRhymeMatch]
+    order_applied: OrderName
 
     model_config = _RESPONSE_CONFIG
 

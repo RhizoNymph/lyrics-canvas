@@ -32,6 +32,16 @@ against the same contract; platform differences are noted per item.
   (merge results, materialized rhymes) appear at the top; deleted ones drop out.
 - **Mode persistence**: the chosen view is per viewer and never stored on the server (web:
   `localStorage`; Android: the screen's `SavedStateHandle`, so not across app launches).
+- **Custom order (server side)**: every placement carries `list_rank`, a fractional index key
+  (fractional-indexing 3.2.0, base-62) on `SnippetResponse` and `SyncPlacement`. The custom order of a
+  canvas is `list_rank` ascending by byte order (never locale), then `placement_id`. The server puts
+  new placements at the top (`key_between(null, min rank)`; create may pass its own `list_rank`), keeps
+  the first block's rank on merge, puts transferred snippets at the top of the target and copies ranks
+  on fork. Clients set ranks as layout: `PUT /api/snippets/{id}?canvas_id=` with `list_rank` only, or
+  one `PATCH /api/snippets/batch-position` with `{id, list_rank}` items for a whole-canvas re-rank. An
+  invalid key is 422 `invalid_list_rank`. Migration 010 ranked existing canvases in the last-edited
+  order above. Keys, vectors (`spec/list_rank_vectors.json`) and the server rules:
+  [snippet_placements.md](./snippet_placements.md#list-order).
 
 ## Web
 

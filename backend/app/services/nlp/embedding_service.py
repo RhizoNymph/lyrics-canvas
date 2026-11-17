@@ -1,4 +1,5 @@
 import logging
+import threading
 from functools import lru_cache
 
 import numpy as np
@@ -8,9 +9,16 @@ logger = logging.getLogger(__name__)
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 _model = None
+# get_model runs in worker threads (related-word index build, meaning order): load at most once at a time
+_load_lock = threading.Lock()
 
 
 def get_model():
+    with _load_lock:
+        return _load()
+
+
+def _load():
     global _model
     if _model is None:
         try:

@@ -63,6 +63,8 @@ class SnippetCreate(BaseModel):
     height: float = 200.0
     group_id: str | None = None
     derived_from: DerivedFromModel | None = None
+    # A fractional index key (``invalid_list_rank`` otherwise); omitted = top of the canvas's order.
+    list_rank: str | None = None
 
 
 class SnippetUpdate(BaseModel):
@@ -77,18 +79,24 @@ class SnippetUpdate(BaseModel):
     height: float | None = None
     z_index: int | None = None
     group_id: str | None = None
+    # the placement's custom list rank: layout, last-write-wins (``invalid_list_rank`` if not a key)
+    list_rank: str | None = None
     # checked only when a content field is set (layout is last-write-wins)
     base_version: BaseVersion | None = None
 
 
 class BatchPositionItem(BaseModel):
+    """Any of the fields may be omitted; an item with only ``list_rank`` re-ranks without moving."""
+
     id: uuid.UUID
     position_x: float | None = None
     position_y: float | None = None
+    list_rank: str | None = None
 
 
 class BatchPositionUpdate(BaseModel):
-    """Positions of placements on ``canvas_id`` (required; applies to every update)."""
+    """Positions and list ranks of placements on ``canvas_id`` (required; applies to every update).
+    One invalid rank fails the whole call (422 ``invalid_list_rank``) before anything changes."""
 
     canvas_id: uuid.UUID
     updates: list[BatchPositionItem]
@@ -105,8 +113,9 @@ class SnippetCanvasRef(BaseModel):
 
 class SnippetResponse(BaseModel):
     """A snippet in the context of one canvas: content is shared by every canvas holding it;
-    ``canvas_id, position_x, position_y, width, height, z_index, group_id`` and ``placement_id``
-    are that canvas's placement. ``canvases`` lists every canvas holding the snippet (including
+    ``canvas_id, position_x, position_y, width, height, z_index, group_id, list_rank`` and
+    ``placement_id`` are that canvas's placement (``list_rank``: the custom list order key, sorted
+    by byte order, ties by ``placement_id``). ``canvases`` lists every canvas holding the snippet (including
     this one), sorted by lower-cased title, then id."""
 
     id: str
@@ -123,6 +132,7 @@ class SnippetResponse(BaseModel):
     height: float
     z_index: int
     group_id: str | None = None
+    list_rank: str
     tags: list[SnippetTagResponse] = []
     phonetics: SnippetPhonetics | None = None
     derived_from: DerivedFromModel | None = None
