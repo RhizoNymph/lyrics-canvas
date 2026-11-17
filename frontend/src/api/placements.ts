@@ -31,6 +31,8 @@ export type SnippetUpdateBody = Partial<
     | 'z_index'
     | 'group_id'
     | 'list_rank'
+    | 'score'
+    | 'score_view'
   >
 >;
 

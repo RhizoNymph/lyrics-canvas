@@ -46,6 +46,8 @@ export function snippet(id: string, text: string, overrides: SnippetOverrides = 
     updated_at: '',
     content_updated_at: '',
     list_rank: 'a0',
+    score: null,
+    score_view: false,
     ...overrides,
   };
 }
