@@ -1,0 +1,26 @@
+"""Fixed numbers of score format v1 (spec/score_format.md section 1)."""
+
+from __future__ import annotations
+
+from typing import Final
+
+VERSION: Final = 1
+PPQ: Final = 48
+WHOLE: Final = 4 * PPQ
+MAX_BAR: Final = 2048
+MAX_TICKS: Final = PPQ * 4 * MAX_BAR
+MAX_METERS: Final = 256
+MAX_TEMPOS: Final = 256
+MAX_SAFE_INT: Final = 2**53 - 1
+NUM_MIN: Final = 1
+NUM_MAX: Final = 32
+DENS: Final = frozenset({1, 2, 4, 8, 16, 32})
+BPM_MIN: Final = 20
+BPM_MAX: Final = 400
+BPM_DECIMALS_TOLERANCE: Final = 1e-6
+SCORE_KEYS: Final = ("v", "ppq", "pickup", "meters", "tempos", "snap", "lines")
+METER_KEYS: Final = ("bar", "num", "den")
+TEMPO_KEYS: Final = ("bar", "bpm")
+LINE_KEYS: Final = ("notes",)
+NOTE_KEYS: Final = ("s", "t", "d", "a")
+ACCENTS: Final = frozenset({0, 1, 2})
