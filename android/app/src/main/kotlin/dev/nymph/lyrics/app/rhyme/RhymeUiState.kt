@@ -13,6 +13,8 @@ import dev.nymph.lyrics.logic.rhyme.ShownRange
 import dev.nymph.lyrics.logic.rhyme.SlotMode
 import dev.nymph.lyrics.logic.rhyme.listRows
 import dev.nymph.lyrics.logic.rhyme.parseManualSlot
+import dev.nymph.lyrics.logic.rhyme.rhythmFitEligible
+import dev.nymph.lyrics.logic.rhyme.rhythmNote as rhythmNoteOf
 import dev.nymph.lyrics.logic.tags.ExpressionField
 import dev.nymph.lyrics.logic.tags.RhymeTagFilter
 import dev.nymph.lyrics.logic.tags.rhymeTagFilter
@@ -91,6 +93,13 @@ data class RhymeUiState(
     val shown: ShownRange get() = shownRows(rows.size, total)
 
     val canLoadMore: Boolean get() = canLoadMoreRows(loading, offset, total)
+
+    /** "Fit rhythm" is offered only while a snippet chip anchors the query. */
+    val rhythmToggleShown: Boolean
+        get() = canvas?.let { rhythmFitEligible(it.selectedIds, it.selectedSnippets, excluded) } == true
+
+    /** Why rhythm fit was asked for and not applied to the shown rows; null otherwise. */
+    val rhythmNote: String? get() = rhythmNoteOf(ordering.rhythm)
 
     /** The typed phrase's echoed rhyme key. */
     val typedKey: String? get() = anchors.firstOrNull { it.provenance == Provenance.GENERATED }?.rhymeKey?.joinToString(" ")

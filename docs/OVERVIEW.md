@@ -157,6 +157,17 @@ order and sorts each band by meaning similarity to the anchor. The lists show a 
 changes and a quiet "≈NN%" per row, or "Meaning order unavailable" when the server answered in rhyme
 order. Changing it refetches from the first page. See
 [android_rhyme_meaning_order.md](./features/android_rhyme_meaning_order.md).
+
+### Score Tools (Android)
+Musical mode's server-side tools on Android. A "Make score" draft sheet asks the server for a draft
+score (`POST /api/snippets/{id}/score/draft`), either from the grid (note length, meter, tempo) or from
+a recorded take (meter, optional tempo to estimate). It shows the estimate and the unplaced / unmatched
+counts, then hands the score to the editor. An "Export" menu fetches MIDI or MusicXML
+(`GET .../score/export`) to the share sheet (FileProvider) or saves it with the system picker (SAF).
+Both are online only and wait for the snippet's changes to sync. On the rhyme sheet, a "Fit rhythm"
+switch (per device, snippet anchors only) sends `rhythm_fit`. Applied, it bands the rows and shows
+"♩NN%" per row; unavailable, it shows the reason. See
+[android_score_tools.md](./features/android_score_tools.md).
 ### API Tokens (web)
 The canvas list page header has an "API tokens" button (next to "Voice dataset") that opens a dialog for
 the user's personal API tokens: the list (name, prefix, created, last used, expires), create (name and an
@@ -207,6 +218,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Rests and Search](./features/android_rests_and_search.md) | Android rest marks (`_` in text ↔ grid rests, display text consumers), ▶ nudge inserting a rest at the end of a line, in-canvas search filter, search across canvases with focus on a snippet |
 | [Android Rhyme Order](./features/android_rhyme_meaning_order.md) | "Rhyme" / "Rhyme, then meaning" toggle (per device) for the rhyme sheet, pattern columns and word bank rhymes; band headers, similarity labels, "Meaning order unavailable" |
+| [Android Score Tools](./features/android_score_tools.md) | Musical mode on Android, server side: score draft sheet (from grid / from a take, estimate and counts), MIDI / MusicXML export via share sheet or SAF save, rhyme sheet "Fit rhythm" switch (per device, reason when unavailable, ♩NN% per row) |
 | [Android Rhyme Patterns](./features/android_rhyme_patterns.md) | Android rhyme-sheet pattern mode: line-range picking, detected and edited slots (pure reducer), one paged list per slot, tuple tray, whole-line matches |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
@@ -868,6 +880,18 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/wordbank/WordBankViewModel.kt (setRhymesOrder)
     depends_on: [android_app, android_rhyme_patterns, android_word_bank, rhyme_view, rhyme_patterns, word_bank]
     doc: docs/features/android_rhyme_meaning_order.md
+  android_score_tools:
+    description: Android musical-mode tools that need the server (feat/android-score-tools). API - ScoreToolsRepository draft (POST /api/snippets/{id}/score/draft, grid {note, meter, bpm} or recording {recording_id, meter, bpm|null explicit}) and export (GET .../score/export?format=midi|musicxml via ApiClient.downloadAttachment, Content-Disposition name), gated online and on LocalFirst.awaitSettled(snippet) (SCORE_NOT_SYNCED_YET, code not_synced); typed ScoreToolErrorKind (score_not_found, recording_not_found, recording_has_no_timings, draft_empty, invalid_score, snippet_not_found, needs connection, not synced...). ScoreDraftSheet(container, snippetId, onDraft, onDismiss) - From grid / From a recording (newest take with timings default, others disabled), meter presets + beats/den, tempo 20..400 two decimals (blank = estimate for takes), Make draft -> summary (estimated tempo, unplaced, unmatched), Use this draft -> onDraft(Score); online only with an offline message. ScoreExportMenu(container, snippetId, hasScore, onMessage) - Share / Save MIDI and MusicXML; cache/score-exports/<id>/ (last export only), FileProvider ${applicationId}.scoreexports, SAF CreateTypedDocument. Rhyme sheet "Fit rhythm" - RhythmFitStore (DataStore rhyme_order key rhyme_rhythm_fit), shown only with a snippet anchor, rhythm_fit sent only then (omitted otherwise), RhythmOutcome (NotAsked / Applied / Unavailable(no_score, slot_unplaced, OTHER)) with a note, applied bands rows (ResultOrdering.rhythm; meaningUnavailable note independent), ♩NN% per row, paging keeps the field and the first page's outcome. Editor hooks (sheet, export menu) are mounted by feat/android-score-editor.
+    entry_points:
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/score/tools/ (ScoreDraftSheet, ScoreDraftViewModel, ScoreExportMenu, ScoreExportViewModel, ScoreFileActions)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/rhythm/ (RhythmFitStore, RhythmFitUi)
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/score/tools/ (DraftForm, ScoreToolError)
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/rhyme/RhythmFit.kt
+      - android/core/data/src/main/kotlin/dev/nymph/lyrics/data/repository/ScoreToolsRepository.kt
+      - android/core/sync/src/main/kotlin/dev/nymph/lyrics/sync/repo/GatedScoreToolsRepository.kt
+      - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/score/ScoreTools.kt
+    depends_on: [score_format, android_app, android_offline_sync, android_voice_capture, android_rhyme_meaning_order, rhyme_view]
+    doc: docs/features/android_score_tools.md
   android_rests_and_search:
     description: Android client of rest marks and search. :core:logic tokenizer (`_` is one rest and a word separator; word_index counts words only), display text (strip; rests-only lines dropped), passing every vector of rest_mark_vectors.json (byte-for-byte copy in core/logic test resources). Local estimate emits {"rest": true} cells; rebuildRawText emits `_` per rest; attachWords and rhyme lineWords use word tokens; the editor's arranged check on open compares display text (legacy rows keep their rests, next save writes `_`). nudgeSelection(+1) at the end of a line inserts a rest before the selection (selection shifts right, row arranged); left at 0 stays a no-op. Display text in rhyme chips, card text fallback and word-bank add from editor selections. In-canvas search box above the tag filter bar (canvas and list mode) - NFC + lowercase substring per term on display text, debounced 150 ms, ANDed with the tag filter with the same hiding, "N of M", ×/Escape, per canvas for the process. Canvas list search across canvases - GET /api/search (typed DTOs, SearchError incl. invalid_search_query, limit clamped 1..200, local 200-code-point check), debounced 250 ms, Canvases + Snippets sections, highlighted excerpts, canvas title tap targets, "No matches", Retry. CanvasRoute.focusSnippetId opens a canvas with the snippet selected and centred (list - scrolled to), clearing a hiding in-canvas search and snackbar "Hidden by the tag filter" when the tag filter hides it.
     entry_points:
