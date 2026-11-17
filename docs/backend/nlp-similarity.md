@@ -80,12 +80,18 @@ def compute_embeddings_batch(texts: list[str]) -> list[list[float]] | None
 - Model: `all-MiniLM-L6-v2` (sentence-transformers)
 - Dimensions: 384
 - Parameters: ~22M
-- Loading: Lazy (global `_model = None`, initialized on first call)
+- Loading: Lazy (global `_model = None`, initialized on first call, behind a `threading.Lock` since the
+  related-word build and meaning order call it from worker threads)
 - Failure: Returns None if model fails to load, logs warning
 
 ### Usage
 
-Embeddings are used exclusively by the t-SNE service. They are computed on-the-fly for each t-SNE request (no caching/persistence, despite the `snippet_embeddings` table existing in the schema).
+The same model serves the t-SNE service (embeddings computed on the fly per request), the word bank
+related-word index ([word_bank.md](../features/word_bank.md#related-words)) and the "Rhyme, then
+meaning" order of the rhyme endpoints (`app/services/meaning/`, with its own LRU;
+[rhyme_view.md](../features/rhyme_view.md#rhyme-then-meaning)). Nothing writes the `snippet_embeddings`
+table; meaning order reads a row only when it is current. Migration 001 created its column as `bytea`
+while the model maps `vector(384)`.
 
 ### Batch Configuration
 

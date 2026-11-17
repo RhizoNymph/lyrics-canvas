@@ -21,9 +21,10 @@ Close the sidebar and nothing else has changed. Feature contract:
 | `src/stores/rhymeStore.ts` | `useRhymeStore`: session, params, anchors/candidates, dismissed, exclusions, anchor word ranges, materialize counts, loading/error |
 | `src/hooks/useRhymeQuery.ts` | 150 ms debounced re-query on selection / anchor / chip / word range / param changes while the sidebar is open |
 | `src/components/sidebar/RhymeSidebar.tsx` | The sidebar shell (380 px, full canvas height): header with close, `QueryControls`, `CandidateList`; `enter()` on mount, `exit()` on unmount |
-| `src/components/rhyme/QueryControls.tsx` | Search box (typed anchor), anchor chips, k, min score, slot (from selection / manual), source toggles, rare-words toggle |
+| `src/components/rhyme/QueryControls.tsx` | Search box (typed anchor), anchor chips, k, min score, order toggle, slot (from selection / manual), source toggles, rare-words toggle |
 | `src/components/rhyme/AnchorChips.tsx` | One chip per selected non-blank snippet with its echoed rhyme key; × excludes it for this query, + restores; ▸ expands the chip to the snippet's lines as clickable `SyllableStrip`s to pick a word range (label becomes the picked text, "part" marker, "whole line" resets) |
-| `src/components/rhyme/CandidateList.tsx` | Status line ("Showing a–b of total"), typed error line, scrollable rows, More |
+| `src/components/rhyme/CandidateList.tsx` | `CandidateListView` (props = store slice) + connected default: status line ("Showing a–b of total"), typed error line, scrollable rows with band headers in meaning order or the "Meaning order unavailable" note, More |
+| `src/lib/rhyme/order.ts`, `src/stores/rhymeOrderStore.ts`, `src/components/rhyme/order/` | Rhyme order toggle ("Rhyme" / "Rhyme, then meaning"), bands, persistence: see [web_rhyme_meaning_order.md](../features/web_rhyme_meaning_order.md) |
 | `src/components/rhyme/CandidateRow.tsx` | One result: text (click = chain search), syllable strip, score, depth, fits badge, source label; click row to expand; Materialize / Dismiss |
 | `src/components/rhyme/SyllableStrip.tsx` | Compact one-row grid from `grid_line.cells` (stressed bold, rests "·"); optional `selected` range highlight and `onWordClick(word_index)` (rests never clickable) |
 | `src/components/rhyme/AlignmentTable.tsx` | Aligned tail vs anchor, cell by cell, coloured by per-cell total |
@@ -53,6 +54,7 @@ not unit-tested; the store test mocks `@/api/client`.
 | `dismissed` | `Set<id>` | Sent as `exclude_ids`; also receives materialized ids |
 | `materializeCounts` | `Map<snippetId, number>` | Materializations per anchor snippet this session (row step-down) |
 | `viewSize` | `{ width, height }` | Canvas element size (set by `CanvasViewport`) for the viewport-centre fallback |
+| `ordering` | `ResultOrdering` (`requested`, `applied`) | Order the loaded candidates were asked for (from `rhymeOrderStore`) and the server's `order_applied`; `loadMore` pages in `requested`; reset by `exit` and empty/blocked queries |
 | `loading`, `error` | boolean, `RhymeError \| null` | Errors are stored, never thrown |
 
 Actions: `enter`, `exit`, `setTypedAnchor`, `excludeAnchor`, `restoreAnchor`, `setAnchorRange(snippetId, range | null)`,

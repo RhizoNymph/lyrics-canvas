@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.api.deps import get_current_user
+from app.models.placement import FALLBACK_RANK
 from app.models.user import User
 from app.schemas.canvas import CanvasCreate, CanvasUpdate, CanvasResponse, CanvasDetailResponse, ShareResponse
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
@@ -60,6 +61,9 @@ def _snippet_response(s) -> SnippetResponse:
         height=s.height,
         z_index=s.z_index,
         group_id=str(s.group_id) if s.group_id else None,
+        # Real placements always carry a rank; hand-built test doubles that predate it get the
+        # rank of a lone placement.
+        list_rank=getattr(s, "list_rank", FALLBACK_RANK),
         tags=[_snippet_tag_response(t) for t in (s.tags or [])],
         phonetics=SnippetPhonetics.model_validate(s.phonetics) if s.phonetics is not None else None,
         derived_from=DerivedFromModel.model_validate(s.derived_from) if s.derived_from is not None else None,

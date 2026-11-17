@@ -72,6 +72,15 @@ class VocabularyIndex:
     def __post_init__(self) -> None:
         self._positions.update({w: i for i, w in enumerate(self.words)})
 
+    def vectors(self, words: Sequence[str]) -> dict[str, np.ndarray]:
+        """The normalized rows of the given words that are in the vocabulary (exact text)."""
+        found: dict[str, np.ndarray] = {}
+        for word in words:
+            position = self._positions.get(word)
+            if position is not None:
+                found[word] = self.matrix[position]
+        return found
+
     def search(self, query: str, limit: int) -> list[RelatedHit]:
         """The ``limit`` words most similar to ``query`` (excluding the query itself, ignoring
         case), by cosine desc then word. CPU-bound: call it from a worker thread."""
@@ -157,6 +166,15 @@ class RelatedWords:
     @property
     def ready(self) -> bool:
         return isinstance(self._state, _Ready)
+
+    def vocabulary_vectors(self, words: Sequence[str], model_name: str) -> dict[str, np.ndarray]:
+        """Rows of the built index for ``words`` (meaning order, app/services/meaning/service.py);
+        empty until the index is ready, or when it was built with another model. Non-blocking."""
+        match self._state:
+            case _Ready(index=index) if index.encoder.model_name == model_name:
+                return index.vectors(words)
+            case _:
+                return {}
 
     async def start(self) -> None:
         """Start the build if nothing has started it yet (one build per process)."""

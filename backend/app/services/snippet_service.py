@@ -1,7 +1,8 @@
 """Snippet content and per-canvas layout (docs/features/snippet_placements.md).
 
 Content fields live on ``Snippet`` and are shared by every canvas holding it; layout fields
-(``LAYOUT_FIELDS``) live on the ``SnippetPlacement`` of one canvas. Ownership of a snippet is
+(``LAYOUT_FIELDS``) and the custom list rank (``RANK_FIELDS``) live on the ``SnippetPlacement`` of
+one canvas. Ownership of a snippet is
 ``Snippet.owner_id``; canvas-scoped operations check the placement's canvas owner.
 
 A content change also bumps ``Snippet.version`` once (docs/features/sync_versions.md#versions);
@@ -29,17 +30,19 @@ from app.services.placements.queries import (
     placed_snippet,
     placed_snippets,
 )
+from app.services.placements.list_rank import validate_rank
+from app.services.placements.ranks import rank_for_new
 from app.services.placements.removal import delete_everywhere, lock_snippets
-from app.services.placements.view import LAYOUT_FIELDS, PlacedSnippet
+from app.services.placements.view import PLACEMENT_FIELDS, PlacedSnippet
 from app.services.sync.bump import bump
 
 logger = logging.getLogger(__name__)
 
 
 def split_fields(fields: Mapping[str, object]) -> tuple[dict[str, object], dict[str, object]]:
-    """``(content, layout)``: the snippet's columns and the placement's columns."""
-    content = {k: v for k, v in fields.items() if k not in LAYOUT_FIELDS}
-    layout = {k: v for k, v in fields.items() if k in LAYOUT_FIELDS}
+    """``(content, layout)``: the snippet's columns and the placement's columns (``list_rank`` too)."""
+    content = {k: v for k, v in fields.items() if k not in PLACEMENT_FIELDS}
+    layout = {k: v for k, v in fields.items() if k in PLACEMENT_FIELDS}
     return content, layout
 
 
@@ -48,6 +51,8 @@ async def create_snippet(
 ) -> PlacedSnippet | None:
     """A new snippet owned by ``owner_id`` with its placement on the canvas; None when the canvas
     is not the caller's. ``group_id`` must be a group of that canvas (``GroupNotFoundError``).
+    ``list_rank`` is used when given (validated, ``InvalidListRankError``), else the placement goes
+    to the top of the canvas's custom order.
     ``snippet_id`` is a client-chosen id (app/services/sync/client_ids.py resolves retries)."""
     cid, owner = uuid.UUID(canvas_id), uuid.UUID(owner_id)
     if await owned_canvas(db, cid, owner) is None:
@@ -55,6 +60,7 @@ async def create_snippet(
     content, layout = split_fields(kwargs)
     if layout.get("group_id") is not None:
         await ensure_group_on_canvas(db, layout["group_id"], cid)
+    layout["list_rank"] = await rank_for_new(db, cid, layout.pop("list_rank", None))
     snippet = Snippet(id=snippet_id or uuid.uuid4(), owner_id=owner, **content)
     placement = SnippetPlacement(id=uuid.uuid4(), snippet_id=snippet.id, canvas_id=cid, **layout)
     db.add(snippet)
@@ -107,7 +113,7 @@ def apply_update(placed: PlacedSnippet, content_edits: Mapping[str, object], cha
     for key, value in changes.items():
         if value is None:
             continue
-        target = placed.placement if key in LAYOUT_FIELDS else placed.snippet
+        target = placed.placement if key in PLACEMENT_FIELDS else placed.snippet
         setattr(target, key, value)
     if content_changed:
         # SQL now(): the transaction clock, so it equals the updated_at written by the same UPDATE.
@@ -127,7 +133,10 @@ async def update_snippet(
 ) -> PlacedSnippet:
     """PUT /api/snippets/{id}?canvas_id=: content to the shared snippet, layout to the placement on
     ``canvas_id``. ``content_edits`` are the content fields the client sent (not derived values such
-    as a re-syllabified grid). ``PlacementNotFoundError`` when not placed on the caller's canvas."""
+    as a re-syllabified grid). ``PlacementNotFoundError`` when not placed on the caller's canvas;
+    ``InvalidListRankError`` (before anything changes) for an invalid ``list_rank``."""
+    if kwargs.get("list_rank") is not None:
+        validate_rank(kwargs["list_rank"])
     placed = await placed_snippet(db, uuid.UUID(snippet_id), canvas_id, uuid.UUID(owner_id))
     if placed is None:
         raise PlacementNotFoundError(f"snippet {snippet_id} is not on canvas {canvas_id}")
@@ -145,8 +154,12 @@ async def update_snippet(
 async def batch_update_positions(
     db: AsyncSession, canvas_id: uuid.UUID, updates: Sequence[Mapping[str, object]], owner_id: str
 ) -> int:
-    """Move placements on ``canvas_id``; ids not placed there (or not the caller's) are skipped.
-    Each update is ``{"id", "position_x"?, "position_y"?}``. Returns how many were updated."""
+    """Move or re-rank placements on ``canvas_id``; ids not placed there (or not the caller's) are
+    skipped. Each update is ``{"id", "position_x"?, "position_y"?, "list_rank"?}``; every rank is
+    validated before anything changes (``InvalidListRankError``). Returns how many were updated."""
+    for update in updates:
+        if update.get("list_rank") is not None:
+            validate_rank(update["list_rank"])
     wanted = [uuid.UUID(str(u["id"])) for u in updates]
     found = {s.id: s for s in await placed_snippets(db, canvas_id, uuid.UUID(owner_id), wanted)}
     count = 0
@@ -154,7 +167,7 @@ async def batch_update_positions(
         placed = found.get(uuid.UUID(str(update["id"])))
         if placed is None:
             continue
-        for key in ("position_x", "position_y"):
+        for key in ("position_x", "position_y", "list_rank"):
             if update.get(key) is not None:
                 setattr(placed.placement, key, update[key])
         count += 1
@@ -201,8 +214,13 @@ async def replace_with_merged(
     All or nothing: any database error rolls the whole transaction back and raises
     ``MergePersistError``; on success there is exactly one commit. ``merged_id`` is a client-chosen
     id for the merged snippet (app/services/sync/client_ids.py resolves retries).
+
+    The merged placement keeps the list rank of the first original (merge order) unless ``fields``
+    names one.
     """
     content, layout = split_fields(fields)
+    if layout.get("list_rank") is None and originals and originals[0].placement.list_rank is not None:
+        layout["list_rank"] = originals[0].placement.list_rank
     snippet = Snippet(id=merged_id or uuid.uuid4(), owner_id=originals[0].owner_id, **content)
     snippet.tags = list(tags)
     placement = SnippetPlacement(id=uuid.uuid4(), snippet_id=snippet.id, canvas_id=canvas_id, **layout)

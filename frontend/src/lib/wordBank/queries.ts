@@ -7,6 +7,8 @@ import type { FilterState } from '@/lib/tagFilter';
 import type { BankFamiliesBody, BankRhymesBody, RelatedWordsResponse, RhymeAnchorInput } from '@/types/wordBank';
 import { WordBankApiError, toWordBankApiError } from './errors';
 import { MAX_WORD_LENGTH } from './text';
+import { orderField } from '@/lib/rhyme/order';
+import type { RhymeOrder } from '@/lib/rhyme/order';
 
 export const DEFAULT_FAMILY_MIN_SCORE = 0.8;
 export const DEFAULT_RHYME_MIN_SCORE = 0.5;
@@ -23,10 +25,11 @@ export function familiesBody(filter: FilterState, minScore: number): BankFamilie
   return tag_filter === undefined ? { min_score: clampScore(minScore) } : { min_score: clampScore(minScore), tag_filter };
 }
 
-export function rhymesBody(anchor: RhymeAnchorInput, filter: FilterState, minScore: number): BankRhymesBody {
+/** `order` "rhyme" (the default) is not sent; "meaning" adds `order: "meaning"`. */
+export function rhymesBody(anchor: RhymeAnchorInput, filter: FilterState, minScore: number, order: RhymeOrder = 'rhyme'): BankRhymesBody {
   const base: BankRhymesBody = anchor.kind === 'word' ? { word_id: anchor.wordId, min_score: clampScore(minScore) } : { text: anchor.text.trim(), min_score: clampScore(minScore) };
   const tag_filter = tagFilterParam(filter);
-  return tag_filter === undefined ? base : { ...base, tag_filter };
+  return { ...(tag_filter === undefined ? base : { ...base, tag_filter }), ...orderField(order) };
 }
 
 export type RelatedQueryCheck = { ok: true; q: string } | { ok: false; problem: 'empty' | 'too_long' };

@@ -3,6 +3,7 @@ import { rhymePatternApi } from '@/api/client';
 import { useCanvasStore } from './canvasStore';
 import { useRhymeStore } from './rhymeStore';
 import { useWordBankStore } from './wordBankStore';
+import { currentRhymeOrder } from './rhymeOrderStore';
 import { format, parse } from '@/lib/tagExpr';
 import { materializePosition } from '@/lib/rhyme/materializePosition';
 import {
@@ -110,7 +111,7 @@ function enabledSources(sources: { notes: boolean; dictionary: boolean }): Sourc
   return out;
 }
 
-/** The shared rhyme controls as request params, or the local tag-filter refusal. */
+/** The shared rhyme controls (and the viewer's rhyme order) as request params, or the local tag-filter refusal. */
 function currentParams(dismissed: ReadonlySet<string>): PatternParams | PatternError {
   const rhyme = useRhymeStore.getState();
   const filter = parse(rhyme.tagFilterText);
@@ -121,6 +122,7 @@ function currentParams(dismissed: ReadonlySet<string>): PatternParams | PatternE
     includeRare: rhyme.includeRare,
     tagFilter: filter.expr === null ? null : format(filter.expr),
     excludeIds: [...dismissed],
+    order: currentRhymeOrder(),
   };
 }
 
@@ -178,12 +180,14 @@ export const useRhymePatternStore = create<RhymePatternState>((set, get) => {
   const fetchPage = async (page: SuggestPage, seq: number) => {
     const v = ready();
     if (v === null) return null;
-    const params = currentParams(get().dismissed);
-    if (params instanceof PatternError) throw params;
+    const live = currentParams(get().dismissed);
+    if (live instanceof PatternError) throw live;
+    // A later page keeps the order of the columns it appends to, so bands continue.
+    const params = page.kind === 'first' || v.results === null ? live : { ...live, order: v.results.ordering.requested };
     const req = buildSuggestRequest(v.session, v.edit, params, page);
     if (req === null) return null;
     const res = await rhymePatternApi.suggest(req, page.kind === 'first' ? 'suggest' : 'more');
-    return seq === suggestSeq ? { view: v, res } : null;
+    return seq === suggestSeq ? { view: v, res, order: params.order ?? 'rhyme' } : null;
   };
 
   const clearResults = () => {
@@ -258,7 +262,7 @@ export const useRhymePatternStore = create<RhymePatternState>((set, get) => {
           set({ suggest: { kind: 'idle' } });
           return;
         }
-        patchReady(got.view.session, () => ({ results: firstPageResults(got.res, get().dismissed) }));
+        patchReady(got.view.session, () => ({ results: firstPageResults(got.res, get().dismissed, got.order) }));
         set({ suggest: { kind: 'done' } });
       } catch (err) {
         if (seq !== suggestSeq) return;
