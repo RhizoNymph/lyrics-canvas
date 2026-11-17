@@ -3210,13 +3210,10 @@
         "type": "object"
       },
       "ScoreErrorBody": {
-        "description": "``score_text_mismatch`` (422): a rest-linked grid line has no text line (the sent grid and\ntext disagree); ``stored_score_invalid`` (500): the stored score no longer fits its grid.",
+        "description": "``stored_score_invalid`` (500): the stored score no longer fits its grid.",
         "properties": {
           "error": {
-            "enum": [
-              "score_text_mismatch",
-              "stored_score_invalid"
-            ],
+            "const": "stored_score_invalid",
             "title": "Error",
             "type": "string"
           },
@@ -6478,9 +6475,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/ScoreInvalidResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ScoreErrorResponse"
                     }
                   ],
                   "title": "Response 422 Create Snippet Api Canvases  Canvas Id  Snippets Post"
@@ -7810,9 +7804,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/ScoreInvalidResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ScoreErrorResponse"
                     }
                   ],
                   "title": "Response 422 Update Snippet Api Snippets  Snippet Id  Put"

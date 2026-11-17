@@ -29,6 +29,7 @@ from app.services.score import (
     Score,
     ScoreError,
     ScoreInvalid,
+    ScoreTextMismatch,
     apply_grid_rest_edit,
     apply_rest_link,
     changed_line_texts,
@@ -102,17 +103,24 @@ class StoredScoreInvalid(ScoreError):
 
 
 def _linked(raw_text: str, grid: GridDict, score: Score | None) -> tuple[str, GridDict]:
-    """The rest link (spec section 8) and the text splice (section 13). Raises ScoreTextMismatch
-    when a re-linked grid line has no text line (a client grid that disagrees with its text)."""
-    if score is None:
+    """The rest link (spec section 8) and the text splice (section 13). When a re-linked grid line
+    has no text line (a client grid that disagrees with its text), the text is kept as sent and a
+    warning is logged; the grid is still linked (the web client does the same)."""
+    if score is None or grid is None:
         return raw_text, grid
     linked = apply_rest_link(score, grid)
-    if linked is None or grid is None:
+    if linked is None:
         return raw_text, grid
     replacements = changed_line_texts(grid, linked)
     if not replacements:
-        return raw_text, grid
-    return splice_line_texts(raw_text, replacements), dict(linked)
+        return raw_text, dict(linked)
+    try:
+        return splice_line_texts(raw_text, replacements), dict(linked)
+    except ScoreTextMismatch as exc:
+        logger.warning(
+            "score.text_mismatch grid_line=%d text_lines=%d action=keep_text", exc.index, exc.available,
+        )
+        return raw_text, dict(linked)
 
 
 def _content(raw_text: str, grid: GridDict, score: Score | None, view: bool) -> ScoredContent:
@@ -152,7 +160,7 @@ def saved_content(
 ) -> ScoredContent:
     """The content an edit stores (module docstring). ``raw_text`` and ``grid`` are the edit's text
     and grid (sent, re-syllabified or unchanged). Raises ScoreInvalid (the client's score, or a
-    rest-only edit pushing notes past MAX_TICKS), ScoreTextMismatch and StoredScoreInvalid."""
+    rest-only edit pushing notes past MAX_TICKS) and StoredScoreInvalid."""
     final_view = stored.score_view if view is None else view
     match edit:
         case SetScore(raw=raw):
@@ -176,6 +184,6 @@ def saved_content(
 
 def new_content(*, raw_text: str, grid: GridDict, raw_score: object, view: bool) -> ScoredContent:
     """A new snippet's content: ``raw_score`` (None = no score) validated against ``grid``, then the
-    rest link. Raises ScoreInvalid and ScoreTextMismatch."""
+    rest link. Raises ScoreInvalid."""
     score = None if raw_score is None else check_score(raw_score, grid)
     return _content(raw_text, grid, score, view)

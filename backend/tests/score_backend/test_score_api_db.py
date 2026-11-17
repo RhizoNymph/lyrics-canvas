@@ -283,12 +283,35 @@ async def test_grid_rest_edit_past_max_ticks_is_422(me, song):
     assert await snippet_on(me, song, s["id"]) == s
 
 
-async def test_grid_text_mismatch_is_422(me, song):
+async def test_grid_text_mismatch_keeps_the_sent_text(me, song):
     s = await new_snippet(me, song, "I go now")
     grid = syllabify_text("I go now\nhello world")
-    res = await put_snippet(me, s["id"], song, grid_data=grid, score=score([], [(1, 0, 24), (2, 96, 24)]))
-    assert res.status_code == 422
-    assert res.json()["detail"]["error"] == "score_text_mismatch"
+    out = ok(await put_snippet(me, s["id"], song, grid_data=grid, score=score([], [(1, 0, 24), (2, 96, 24)])))
+    assert out["raw_text"] == "I go now"
+    assert rests(out, 1) == [False, False, True, False]
+
+
+async def test_client_resending_its_final_state_does_not_bump(me, song):
+    s = await new_snippet(me, song, "I go now", score=GAP, score_view=True)
+    out = ok(await put_snippet(
+        me, s["id"], song, grid_data=s["grid_data"], raw_text=s["raw_text"], score=s["score"], score_view=True,
+        base_version=s["version"],
+    ))
+    assert out["version"] == s["version"] and out["content_updated_at"] == s["content_updated_at"]
+    assert out == s
+
+
+async def test_client_grid_save_with_its_moved_score_bumps_once(me, song):
+    s = await new_snippet(me, song, "I go now", score=EVEN)
+    grid = copy.deepcopy(s["grid_data"])
+    cells = grid["lines"][0]["cells"]
+    grid["lines"][0]["cells"] = [cells[0], cells[1], {"rest": True}, cells[2]]
+    grid["lines"][0]["raw_text"] = "i go _ now"
+    moved = score([(0, 0, 24), (1, 24, 24), (2, 96, 24)])
+    out = ok(await put_snippet(me, s["id"], song, grid_data=grid, raw_text="i go _ now", score=moved, score_view=False))
+    assert out["version"] == 2 and out["score"] == moved and out["grid_data"] == grid
+    again = ok(await put_snippet(me, s["id"], song, grid_data=grid, raw_text="i go _ now", score=moved, score_view=False))
+    assert again["version"] == 2
 
 
 async def test_phonetics_follow_the_linked_text(me, song):
