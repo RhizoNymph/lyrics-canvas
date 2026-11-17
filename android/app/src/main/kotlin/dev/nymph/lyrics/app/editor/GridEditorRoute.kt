@@ -24,6 +24,8 @@ import dev.nymph.lyrics.app.di.AppContainer
 import dev.nymph.lyrics.app.editor.ui.AlsoOnLine
 import dev.nymph.lyrics.app.editor.ui.GridEditorScreen
 import dev.nymph.lyrics.app.editor.ui.LocalAddToWordBank
+import dev.nymph.lyrics.app.score.tools.ScoreDraftSheet
+import dev.nymph.lyrics.app.score.tools.ScoreExportMenu
 import dev.nymph.lyrics.app.ui.userMessage
 import dev.nymph.lyrics.app.voice.recordings.RecordingsSection
 import dev.nymph.lyrics.app.voice.recordings.RecordingsViewModel
@@ -127,9 +129,24 @@ fun GridEditorRoute(
             snackbar = snackbar,
             topBarActions = {
                 extraTopBarActions()
+                ScoreExportMenu(container, snippet.id, hasScore = snippet.score != null, onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } })
                 NeedsConnectionButton("Record", record, enabled = !flushing && !state.isSaving)
             },
             header = { AlsoOnLine(snippet, onOpenCanvas) },
+            scoreActions = viewModel,
+            draftSheet = { onDraft, onDismiss ->
+                // Online-only (from a recording); the local from-grid draft stays in the dialog.
+                ScoreDraftSheet(
+                    container,
+                    snippet.id,
+                    onDraft = { score ->
+                        onDraft(score)
+                        viewModel.save()
+                    },
+                    onDismiss = onDismiss,
+                )
+            },
+            onDraftProblemShown = viewModel::acknowledgeDraftProblem,
             bottomPanel = {
                 RecordingsSection(recordingsState, recordings, onCheckTranscript = { recording ->
                     recordings.stopPlayback()
