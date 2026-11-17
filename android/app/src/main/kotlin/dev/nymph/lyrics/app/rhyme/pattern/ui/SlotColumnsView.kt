@@ -33,7 +33,16 @@ import dev.nymph.lyrics.app.rhyme.pattern.PatternSession
 import dev.nymph.lyrics.app.rhyme.pattern.PatternViewModel
 import dev.nymph.lyrics.app.rhyme.pattern.SlotChip
 import dev.nymph.lyrics.app.rhyme.pattern.columnTitle
+import dev.nymph.lyrics.app.rhyme.order.BandHeader
+import dev.nymph.lyrics.app.rhyme.order.OrderNote
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderToggle
+import dev.nymph.lyrics.app.rhyme.order.SimilarityLabel
+import dev.nymph.lyrics.app.rhyme.order.bandedKey
 import dev.nymph.lyrics.app.ui.theme.Palette
+import dev.nymph.lyrics.logic.rhyme.BandedItem
+import dev.nymph.lyrics.logic.rhyme.rowBand
+import dev.nymph.lyrics.logic.rhyme.withBandHeaders
+import dev.nymph.lyrics.model.RhymeOrder
 import dev.nymph.lyrics.logic.rhyme.pattern.SlotColumn
 import dev.nymph.lyrics.logic.wordbank.WordTextCheck
 import dev.nymph.lyrics.logic.wordbank.validateWordText
@@ -50,9 +59,29 @@ private val MIN_COLUMN_WIDTH = 140.dp
 /**
  * One independently scrollable list per on slot, in slot order, paged horizontally (no Cartesian
  * product): header (letter and key), rows (tap = pick for the tuple), and "More" for the next page.
+ * Above them the order toggle ([order]); with meaning order applied each column shows band
+ * headers where the band changes, and "Meaning order unavailable" when the server could not.
  */
 @Composable
-fun SlotColumnsView(session: PatternSession, chips: List<SlotChip>, vm: PatternViewModel, onAddToBank: ((String) -> Unit)?, modifier: Modifier = Modifier) {
+fun SlotColumnsView(
+    session: PatternSession,
+    chips: List<SlotChip>,
+    vm: PatternViewModel,
+    onAddToBank: ((String) -> Unit)?,
+    modifier: Modifier = Modifier,
+    order: RhymeOrder = RhymeOrder.RHYME,
+) {
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            RhymeOrderToggle(order, vm::setOrder)
+        }
+        OrderNote(session.ordering.presentation, Modifier.padding(horizontal = 6.dp))
+        SlotColumnsRow(session, chips, vm, onAddToBank, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SlotColumnsRow(session: PatternSession, chips: List<SlotChip>, vm: PatternViewModel, onAddToBank: ((String) -> Unit)?, modifier: Modifier) {
     val columns = session.shownColumns
     if (columns.isEmpty()) {
         Text(if (session.loading) "Searching…" else "No lists yet.", color = Palette.Muted, fontSize = 12.sp, modifier = modifier.padding(12.dp))
@@ -95,7 +124,12 @@ private fun SlotColumnView(
             if (column.candidates.isEmpty()) {
                 item(key = "empty") { Text("No candidates for this slot.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
             }
-            items(column.candidates, key = { it.id }) { candidate ->
+            val entries = withBandHeaders(column.candidates, session.ordering.presentation) { rowBand(it.band, it.score) }
+            items(entries.size, key = { i -> bandedKey(entries, i) { it.id } }) { i ->
+                val candidate = when (val entry = entries[i]) {
+                    is BandedItem.Header -> return@items BandHeader(entry.band)
+                    is BandedItem.Row -> entry.value
+                }
                 PatternCandidateRow(
                     candidate = candidate,
                     picked = session.tray.isPicked(column.id, candidate.id),
@@ -138,6 +172,7 @@ private fun PatternCandidateRow(
         Text(candidate.text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(String.format(Locale.US, "%.2f", candidate.score), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Palette.CellText)
+            SimilarityLabel(candidate.similarity)
             if (candidate.fitsSlot) Text("fits", fontSize = 10.sp, color = Palette.Fits)
             Text(
                 if (candidate.source == SourceName.NOTES) "my line" else "dict",

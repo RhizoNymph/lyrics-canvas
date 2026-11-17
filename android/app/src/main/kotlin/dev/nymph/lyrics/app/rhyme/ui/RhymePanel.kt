@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
@@ -29,7 +28,12 @@ import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
 import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.tags.TagsUiState
+import dev.nymph.lyrics.app.rhyme.order.BandHeader
+import dev.nymph.lyrics.app.rhyme.order.OrderNote
+import dev.nymph.lyrics.app.rhyme.order.bandedKey
 import dev.nymph.lyrics.app.ui.theme.Palette
+import dev.nymph.lyrics.logic.rhyme.BandedItem
+import dev.nymph.lyrics.model.RhymeCandidate
 import dev.nymph.lyrics.logic.rhyme.RhymeError
 import dev.nymph.lyrics.logic.rhyme.RhymeOperation
 import dev.nymph.lyrics.app.wordbank.userMessage
@@ -86,33 +90,44 @@ fun RhymePanel(
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             HorizontalDivider(color = Palette.Border)
             state.error?.let { Text(errorText(it), color = Palette.Error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+            OrderNote(state.presentation, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
         }
-        items(state.rows, key = { it.id }) { candidate ->
-            val dismissState = rememberSwipeToDismissBoxState()
-            SwipeToDismissBox(
-                state = dismissState,
-                backgroundContent = {
-                    Box(Modifier.fillMaxSize().background(Palette.Border).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-                        Text("Dismiss", color = Palette.Muted, fontSize = 12.sp)
-                    }
-                },
-                onDismiss = { vm.dismiss(candidate.id) },
-            ) {
-                CandidateRow(
-                    candidate = candidate,
-                    anchor = state.anchors.firstOrNull { it.id == candidate.bestAnchorId },
-                    hasSlot = state.slot != null,
-                    expanded = state.expandedRow == candidate.id,
-                    materializing = candidate.id in state.materializing,
-                    onToggle = { vm.toggleRow(candidate.id) },
-                    onChain = { vm.setTypedText(candidate.text) },
-                    onMaterialize = { vm.materialize(candidate.id) },
-                    onDismiss = { vm.dismiss(candidate.id) },
-                    onAddToBank = onAddToBank?.let { add -> { add(candidate.text) } },
-                    bankProblem = (validateWordText(candidate.text) as? WordTextCheck.Invalid)?.problem?.userMessage(),
-                    modifier = Modifier.background(Palette.Sidebar),
-                )
+        val entries = state.items
+        items(entries.size, key = { i -> bandedKey(entries, i) { it.id } }) { i ->
+            when (val entry = entries[i]) {
+                is BandedItem.Header -> BandHeader(entry.band)
+                is BandedItem.Row -> CandidateEntry(entry.value, state, vm, onAddToBank)
             }
         }
+    }
+}
+
+/** One swipe-to-dismiss candidate row of the sheet. */
+@Composable
+private fun CandidateEntry(candidate: RhymeCandidate, state: RhymeUiState, vm: RhymeViewModel, onAddToBank: ((String) -> Unit)?) {
+    val dismissState = rememberSwipeToDismissBoxState()
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(Modifier.fillMaxSize().background(Palette.Border).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                Text("Dismiss", color = Palette.Muted, fontSize = 12.sp)
+            }
+        },
+        onDismiss = { vm.dismiss(candidate.id) },
+    ) {
+        CandidateRow(
+            candidate = candidate,
+            anchor = state.anchors.firstOrNull { it.id == candidate.bestAnchorId },
+            hasSlot = state.slot != null,
+            expanded = state.expandedRow == candidate.id,
+            materializing = candidate.id in state.materializing,
+            onToggle = { vm.toggleRow(candidate.id) },
+            onChain = { vm.setTypedText(candidate.text) },
+            onMaterialize = { vm.materialize(candidate.id) },
+            onDismiss = { vm.dismiss(candidate.id) },
+            onAddToBank = onAddToBank?.let { add -> { add(candidate.text) } },
+            bankProblem = (validateWordText(candidate.text) as? WordTextCheck.Invalid)?.problem?.userMessage(),
+            modifier = Modifier.background(Palette.Sidebar),
+        )
     }
 }

@@ -136,6 +136,14 @@ picks build a tuple ("Make snippet", "Add picks to word bank"), and a Whole line
 lines that already hit 2+ slots. Server-only ("Needs connection" offline). See
 [android_rhyme_patterns.md](./features/android_rhyme_patterns.md).
 
+### Rhyme Order (Android)
+The rhyme sheet, the pattern slot columns and the word bank's Rhymes with view share an order toggle,
+"Rhyme" / "Rhyme, then meaning", remembered per device. Meaning order sends `order: "meaning"`; the
+server keeps fixed score bands (Perfect >= 0.95 > Strong >= 0.85 > Near >= 0.75 > Loose) in rhyme
+order and sorts each band by meaning similarity to the anchor. The lists show a header where the band
+changes and a quiet "≈NN%" per row, or "Meaning order unavailable" when the server answered in rhyme
+order. Changing it refetches from the first page. See
+[android_rhyme_meaning_order.md](./features/android_rhyme_meaning_order.md).
 ### API Tokens (web)
 The canvas list page header has an "API tokens" button (next to "Voice dataset") that opens a dialog for
 the user's personal API tokens: the list (name, prefix, created, last used, expires), create (name and an
@@ -185,6 +193,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Android Tag Expressions](./features/android_tag_expressions.md) | Android tag picker (link / unlink / create / edit user-wide tags), expression filter bar with autocomplete and presets, rhyme "Only my lines matching" |
 | [Android Snippet Placements](./features/android_snippet_placements.md) | Android canvas rename (list and title), Move to / Also show on canvas picker, Remove from this canvas vs Delete everywhere, "⧉ N" badge and editor "Also on"; every layout save names the open canvas |
 | [Android Rests and Search](./features/android_rests_and_search.md) | Android rest marks (`_` in text ↔ grid rests, display text consumers), ▶ nudge inserting a rest at the end of a line, in-canvas search filter, search across canvases with focus on a snippet |
+| [Android Rhyme Order](./features/android_rhyme_meaning_order.md) | "Rhyme" / "Rhyme, then meaning" toggle (per device) for the rhyme sheet, pattern columns and word bank rhymes; band headers, similarity labels, "Meaning order unavailable" |
 | [Android Rhyme Patterns](./features/android_rhyme_patterns.md) | Android rhyme-sheet pattern mode: line-range picking, detected and edited slots (pure reducer), one paged list per slot, tuple tray, whole-line matches |
 | [Android Word Bank](./features/android_word_bank.md) | Android word bank screen (add, filter, select, rename, delete, tag), rhyme families / rhymes-with, related words, snippet drafts; "+ bank" on rhyme candidates and editor selections |
 | [Helm Deployment](./features/helm_deployment.md) | Kubernetes chart (`deploy/helm/lyrics-canvas`), production frontend image, migrations, secrets, ingress |
@@ -823,6 +832,16 @@ Features Index:
       - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/ui/RhymeSidebar.kt
     depends_on: [rhyme_patterns, rhyme_view, android_app, android_offline_sync, android_tag_expressions, android_word_bank]
     doc: docs/features/android_rhyme_patterns.md
+  android_rhyme_meaning_order:
+    description: Android client of the rhyme order "Rhyme, then meaning". One per-device choice (DataStore rhyme_order, default rhyme) shown as an Order chip pair in the rhyme sheet controls, above the pattern slot columns and in the word bank Rhymes with view; a change refetches each shown list from its first page. Meaning sends order "meaning" on rhyme-suggest, rhyme-pattern/suggest and word-bank/rhymes (rhyme sends no field; later pages keep the order). With order_applied meaning the lists show band headers (Perfect / Strong / Near / Loose from each row's band, fallback from score with the edges in RhymeOrder.kt) where the band changes and a muted ≈NN% similarity per row; meaning asked but rhyme applied shows "Meaning order unavailable" and no headers. Line matches are never banded.
+    entry_points:
+      - android/core/logic/src/main/kotlin/dev/nymph/lyrics/logic/rhyme/RhymeOrder.kt
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/order/ (RhymeOrderStore, RhymeOrderUi)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/RhymeViewModel.kt (setOrder)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/rhyme/pattern/PatternViewModel.kt (setOrder)
+      - android/app/src/main/kotlin/dev/nymph/lyrics/app/wordbank/WordBankViewModel.kt (setRhymesOrder)
+    depends_on: [android_app, android_rhyme_patterns, android_word_bank, rhyme_view, rhyme_patterns, word_bank]
+    doc: docs/features/android_rhyme_meaning_order.md
   android_rests_and_search:
     description: Android client of rest marks and search. :core:logic tokenizer (`_` is one rest and a word separator; word_index counts words only), display text (strip; rests-only lines dropped), passing every vector of rest_mark_vectors.json (byte-for-byte copy in core/logic test resources). Local estimate emits {"rest": true} cells; rebuildRawText emits `_` per rest; attachWords and rhyme lineWords use word tokens; the editor's arranged check on open compares display text (legacy rows keep their rests, next save writes `_`). nudgeSelection(+1) at the end of a line inserts a rest before the selection (selection shifts right, row arranged); left at 0 stays a no-op. Display text in rhyme chips, card text fallback and word-bank add from editor selections. In-canvas search box above the tag filter bar (canvas and list mode) - NFC + lowercase substring per term on display text, debounced 150 ms, ANDed with the tag filter with the same hiding, "N of M", ×/Escape, per canvas for the process. Canvas list search across canvases - GET /api/search (typed DTOs, SearchError incl. invalid_search_query, limit clamped 1..200, local 200-code-point check), debounced 250 ms, Canvases + Snippets sections, highlighted excerpts, canvas title tap targets, "No matches", Retry. CanvasRoute.focusSnippetId opens a canvas with the snippet selected and centred (list - scrolled to), clearing a hiding in-canvas search and snackbar "Hidden by the tag filter" when the tag filter hides it.
     entry_points:

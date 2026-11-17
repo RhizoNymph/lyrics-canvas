@@ -131,6 +131,8 @@ data class PatternSuggestRequest(
     @SerialName("line_match_offset") val lineMatchOffset: Int = 0,
     val weights: ScoreWeights? = null,
     val dialect: DialectMap? = null,
+    /** Per slot column ([RhymeOrder.MEANING]); line matches keep their order. Null (omitted) = rhyme order. */
+    val order: RhymeOrder? = null,
 )
 
 /**
@@ -162,6 +164,10 @@ data class PatternCandidate(
     val source: SourceName,
     /** Score against each slot member, in member order. */
     @SerialName("member_scores") val memberScores: List<Double>,
+    /** The score band ([RhymeCandidate.band]). */
+    val band: RhymeBand? = null,
+    /** Similarity to the pattern's snippet; null unless meaning order was applied. */
+    val similarity: Double? = null,
 ) : RhymeUnitFields
 
 @Serializable
@@ -200,6 +206,7 @@ data class PatternSuggestResponse(
     @SerialName("line_matches") val lineMatches: List<LineMatch>,
     @SerialName("line_match_total") val lineMatchTotal: Int,
     @SerialName("elapsed_ms") val elapsedMs: Double,
+    @SerialName("order_applied") val orderApplied: RhymeOrder = RhymeOrder.RHYME,
 )
 
 /** The structured `detail.error` codes of the rhyme-pattern routes (422). */

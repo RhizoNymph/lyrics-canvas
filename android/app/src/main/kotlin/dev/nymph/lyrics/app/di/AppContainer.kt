@@ -33,6 +33,8 @@ import dev.nymph.lyrics.data.repository.HttpTagPresetRepository
 import dev.nymph.lyrics.data.repository.TagPresetRepository
 import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
+import dev.nymph.lyrics.app.rhyme.order.DataStoreRhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
 import dev.nymph.lyrics.app.canvas.list.DataStoreListSortStore
 import dev.nymph.lyrics.app.canvas.list.ListSortStore
 import dev.nymph.lyrics.app.tags.FilterTextStore
@@ -59,6 +61,7 @@ import okhttp3.OkHttpClient
 private val Context.authDataStore by preferencesDataStore(name = "auth")
 private val Context.voiceDataStore by preferencesDataStore(name = "voice")
 private val Context.tagFilterDataStore by preferencesDataStore(name = "tag_filters")
+private val Context.rhymeOrderDataStore by preferencesDataStore(name = "rhyme_order")
 private val Context.listViewDataStore by preferencesDataStore(name = "list_view")
 
 /**
@@ -145,6 +148,8 @@ class AppContainer(
 
     val voice: VoiceRepository = GatedVoiceRepository(HttpVoiceRepository(ApiClient(apiBase, tokenStore, voiceHttp, observer = status.health)), sync.gate, sync.local)
 
+    /** "Rhyme" / "Rhyme, then meaning" for every rhyme list, per device (DataStore `rhyme_order`). */
+    val rhymeOrders: RhymeOrderStore = DataStoreRhymeOrderStore(appContext.rhymeOrderDataStore)
     /** The list-mode sort, per device (DataStore `list_view`). */
     val listSorts: ListSortStore = DataStoreListSortStore(appContext.listViewDataStore)
 

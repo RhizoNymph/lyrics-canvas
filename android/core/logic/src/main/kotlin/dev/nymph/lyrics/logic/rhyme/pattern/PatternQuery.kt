@@ -1,5 +1,6 @@
 package dev.nymph.lyrics.logic.rhyme.pattern
 
+import dev.nymph.lyrics.model.RhymeOrder
 import dev.nymph.lyrics.logic.rhyme.RhymeSources
 import dev.nymph.lyrics.logic.tags.ExpressionField
 import dev.nymph.lyrics.logic.tags.RhymeTagFilter
@@ -21,6 +22,8 @@ data class PatternParams(
     val includeRare: Boolean = false,
     /** The detection threshold (detect `min_score`). */
     val detectMinScore: Double = PatternLimits.DETECT_MIN_SCORE,
+    /** The slot columns' order (the device's choice); sent as `order` when meaning. */
+    val order: RhymeOrder = RhymeOrder.RHYME,
 )
 
 /** Which page a suggest request asks for. */
@@ -98,6 +101,7 @@ fun planPatternSuggest(
         lineMatches = notes && page !is PatternPage.Slot,
         lineMatchLimit = PatternLimits.PAGE_SIZE,
         lineMatchOffset = if (page is PatternPage.LineMatches) page.offset else 0,
+        order = params.order.requestValue,
     )
     return PatternPlan.Query(request)
 }

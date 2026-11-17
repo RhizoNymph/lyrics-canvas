@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.nymph.lyrics.app.rhyme.order.SimilarityLabel
 import dev.nymph.lyrics.app.ui.theme.Palette
 import dev.nymph.lyrics.model.RhymeCandidate
 import dev.nymph.lyrics.model.RhymeUnit
@@ -81,6 +82,7 @@ fun CandidateRow(
             Spacer(Modifier.weight(1f))
             Text(String.format(Locale.US, "%.2f", candidate.score), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Palette.CellText)
             Text("d${candidate.matchDepth}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Palette.Muted)
+            SimilarityLabel(candidate.similarity)
             if (hasSlot && candidate.fitsSlot) {
                 Text(
                     "fits slot",

@@ -112,6 +112,30 @@ data class DialectMap(
     val rules: List<DialectRule> = emptyList(),
 )
 
+/**
+ * How a rhyme list is ordered (`order` on the three rhyme routes, `order_applied` in their
+ * answers): [RHYME] is the score order; [MEANING] keeps fixed score bands in rhyme order and sorts
+ * each band by meaning similarity to the anchor.
+ */
+@Serializable
+enum class RhymeOrder {
+    @SerialName("rhyme") RHYME,
+    @SerialName("meaning") MEANING,
+    ;
+
+    /** The request field: null for [RHYME] (the server's default, so the field is omitted). */
+    val requestValue: RhymeOrder? get() = takeIf { it == MEANING }
+}
+
+/** A candidate's fixed score band (`band`), computed by the server from `score`. */
+@Serializable
+enum class RhymeBand {
+    @SerialName("perfect") PERFECT,
+    @SerialName("strong") STRONG,
+    @SerialName("near") NEAR,
+    @SerialName("loose") LOOSE,
+}
+
 /** Body of `POST /api/nlp/rhyme-suggest`. */
 @Serializable
 data class RhymeSuggestRequest(
@@ -130,6 +154,8 @@ data class RhymeSuggestRequest(
     val dialect: DialectMap? = null,
     /** Restricts the notes source to snippets matching this tag expression (normalized); null = no restriction. */
     @SerialName("tag_filter") val tagFilter: String? = null,
+    /** "Rhyme, then meaning" when [RhymeOrder.MEANING]; null (omitted) = rhyme order. */
+    val order: RhymeOrder? = null,
 )
 
 @Serializable
@@ -213,6 +239,10 @@ data class RhymeCandidate(
     @SerialName("fits_slot") val fitsSlot: Boolean,
     val alignment: List<SyllableAlignment>,
     val source: SourceName,
+    /** The score band; always sent by the server (null only where a payload predates it). */
+    val band: RhymeBand? = null,
+    /** Cosine similarity to the meaning target (4 decimals); null unless meaning order was applied. */
+    val similarity: Double? = null,
 ) : RhymeUnitFields
 
 /** Response of `POST /api/nlp/rhyme-suggest`. */
@@ -222,4 +252,6 @@ data class RhymeSuggestResponse(
     val candidates: List<RhymeCandidate>,
     val total: Int,
     @SerialName("elapsed_ms") val elapsedMs: Double,
+    /** The order the server used: rhyme when meaning was asked but the model is unavailable. */
+    @SerialName("order_applied") val orderApplied: RhymeOrder = RhymeOrder.RHYME,
 )

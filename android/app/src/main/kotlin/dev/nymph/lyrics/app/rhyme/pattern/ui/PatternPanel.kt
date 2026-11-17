@@ -134,7 +134,7 @@ fun PatternPanel(
             }
             val content = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp)
             when (session.tab) {
-                PatternTab.SLOTS -> SlotColumnsView(session, chips, vm, onAddToBank, content.padding(horizontal = 6.dp))
+                PatternTab.SLOTS -> SlotColumnsView(session, chips, vm, onAddToBank, content.padding(horizontal = 6.dp), order = state.params.order)
                 PatternTab.LINES -> LineMatchesView(session, chips, vm, content)
             }
         }

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nymph.lyrics.app.rhyme.RhymeUiState
 import dev.nymph.lyrics.app.rhyme.RhymeViewModel
+import dev.nymph.lyrics.app.rhyme.order.RhymeOrderToggle
 import dev.nymph.lyrics.app.rhyme.pattern.ui.PatternEntry
 import dev.nymph.lyrics.app.tags.TagsUiState
 import dev.nymph.lyrics.app.tags.ui.ExpressionInput
@@ -124,6 +125,8 @@ fun QueryControls(state: RhymeUiState, vm: RhymeViewModel, tags: TagsUiState<*>,
                 }
             }
         }
+
+        RhymeOrderToggle(state.params.order, vm::setOrder)
 
         FlowRow(verticalArrangement = Arrangement.Center) {
             Toggle("notes", state.params.sources.notes) { vm.toggleSource(SourceName.NOTES) }
