@@ -8,6 +8,7 @@ import NotesTagFilter from './NotesTagFilter';
 import SourceToggles from './SourceToggles';
 import PatternShortcut from './pattern/PatternShortcut';
 import RhymeOrderToggle from './order/RhymeOrderToggle';
+import RhythmFitToggle from './rhythm/RhythmFitToggle';
 import { inputStyle, labelStyle, mutedStyle, errorStyle, monoStyle } from './sidebarStyles';
 
 /** Search box, anchor chips, k / min score / slot / sources / include-rare / notes tag filter. Changes re-query via useRhymeQuery. */
@@ -96,6 +97,8 @@ export default function QueryControls() {
       </div>
 
       <RhymeOrderToggle label="Order" />
+
+      <RhythmFitToggle />
 
       <div>
         <label style={labelStyle}>Slot</label>

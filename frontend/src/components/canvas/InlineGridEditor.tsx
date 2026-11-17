@@ -31,6 +31,7 @@ import { rowKeyAction } from './editorKeys';
 import { registerEditorBridge } from './editorBridge';
 import RecordButton from '@/components/voice/RecordButton';
 import RecordingsSection from '@/components/voice/RecordingsSection';
+import ScoreExportMenu from '@/components/score/ScoreExportMenu';
 import EditorBankMenu from '@/components/wordBank/EditorBankMenu';
 import { isAddSelectionShortcut, selectedFieldText } from '@/lib/wordBank';
 import { useWordBankStore } from '@/stores/wordBankStore';
@@ -448,6 +449,21 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
           <option value="freestyle">FREESTYLE</option>
         </select>
         <span style={{ flex: 1 }} />
+        {/* Score export (MIDI / MusicXML of the saved score); hidden without a score */}
+        <span style={{ marginRight: 4 }}>
+          <ScoreExportMenu
+            snippet={snippet}
+            buttonStyle={{
+              background: 'rgba(0,0,0,0.3)',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: 4,
+              padding: '1px 6px',
+              fontSize: 10 * s,
+              cursor: 'pointer',
+            }}
+          />
+        </span>
         <RecordButton
           variant="editor"
           style={{

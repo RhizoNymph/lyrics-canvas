@@ -40,6 +40,17 @@ Opened by the canvas list page's "Voice dataset" header button. Shows the stats 
 fetches the export with the bearer token into a blob and saves it under the server's file name. Escape,
 Close or a backdrop press close it and abort pending requests.
 
+## ScoreDraftDialog
+
+**Files:** `src/components/score/ScoreDraftDialog.tsx`, `ScoreDraftView.tsx`, `ScoreDraftHost.tsx`
+
+"Make score" for one snippet (props `snippet`, `onDraft(score)`, `onClose`, `initialSource?`, `draftGrid?`):
+From grid (note length, meter, tempo) or From recording (the snippet's takes, meter, optional tempo), Draft,
+then the estimated tempo and unplaced / unmatched counts with "Use score". Portal on `document.body`,
+focus trap, Escape / Cancel / backdrop close and abort requests; the overlay keeps the inline editor open.
+`ScoreDraftHost` (mounted on the canvas page) opens it from the context menu's "Make score…" and saves the
+draft. See [web_score_tools.md](../features/web_score_tools.md).
+
 ## ApiTokensDialog
 
 **Files:** `src/components/account/ApiTokensDialog.tsx`, `ApiTokensView.tsx`

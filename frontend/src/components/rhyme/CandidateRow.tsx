@@ -5,6 +5,7 @@ import { PROVENANCE_COLORS, PROVENANCE_LABELS, NON_FIT_ALPHA } from './rhymeColo
 import { btnStyle, primaryBtnStyle, monoStyle } from './sidebarStyles';
 import AddToBankButton from '@/components/wordBank/AddToBankButton';
 import { SimilarityBadge } from './order/orderParts';
+import { RhythmBadge } from './rhythm/rhythmParts';
 
 interface Props {
   candidate: RhymeCandidate;
@@ -44,6 +45,7 @@ export default function CandidateRow({ candidate, anchor, hasSlot, expanded, onT
           {candidate.text}
         </span>
         <span style={{ flex: 1 }} />
+        <RhythmBadge fit={candidate.rhythm_fit} />
         <SimilarityBadge similarity={candidate.similarity} />
         <span style={{ ...monoStyle, fontSize: 11, color: '#c0c0d8' }}>{candidate.score.toFixed(2)}</span>
         <span style={{ ...monoStyle, fontSize: 11, color: '#8a8aaa' }}>d{candidate.match_depth}</span>

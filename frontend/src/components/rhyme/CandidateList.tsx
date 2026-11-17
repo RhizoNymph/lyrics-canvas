@@ -4,7 +4,9 @@ import type { RhymeState } from '@/stores/rhymeStore';
 import { listRows, shownRange, canLoadMore } from '@/lib/rhyme/candidateList';
 import CandidateRow from './CandidateRow';
 import { presentationOf, withBandHeaders } from '@/lib/rhyme/order';
+import { RHYTHM_OFF, listPresentation } from '@/lib/rhyme/rhythmFit';
 import { BandHeader, OrderNote } from './order/orderParts';
+import { RhythmNote } from './rhythm/rhythmParts';
 import { btnStyle, mutedStyle, errorStyle } from './sidebarStyles';
 
 /** The store state and actions the list reads (the store itself in the app; plain values in tests). */
@@ -12,21 +14,26 @@ export type CandidateListProps = Pick<
   RhymeState,
   | 'candidates' | 'anchors' | 'dismissed' | 'offset' | 'total' | 'slot' | 'loading' | 'error' | 'ordering'
   | 'loadMore' | 'dismiss' | 'materialize' | 'setTypedAnchor'
->;
+> &
+  /** Rhythm fit of the loaded results; omitted = off. */
+  Partial<Pick<RhymeState, 'rhythm'>>;
 
 /**
  * The scrollable result list with the status line, errors, and the More button. In meaning order a band
  * header (Perfect / Strong / Near / Loose) starts each band; a meaning request answered in rhyme order shows
- * a quiet "Meaning order unavailable" instead.
+ * a quiet "Meaning order unavailable" instead. Rhythm fit, when applied, bands the rows in either order (the
+ * server bands them), and a requested but unavailable rhythm fit shows its reason.
  */
 export function CandidateListView(props: CandidateListProps) {
   const { candidates, anchors, dismissed, offset, total, slot, loading, error, ordering, loadMore, dismiss, materialize, setTypedAnchor } = props;
+  const rhythm = props.rhythm ?? RHYTHM_OFF;
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const rows = listRows(candidates, offset, dismissed);
   const range = shownRange(rows.length, total);
   const more = canLoadMore(loading, offset, total);
-  const presentation = presentationOf(ordering);
+  const presentation = listPresentation(ordering, rhythm);
+  const orderNote = presentationOf(ordering);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -47,9 +54,15 @@ export function CandidateListView(props: CandidateListProps) {
         </div>
       )}
 
-      {!loading && rows.length > 0 && presentation === 'unavailable' && (
+      {!loading && rows.length > 0 && orderNote === 'unavailable' && (
         <div style={{ padding: '4px 12px 0' }}>
-          <OrderNote presentation={presentation} />
+          <OrderNote presentation={orderNote} />
+        </div>
+      )}
+
+      {!loading && rhythm.unavailable !== null && (
+        <div style={{ padding: '4px 12px 0' }}>
+          <RhythmNote rhythm={rhythm} />
         </div>
       )}
 
@@ -86,6 +99,7 @@ export default function CandidateList() {
   const loading = useRhymeStore((s) => s.loading);
   const error = useRhymeStore((s) => s.error);
   const ordering = useRhymeStore((s) => s.ordering);
+  const rhythm = useRhymeStore((s) => s.rhythm);
   const loadMore = useRhymeStore((s) => s.loadMore);
   const dismiss = useRhymeStore((s) => s.dismiss);
   const materialize = useRhymeStore((s) => s.materialize);
@@ -101,6 +115,7 @@ export default function CandidateList() {
       loading={loading}
       error={error}
       ordering={ordering}
+      rhythm={rhythm}
       loadMore={loadMore}
       dismiss={dismiss}
       materialize={materialize}
