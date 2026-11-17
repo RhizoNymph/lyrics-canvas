@@ -48,4 +48,5 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "timing: performance budget tests (deselect with -m 'not timing')",
+    "embedding_model: uses the real sentence-transformers model from the local cache (opt-in: RUN_EMBEDDING_MODEL_TESTS=1)",
 ]

@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.api.deps import get_current_user
+from app.api.embeddings import get_meaning_service
+from app.services.meaning.service import MeaningService
+from app.services.meaning.store import DbSnippetEmbeddingStore
 from app.models.user import User
 from app.models.snippet import Snippet
 from app.models.canvas import Canvas
@@ -169,10 +172,13 @@ async def rhyme_suggest(
     req: RhymeSuggestRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    meaning: MeaningService = Depends(get_meaning_service),
 ):
     repo = rhyme_suggest_service.DbSnippetRepository(db)
     try:
-        return await rhyme_suggest_service.suggest(req, str(user.id), repo)
+        return await rhyme_suggest_service.suggest(
+            req, str(user.id), repo, meaning=meaning, embeddings=DbSnippetEmbeddingStore(db)
+        )
     except (CanvasNotFoundError, SnippetNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TagExpressionError as exc:
@@ -210,11 +216,14 @@ async def rhyme_pattern_suggest(
     req: PatternSuggestRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    meaning: MeaningService = Depends(get_meaning_service),
 ):
     """Per-slot candidates that rhyme with every slot member, and note lines that already hit 2+ slots."""
     repo = rhyme_pattern_service.DbPatternRepository(db)
     try:
-        return await rhyme_pattern_service.suggest(req, str(user.id), repo)
+        return await rhyme_pattern_service.suggest(
+            req, str(user.id), repo, meaning=meaning, embeddings=DbSnippetEmbeddingStore(db)
+        )
     except (CanvasNotFoundError, SnippetNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TagExpressionError as exc:

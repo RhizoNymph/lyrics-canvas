@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useTagFilterStore } from '@/stores/tagFilterStore';
@@ -7,15 +7,20 @@ import { isSearchActive } from '@/lib/search';
 import { useUIStore } from '@/stores/uiStore';
 import { useVoiceStore } from '@/stores/voiceStore';
 import { visibleSnippets } from '@/lib/canvas';
-import { listClick, sortForList } from '@/lib/listMode';
+import { listClick, sortSnippets, LIST_SORT_LABELS, stepTarget } from '@/lib/listMode';
+import { useListOrderStore } from '@/stores/listOrderStore';
 import SnippetContextMenu from '@/components/canvas/SnippetContextMenu';
 import ListRow from './ListRow';
 import { useFrozenOrder } from './useFrozenOrder';
+import { useRowDrag } from './useRowDrag';
+import ListSortMenu from './ListSortMenu';
 
 /**
- * List mode: the canvas's snippets (same tag expression filter and in-canvas search as the canvas) as a vertical list, last content
- * edit first. Rows share the canvas selection, open the inline editor in place, and use the canvas
- * context menu; merge / delete / undo go through the same store actions and page shortcuts.
+ * List mode: the canvas's snippets (same tag expression filter and in-canvas search as the canvas) as a vertical
+ * list in the chosen sort (Last edited, Created, A-Z, Custom). Rows share the canvas selection, open the inline
+ * editor in place, and use the canvas context menu; merge / delete / undo go through the same store actions and
+ * page shortcuts. Rows reorder by their drag handle or Alt+Up / Alt+Down (listOrderStore), except while an
+ * editor is open.
  */
 export default function ListView() {
   const snippets = useCanvasStore((s) => s.snippets);
@@ -35,11 +40,48 @@ export default function ListView() {
   const searchRevealId = useCanvasSearchStore((s) => s.revealSnippetId);
   const clearSearchReveal = useCanvasSearchStore((s) => s.clearReveal);
 
+  const sort = useListOrderStore((s) => s.sort);
+  const reorder = useListOrderStore((s) => s.reorder);
+
   const sortedIds = useMemo(
-    () => sortForList(visibleSnippets(snippets, tagFilter, search)).map((s) => s.id),
-    [snippets, tagFilter, search],
+    () => sortSnippets(sort, visibleSnippets(snippets, tagFilter, search)).map((s) => s.id),
+    [snippets, tagFilter, search, sort],
   );
   const order = useFrozenOrder(sortedIds, editingSnippetId !== null);
+  const canReorder = editingSnippetId === null;
+
+  const moveRow = useCallback(
+    (id: string, toIndex: number) => {
+      void reorder({ visible: order, movedId: id, toIndex });
+    },
+    [reorder, order],
+  );
+  const { drag, startDrag, cancelDrag } = useRowDrag(listRef, order, moveRow);
+
+  // An editor opening mid-drag (it cannot, the pointer is captured) or any other freeze ends the drag.
+  useEffect(() => {
+    if (!canReorder) cancelDrag();
+  }, [canReorder, cancelDrag]);
+
+  // Alt+Up / Alt+Down keep the moved row focused: React may re-insert its node, which drops focus.
+  const refocusId = useRef<string | null>(null);
+  const stepRow = (id: string, delta: -1 | 1) => {
+    const to = stepTarget(order, id, delta);
+    if (to === null) return;
+    refocusId.current = id;
+    moveRow(id, to);
+  };
+  useEffect(() => {
+    const id = refocusId.current;
+    if (id === null) return;
+    refocusId.current = null;
+    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-snippet-id]') ?? []).find(
+      (el) => el.dataset.snippetId === id,
+    );
+    if (!row) return;
+    if (document.activeElement !== row) row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'nearest' });
+  }, [order]);
 
   /** Scroll a rendered row into view and focus it; false when it is not rendered. */
   const scrollToRow = (snippetId: string): boolean => {
@@ -112,35 +154,68 @@ export default function ListView() {
       ref={listRef}
       role="listbox"
       aria-multiselectable
-      aria-label="Snippets, last edited first"
+      aria-label={`Snippets, sorted by ${LIST_SORT_LABELS[sort]}`}
       onClick={onBackgroundClick}
       onContextMenu={(e) => e.preventDefault()}
       style={{ flex: 1, overflowY: 'auto', background: '#12122a', padding: '16px 16px 48px' }}
     >
       <div onClick={onBackgroundClick} style={{ maxWidth: 960, margin: '0 auto' }}>
+        <ListSortMenu />
         {order.length === 0 && (
           <div style={{ color: '#6a6a8a', fontSize: 13, textAlign: 'center', marginTop: 48 }}>
             {emptyText}
           </div>
         )}
-        {order.map((id) => {
+        {order.map((id, index) => {
           const snippet = snippets.get(id);
           if (!snippet) return null;
           return (
-            <ListRow
-              key={id}
-              snippet={snippet}
-              selected={selectedSnippetIds.has(id)}
-              editing={editingSnippetId === id}
-              onClick={(e) => onRowClick(id, e)}
-              onContextMenu={(e) => onRowContextMenu(id, e)}
-              onOpen={() => openRow(id)}
-              onShowCanvases={(x, y) => setCanvasesPopover({ snippetId: id, x, y })}
-            />
+            <Fragment key={id}>
+              {drag !== null && drag.slot === index && <DropIndicator />}
+              <ListRow
+                snippet={snippet}
+                selected={selectedSnippetIds.has(id)}
+                editing={editingSnippetId === id}
+                onClick={(e) => onRowClick(id, e)}
+                onContextMenu={(e) => onRowContextMenu(id, e)}
+                onOpen={() => openRow(id)}
+                onShowCanvases={(x, y) => setCanvasesPopover({ snippetId: id, x, y })}
+                reorder={
+                  canReorder
+                    ? {
+                        dragging: drag?.id === id,
+                        onHandlePointerDown: (e) => startDrag(id, e),
+                        onStep: (delta) => stepRow(id, delta),
+                      }
+                    : null
+                }
+              />
+            </Fragment>
           );
         })}
+        {drag !== null && drag.slot === order.length && <DropIndicator />}
       </div>
       <SnippetContextMenu />
+    </div>
+  );
+}
+
+/** Where a dragged row will land. Takes no layout space so rows do not shift under the pointer. */
+function DropIndicator() {
+  return (
+    <div aria-hidden style={{ position: 'relative', height: 0 }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: -7,
+          height: 3,
+          borderRadius: 2,
+          background: '#8b8bff',
+          boxShadow: '0 0 6px rgba(139,139,255,0.8)',
+        }}
+      />
     </div>
   );
 }

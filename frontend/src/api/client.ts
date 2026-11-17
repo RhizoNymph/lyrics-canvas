@@ -8,6 +8,7 @@ import { createVoiceApi } from './voice';
 import { createWordBankApi } from './wordBank';
 import { createSearchApi } from './search';
 import { createRhymePatternApi } from './rhymePattern';
+import { createApiTokenApi } from './apiTokens';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -75,6 +76,8 @@ export interface SnippetCreateBody {
   group_id?: string | null;
   /** Set only by rhyme-view promotion. */
   derived_from?: DerivedFrom;
+  /** Custom list rank on the canvas; omitted, the server puts the snippet at the top of the custom order. */
+  list_rank?: string;
 }
 
 export const snippetApi = {
@@ -160,5 +163,8 @@ export const searchApi = createSearchApi(api);
 
 // ---- Word bank (see api/wordBank.ts) ----
 export const wordBankApi = createWordBankApi(api);
+
+// ---- Personal API tokens (see api/apiTokens.ts) ----
+export const apiTokenApi = createApiTokenApi(api);
 
 export default api;

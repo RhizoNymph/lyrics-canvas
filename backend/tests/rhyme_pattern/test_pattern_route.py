@@ -71,7 +71,7 @@ def test_suggest_shape(client: TestClient):
     res = client.post(SUGGEST, json={**RANGE, "slots": SLOTS, "limit": 5})
     assert res.status_code == 200, res.text
     body = res.json()
-    assert set(body) == {"slots", "line_matches", "line_match_total", "elapsed_ms"}
+    assert set(body) == {"slots", "line_matches", "line_match_total", "elapsed_ms", "order_applied"}
     result = body["slots"][0]
     assert set(result) == {"slot", "candidates", "total"}
     assert result["slot"]["id"] == "s0"

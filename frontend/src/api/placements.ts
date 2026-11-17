@@ -7,8 +7,8 @@ import type { AxiosInstance } from 'axios';
 import { toPlacementError } from '@/lib/placements/errors';
 import type { PlacementOperation } from '@/lib/placements/errors';
 import type {
+  BatchPositionItem,
   Canvas,
-  PositionUpdate,
   RemovePlacementResponse,
   Snippet,
   TransferRequest,
@@ -30,8 +30,15 @@ export type SnippetUpdateBody = Partial<
     | 'height'
     | 'z_index'
     | 'group_id'
+    | 'list_rank'
   >
 >;
+
+/** One placement's new custom list rank (an item of a rank-only batch-position call). */
+export interface ListRankUpdate {
+  id: string;
+  list_rank: string;
+}
 
 export interface PlacementApi {
   listCanvases(): Promise<Canvas[]>;
@@ -40,7 +47,11 @@ export interface PlacementApi {
   renameCanvas(canvasId: string, title: string): Promise<Canvas>;
   /** `canvas_id` is required: layout fields go to the placement on it, and the response is in its context. */
   updateSnippet(snippetId: string, canvasId: string, data: SnippetUpdateBody): Promise<Snippet>;
-  batchPosition(canvasId: string, updates: PositionUpdate[]): Promise<void>;
+  batchPosition(canvasId: string, updates: BatchPositionItem[]): Promise<void>;
+  /** Layout PUT with `list_rank` only (last write wins, no base_version); the snippet in `canvasId`'s context. */
+  setListRank(snippetId: string, canvasId: string, listRank: string): Promise<Snippet>;
+  /** Re-rank many placements on `canvasId` in one batch-position call (items carry only `list_rank`). */
+  setListRanks(canvasId: string, ranks: ReadonlyArray<ListRankUpdate>): Promise<void>;
   /** Remove from this canvas; deletes the snippet when it was its last placement. */
   removeFromCanvas(canvasId: string, snippetId: string): Promise<RemovePlacementResponse>;
   /** Delete the snippet, every placement and its recordings. */
@@ -70,6 +81,20 @@ export function createPlacementApi(http: AxiosInstance): PlacementApi {
       ),
     batchPosition: async (canvasId, updates) => {
       await wrap('save_positions', () =>
+        http.patch<unknown>('/api/snippets/batch-position', { canvas_id: canvasId, updates }),
+      );
+    },
+    setListRank: (snippetId, canvasId, listRank) =>
+      wrap('save_list_order', () =>
+        http.put<Snippet>(
+          `/api/snippets/${enc(snippetId)}`,
+          { list_rank: listRank },
+          { params: { canvas_id: canvasId } },
+        ),
+      ),
+    setListRanks: async (canvasId, ranks) => {
+      const updates: BatchPositionItem[] = ranks.map((r) => ({ id: r.id, list_rank: r.list_rank }));
+      await wrap('save_list_order', () =>
         http.patch<unknown>('/api/snippets/batch-position', { canvas_id: canvasId, updates }),
       );
     },

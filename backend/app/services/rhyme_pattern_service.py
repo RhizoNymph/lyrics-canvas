@@ -33,7 +33,18 @@ from app.services.phonetics.pattern.slots import summarize
 from app.services.phonetics.sources.dictionary import DictionarySource
 from app.services.rhyme_pattern.models import line_model, slot_model
 from app.services.rhyme_pattern.resolve import PatternRange, resolve_range, resolve_slots
-from app.services.rhyme_pattern.suggest import NoteSpans, SlotRequest, SuggestParams, build_note_spans, compute
+from app.services.meaning.order import apply_orders
+from app.services.meaning.service import MeaningService
+from app.services.meaning.store import NoStoredEmbeddings, SnippetEmbeddingStore, SnippetText, snippet_parts
+from app.services.rhyme_pattern.suggest import (
+    NoteSpans,
+    Ranked,
+    SlotRequest,
+    SuggestParams,
+    build_note_spans,
+    page_slots,
+    rank_slots,
+)
 from app.services.rhyme_suggest_service import (
     CanvasNotFoundError,
     DbSnippetRepository,
@@ -133,7 +144,11 @@ async def suggest(
     repo: PatternRepository,
     *,
     dictionary: DictionaryIndexFactory | None = None,
+    meaning: MeaningService | None = None,
+    embeddings: SnippetEmbeddingStore | None = None,
 ) -> PatternSuggestResponse:
+    """Per-slot candidates and line matches. ``order="meaning"`` re-orders each slot column against
+    the request's snippet (needs ``meaning``; otherwise ``order_applied="rhyme"``)."""
     started = time.perf_counter()
     # an invalid filter is a request error before anything is looked up (TagExpressionError)
     if req.tag_filter:
@@ -160,11 +175,20 @@ async def suggest(
         line_match_offset=req.line_match_offset,
     )
 
-    def run():
+    def rank():
         index = factory(dialect, req.include_rare) if "dictionary" in req.sources else None
-        return compute(slots, params, dialect, notes, index)
+        return rank_slots(slots, params, notes, index)
 
-    result = await asyncio.to_thread(run)
+    ranked = await asyncio.to_thread(rank)
+    target = (
+        await snippet_parts([SnippetText(record.id, record.raw_text)], embeddings or NoStoredEmbeddings())
+        if req.order == "meaning"
+        else []
+    )
+    ordered = await apply_orders(
+        req.order, ranked.ranked, score=_score, text=_text, target=target, meaning=meaning
+    )
+    result = await asyncio.to_thread(page_slots, slots, ranked, ordered.lists, params, dialect, notes)
     response = PatternSuggestResponse(
         slots=[
             PatternSlotResult(slot=slot_model(s.id, s.slot, rng), candidates=page.candidates, total=page.total)
@@ -173,10 +197,21 @@ async def suggest(
         line_matches=result.line_matches,
         line_match_total=result.line_match_total,
         elapsed_ms=_elapsed(started),
+        order_applied=ordered.applied,
     )
     logger.info(
-        "rhyme_pattern.suggest snippet=%s lines=%d slots=%d candidates=%s line_matches=%d sources=%s tag_filter=%s elapsed_ms=%.1f",
+        "rhyme_pattern.suggest snippet=%s lines=%d slots=%d candidates=%s line_matches=%d sources=%s tag_filter=%s "
+        "order=%s order_applied=%s elapsed_ms=%.1f",
         record.id, rng.line_count, len(slots), ",".join(str(p.total) for p in result.pages), result.line_match_total,
-        ",".join(req.sources), req.tag_filter is not None and bool(req.tag_filter.strip()), response.elapsed_ms,
+        ",".join(req.sources), req.tag_filter is not None and bool(req.tag_filter.strip()), req.order, ordered.applied,
+        response.elapsed_ms,
     )
     return response
+
+
+def _score(r: Ranked) -> float:
+    return r.found.score
+
+
+def _text(r: Ranked) -> str:
+    return r.found.unit.text

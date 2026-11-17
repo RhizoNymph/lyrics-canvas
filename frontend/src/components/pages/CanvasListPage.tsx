@@ -4,6 +4,7 @@ import { canvasApi, placementApi } from '@/api/client';
 import TitleEditor from '@/components/placements/TitleEditor';
 import { createCanvasFromInput, describePlacementError, renameCanvasIn, replaceCanvas } from '@/lib/placements';
 import VoiceDatasetDialog from '@/components/voice/dataset/VoiceDatasetDialog';
+import ApiTokensDialog from '@/components/account/ApiTokensDialog';
 import { useAuthStore } from '@/stores/authStore';
 import type { Canvas } from '@/types';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
@@ -17,6 +18,7 @@ export default function CanvasListPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [datasetOpen, setDatasetOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const search = useGlobalSearch();
@@ -100,6 +102,14 @@ export default function CanvasListPage() {
             style={{ background: '#2a2a4a', color: '#ccc', border: '1px solid #3a3a5a', borderRadius: 4, padding: '6px 14px', cursor: 'pointer', fontSize: 12 }}
           >
             Voice dataset
+          </button>
+          <button
+            type="button"
+            onClick={() => setTokensOpen(true)}
+            title="Personal API tokens for scripts and agents"
+            style={{ background: '#2a2a4a', color: '#ccc', border: '1px solid #3a3a5a', borderRadius: 4, padding: '6px 14px', cursor: 'pointer', fontSize: 12 }}
+          >
+            API tokens
           </button>
           <button
             onClick={logout}
@@ -234,6 +244,7 @@ export default function CanvasListPage() {
         )}
       </main>
       {datasetOpen && <VoiceDatasetDialog onClose={() => setDatasetOpen(false)} />}
+      {tokensOpen && <ApiTokensDialog onClose={() => setTokensOpen(false)} />}
     </div>
   );
 }
