@@ -15,6 +15,8 @@ import {
 import type { CanvasRef, TransferMode } from '@/types';
 import TagPicker from '@/components/tags/TagPicker';
 import CanvasPicker from '@/components/placements/CanvasPicker';
+import { scoreExportEntries } from '@/components/score/ScoreExportMenu';
+import { exportScoreWithNotice } from '@/components/score/exportScore';
 
 /** What the menu shows: the actions, a canvas picker for a transfer, or the Delete everywhere confirmation. */
 type MenuView = { kind: 'main' } | { kind: 'picker'; mode: TransferMode } | { kind: 'confirm_delete_everywhere' };
@@ -125,6 +127,8 @@ export default function SnippetContextMenu() {
   const canMerge = selectedSnippetIds.size >= 2 && selectedSnippetIds.has(snippet.id);
   const del = deleteMenu(targets, canvasId);
   const many = targets.length > 1 ? ` (${targets.length})` : '';
+  // Score export applies to the snippet the menu was opened on only (one file per snippet).
+  const exportEntries = scoreExportEntries(snippet);
 
   return (
     <div
@@ -203,6 +207,25 @@ export default function SnippetContextMenu() {
                 title={`Join the ${selectedSnippetIds.size} selected snippets left to right (Ctrl+Shift+H)`}
                 onClick={() => void handleMerge('horizontal')}
               />
+              {divider}
+            </>
+          )}
+
+          {/* Score export: MIDI / MusicXML of this snippet's saved score */}
+          {exportEntries.length > 0 && (
+            <>
+              {exportEntries.map((entry) => (
+                <Item
+                  key={entry.format}
+                  icon="♩"
+                  label={entry.label}
+                  title="Download this snippet's score"
+                  onClick={() => {
+                    closeContextMenu();
+                    void exportScoreWithNotice(snippet.id, entry.format);
+                  }}
+                />
+              ))}
               {divider}
             </>
           )}
