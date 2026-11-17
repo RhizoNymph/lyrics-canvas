@@ -17,6 +17,8 @@ import TagPicker from '@/components/tags/TagPicker';
 import CanvasPicker from '@/components/placements/CanvasPicker';
 import { scoreExportEntries } from '@/components/score/ScoreExportMenu';
 import { exportScoreWithNotice } from '@/components/score/exportScore';
+import { hasScore } from '@/lib/scoreTools/exportFile';
+import { useScoreDraftStore } from '@/stores/scoreDraftStore';
 
 /** What the menu shows: the actions, a canvas picker for a transfer, or the Delete everywhere confirmation. */
 type MenuView = { kind: 'main' } | { kind: 'picker'; mode: TransferMode } | { kind: 'confirm_delete_everywhere' };
@@ -53,6 +55,7 @@ export default function SnippetContextMenu() {
   const { canvasId, snippets, selectedSnippetIds, mergeSelected, removeFromCanvas, deleteEverywhere, transferSnippets } =
     useCanvasStore();
   const showNotice = usePlacementNoticeStore((s) => s.show);
+  const openScoreDraft = useScoreDraftStore((s) => s.open);
   const menuRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<MenuView>({ kind: 'main' });
 
@@ -206,6 +209,22 @@ export default function SnippetContextMenu() {
                 label="Merge horizontally"
                 title={`Join the ${selectedSnippetIds.size} selected snippets left to right (Ctrl+Shift+H)`}
                 onClick={() => void handleMerge('horizontal')}
+              />
+              {divider}
+            </>
+          )}
+
+          {/* Musical mode: draft a first score for a snippet without one (ScoreDraftHost shows the dialog) */}
+          {!hasScore(snippet) && (
+            <>
+              <Item
+                icon="♩"
+                label="Make score…"
+                title="Draft a rhythm score for this snippet from its grid or a voice take"
+                onClick={() => {
+                  closeContextMenu();
+                  openScoreDraft(snippet.id);
+                }}
               />
               {divider}
             </>

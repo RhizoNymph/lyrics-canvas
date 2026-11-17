@@ -4,7 +4,10 @@
  * `draftFromGrid` port, so unsaved edits are drafted too), else from the server over the stored grid.
  */
 import type { ScoreApi } from '@/api/score';
-import type { ScoreApiError, GridDraftRequest, ScoreDraftRequest, ScoreDraftResponse } from '@/types/scoreTools';
+import { ScoreInvalid, draftFromGrid } from '@/lib/score';
+import { ScoreApiError } from '@/types/scoreTools';
+import type { GridDraftRequest, ScoreDraftRequest, ScoreDraftResponse } from '@/types/scoreTools';
+import type { GridData } from '@/types';
 import type { Score } from '@/types/score';
 
 export type LocalDraftResult = { ok: true; score: Score } | { ok: false; error: ScoreApiError };
@@ -30,4 +33,26 @@ export async function runDraft(
     return { score: result.score, bpm_estimated: null, unplaced: 0, unmatched_words: 0 };
   }
   return deps.draft(snippetId, request, signal);
+}
+
+/**
+ * A local grid drafter over `grid` (the editor's live grid): the `draftFromGrid` port of
+ * feat/web-score-editor, its `ScoreInvalid` returned as an `invalid_score` ScoreApiError.
+ */
+export function localGridDrafter(grid: GridData | null): LocalGridDrafter {
+  return (request) => {
+    try {
+      return { ok: true, score: draftFromGrid(grid, request.meter, request.bpm, request.note) };
+    } catch (err) {
+      if (!(err instanceof ScoreInvalid)) throw err;
+      return {
+        ok: false,
+        error: new ScoreApiError('invalid_score', 'draft', err.message, null, {
+          reason: err.reason,
+          line: err.line ?? null,
+          note: err.note ?? null,
+        }),
+      };
+    }
+  };
 }

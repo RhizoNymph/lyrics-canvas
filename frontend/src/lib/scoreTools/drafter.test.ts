@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runDraft } from './drafter';
+import { localGridDrafter, runDraft } from './drafter';
 import type { LocalGridDrafter } from './drafter';
 import { ScoreApiError } from '@/types/scoreTools';
 import type { GridDraftRequest, RecordingDraftRequest, ScoreDraftResponse } from '@/types/scoreTools';
@@ -51,5 +51,43 @@ describe('runDraft', () => {
     await expect(runDraft('s1', recordingRequest, { draft, local }, abort.signal)).resolves.toBe(serverDraft);
     expect(draft).toHaveBeenCalledWith('s1', recordingRequest, abort.signal);
     expect(local).not.toHaveBeenCalled();
+  });
+});
+
+describe('localGridDrafter', () => {
+  const grid = {
+    lines: [
+      {
+        cells: [
+          { syllable: 'I', stress: 1 as const },
+          { rest: true },
+          { syllable: 'go', stress: 1 as const },
+        ],
+        syllable_count: 2,
+        raw_text: 'I _ go',
+      },
+    ],
+  };
+
+  it('drafts the given grid with the editor port (spec example: I _ go in 4/4 eighths)', () => {
+    const result = localGridDrafter(grid)({ source: 'grid', note: '1/8', meter: { num: 4, den: 4 }, bpm: 90 });
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.score.lines).toEqual([
+      {
+        notes: [
+          { s: 0, t: 0, d: 24, a: 1 },
+          { s: 1, t: 72, d: 24, a: 1 },
+        ],
+      },
+    ]);
+  });
+
+  it('returns invalid_score instead of throwing', () => {
+    const result = localGridDrafter(grid)({ source: 'grid', note: '1/8', meter: { num: 4, den: 4 }, bpm: 1000 });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(ScoreApiError);
+    expect(result.error.kind).toBe('invalid_score');
+    expect(result.error.reason).toBe('tempo_invalid');
   });
 });
