@@ -174,7 +174,7 @@ async def get_canvas_by_share_token(db: AsyncSession, token: str) -> CanvasDetai
 
 def fork_copy(placed: PlacedSnippet, new_owner_id: uuid.UUID, canvas_id: uuid.UUID) -> tuple[Snippet, SnippetPlacement]:
     """A new snippet with ``placed``'s content, owned by the forking user, and its one placement
-    on the new canvas at the same layout. Tags, recordings and groups are not copied."""
+    on the new canvas at the same layout and list rank. Tags, recordings and groups are not copied."""
     snippet = Snippet(
         id=uuid.uuid4(),
         owner_id=new_owner_id,
@@ -196,6 +196,7 @@ def fork_copy(placed: PlacedSnippet, new_owner_id: uuid.UUID, canvas_id: uuid.UU
         width=placed.width,
         height=placed.height,
         z_index=placed.z_index,
+        list_rank=placed.list_rank,
     )
     return snippet, placement
 

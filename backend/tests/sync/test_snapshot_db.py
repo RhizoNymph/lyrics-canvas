@@ -15,12 +15,12 @@ from tests.tags.db import requires_db
 pytestmark = requires_db
 
 SNAPSHOT_KEYS = ["server_time", "canvases", "placements", "snippets", "tags", "tag_presets", "word_bank"]
-PLACEMENT_KEYS = {"snippet_id", "canvas_id", "placement_id", "position_x", "position_y", "width", "height", "z_index", "group_id"}
+PLACEMENT_KEYS = {"snippet_id", "canvas_id", "placement_id", "position_x", "position_y", "width", "height", "z_index", "group_id", "list_rank"}
 SNIPPET_KEYS = {
     "id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text", "phonetics", "derived_from",
     "created_at", "updated_at", "content_updated_at", "version", "tag_ids",
 }
-PER_CANVAS = {"placement_id", "canvas_id", "position_x", "position_y", "width", "height", "z_index", "group_id", "canvases", "tags"}
+PER_CANVAS = {"placement_id", "canvas_id", "position_x", "position_y", "width", "height", "z_index", "group_id", "list_rank", "canvases", "tags"}
 
 
 @pytest.fixture
