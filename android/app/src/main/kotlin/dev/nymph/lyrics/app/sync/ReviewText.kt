@@ -1,5 +1,7 @@
 package dev.nymph.lyrics.app.sync
 
+import dev.nymph.lyrics.logic.score.barCount
+import dev.nymph.lyrics.model.score.Score
 import dev.nymph.lyrics.sync.conflict.EntityKind
 import dev.nymph.lyrics.sync.conflict.ResolveError
 import dev.nymph.lyrics.sync.conflict.Resolution
@@ -29,12 +31,30 @@ fun kindLabel(kind: EntityKind): String = when (kind) {
 /** One side as lines of text for the review (the snippet text itself is shown separately). */
 fun sideSummary(side: ReviewSide?): List<String> = when (side) {
     null -> emptyList()
-    is ReviewSide.OfSnippet -> listOfNotNull("Type: ${side.type.name.lowercase()}", side.tags.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Tags: "))
+    is ReviewSide.OfSnippet -> listOfNotNull(
+        "Type: ${side.type.name.lowercase()}",
+        side.tags.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Tags: "),
+        scoreSummary(side.score),
+    )
     is ReviewSide.OfCanvas -> listOf(side.title)
     is ReviewSide.OfTag -> listOf(side.name, "Colour ${side.color}")
     is ReviewSide.OfWord -> listOfNotNull(side.text, side.tags.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Tags: "))
     ReviewSide.Deleted -> listOf("Deleted")
     ReviewSide.Gone -> listOf("Deleted on the server")
+}
+
+/** The review's note when the two snippet sides have different scores. */
+const val CADENCE_CHANGED: String = "Cadence changed"
+
+/** A score in one line for the review: meter, tempo, bars and placed syllables; null without a score. */
+fun scoreSummary(score: Score?): String? {
+    score ?: return null
+    val meter = score.meters.first()
+    val bpm = score.tempos.first().bpm.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }
+    val notes = score.lines.sumOf { it.notes.size }
+    val changes = (score.meters.size - 1) + (score.tempos.size - 1)
+    return "Score: ${meter.num}/${meter.den}, $bpm bpm, ${barCount(score)} bar(s), $notes placed" +
+        (if (changes > 0) ", $changes change(s)" else "")
 }
 
 fun resolveErrorMessage(error: ResolveError): String = when (error) {
