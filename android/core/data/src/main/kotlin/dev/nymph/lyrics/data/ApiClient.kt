@@ -102,6 +102,19 @@ class ApiClient(
     suspend fun download(path: List<String>, target: File): ApiResult<File> =
         call(HttpMethod.GET, path, null, accept = "*/*") { readFile(it, target) }
 
+    /**
+     * Like [download], with [query] parameters, also answering the file name the server suggests
+     * in `Content-Disposition` (e.g. a score export's `<title>.mid`).
+     */
+    suspend fun downloadAttachment(path: List<String>, query: List<Pair<String, String>>, target: File): ApiResult<DownloadedFile> =
+        call(HttpMethod.GET, path, null, accept = "*/*", query = query) { response ->
+            val name = contentDispositionFileName(response.header("Content-Disposition"))
+            when (val result = readFile(response, target)) {
+                is ApiResult.Success -> ApiResult.Success(DownloadedFile(result.value, name))
+                is ApiResult.Failure -> result
+            }
+        }
+
     private suspend fun <T> call(
         method: HttpMethod,
         path: List<String>,

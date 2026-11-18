@@ -156,6 +156,12 @@ data class RhymeSuggestRequest(
     @SerialName("tag_filter") val tagFilter: String? = null,
     /** "Rhyme, then meaning" when [RhymeOrder.MEANING]; null (omitted) = rhyme order. */
     val order: RhymeOrder? = null,
+    /**
+     * "Fit rhythm": rank by agreement with the snippet anchor's placed slot rhythm (its score).
+     * Candidates of another syllable count are dropped. Sent only when on (null is omitted, like
+     * [order], so the body is unchanged for a server without the field).
+     */
+    @SerialName("rhythm_fit") val rhythmFit: Boolean? = null,
 )
 
 @Serializable
@@ -243,6 +249,8 @@ data class RhymeCandidate(
     val band: RhymeBand? = null,
     /** Cosine similarity to the meaning target (4 decimals); null unless meaning order was applied. */
     val similarity: Double? = null,
+    /** Rhythm agreement in [0, 1] with the slot's strong positions; null unless rhythm fit was applied. */
+    @SerialName("rhythm_fit") val rhythmFit: Double? = null,
 ) : RhymeUnitFields
 
 /** Response of `POST /api/nlp/rhyme-suggest`. */
@@ -254,4 +262,31 @@ data class RhymeSuggestResponse(
     @SerialName("elapsed_ms") val elapsedMs: Double,
     /** The order the server used: rhyme when meaning was asked but the model is unavailable. */
     @SerialName("order_applied") val orderApplied: RhymeOrder = RhymeOrder.RHYME,
+    /** True when rhythm fit was asked for and applied (rows banded, then by `rhythm_fit`). */
+    @SerialName("rhythm_applied") val rhythmApplied: Boolean = false,
+    /** Why rhythm fit was asked for but not applied; null when applied or not asked. */
+    @SerialName("rhythm_unavailable_reason") val rhythmUnavailableReason: RhythmUnavailableReason? = null,
 )
+
+/**
+ * `rhythm_unavailable_reason`: [NO_SCORE] (the anchor snippet has no score), [SLOT_UNPLACED] (a
+ * slot syllable has no note). A code this client does not know reads as [OTHER].
+ */
+@Serializable(with = RhythmUnavailableReasonSerializer::class)
+enum class RhythmUnavailableReason(val wire: String) {
+    NO_SCORE("no_score"),
+    SLOT_UNPLACED("slot_unplaced"),
+    OTHER("other"),
+}
+
+internal object RhythmUnavailableReasonSerializer : KSerializer<RhythmUnavailableReason> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("dev.nymph.lyrics.model.RhythmUnavailableReason", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: RhythmUnavailableReason) = encoder.encodeString(value.wire)
+
+    override fun deserialize(decoder: Decoder): RhythmUnavailableReason {
+        val raw = decoder.decodeString()
+        return RhythmUnavailableReason.entries.firstOrNull { it.wire == raw } ?: RhythmUnavailableReason.OTHER
+    }
+}

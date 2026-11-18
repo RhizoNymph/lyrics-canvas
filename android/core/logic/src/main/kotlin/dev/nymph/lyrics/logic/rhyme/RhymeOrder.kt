@@ -62,10 +62,19 @@ fun orderPresentation(asked: RhymeOrder, applied: RhymeOrder): OrderPresentation
 
 /**
  * The order a list's current rows were fetched with: what it asked for and what the server
- * applied (from the first page; later pages of the same query reuse it).
+ * applied (from the first page; later pages of the same query reuse it), and what became of
+ * "Fit rhythm" (the rhyme sheet only). Rhythm fit applied bands the rows like meaning order.
  */
-data class ResultOrdering(val asked: RhymeOrder = RhymeOrder.RHYME, val applied: RhymeOrder = RhymeOrder.RHYME) {
-    val presentation: OrderPresentation get() = orderPresentation(asked, applied)
+data class ResultOrdering(
+    val asked: RhymeOrder = RhymeOrder.RHYME,
+    val applied: RhymeOrder = RhymeOrder.RHYME,
+    val rhythm: RhythmOutcome = RhythmOutcome.NotAsked,
+) {
+    val presentation: OrderPresentation
+        get() = if (rhythm == RhythmOutcome.Applied) OrderPresentation.BANDED else orderPresentation(asked, applied)
+
+    /** Meaning was asked for and the server answered in rhyme order (the note shows even when banded by rhythm). */
+    val meaningUnavailable: Boolean get() = asked == RhymeOrder.MEANING && applied != RhymeOrder.MEANING
 }
 
 /** A list entry: a band header or a row. */

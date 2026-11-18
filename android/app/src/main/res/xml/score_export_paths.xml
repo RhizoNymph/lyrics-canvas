@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only exported score files (cacheDir/score-exports) are shared through the FileProvider. -->
+<paths>
+    <cache-path name="score_exports" path="score-exports/" />
+</paths>

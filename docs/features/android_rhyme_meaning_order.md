@@ -78,6 +78,12 @@ Word bank Rhymes with
 | meaning | meaning | `BANDED` (headers) |
 | meaning | rhyme | `MEANING_UNAVAILABLE` (note, no headers) |
 
+On the rhyme sheet, "Fit rhythm" ([android_score_tools.md](./android_score_tools.md)) adds a third
+input: when the server answers `rhythm_applied: true`, `ResultOrdering.presentation` is `BANDED`
+whatever the order. The sheet then shows "Meaning order unavailable" from
+`ResultOrdering.meaningUnavailable` (asked meaning, applied rhyme), so the note still appears when
+the rows are banded by rhythm. The pattern columns and the word bank keep using `OrderNote(presentation)`.
+
 ## Files and key exports
 
 | File | Role / key exports |
@@ -137,3 +143,5 @@ Tests:
    bar or percent to the client; this matches the web.
 5. **The Rhymes with toggle refetches only a list that was already asked for.** Before the first
    "Find" there is nothing to refetch; the next query uses the new order.
+6. **Rhythm fit (rhyme sheet only) bands rows too** (round-4 contract section 6). See
+   [android_score_tools.md](./android_score_tools.md).

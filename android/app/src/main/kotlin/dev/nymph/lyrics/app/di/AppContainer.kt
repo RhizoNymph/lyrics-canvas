@@ -9,6 +9,9 @@ import dev.nymph.lyrics.sync.SyncCenter
 import dev.nymph.lyrics.sync.repo.CachedTagPresetRepository
 import dev.nymph.lyrics.sync.repo.GatedNlpRepository
 import dev.nymph.lyrics.sync.repo.GatedVoiceRepository
+import dev.nymph.lyrics.sync.repo.GatedScoreToolsRepository
+import dev.nymph.lyrics.data.repository.HttpScoreToolsRepository
+import dev.nymph.lyrics.data.repository.ScoreToolsRepository
 import dev.nymph.lyrics.sync.repo.LocalCanvasRepository
 import dev.nymph.lyrics.sync.repo.LocalSearchRepository
 import dev.nymph.lyrics.sync.repo.LocalSnippetRepository
@@ -35,6 +38,8 @@ import dev.nymph.lyrics.data.repository.TagRepository
 import dev.nymph.lyrics.app.tags.DataStoreTagFilterStore
 import dev.nymph.lyrics.app.rhyme.order.DataStoreRhymeOrderStore
 import dev.nymph.lyrics.app.rhyme.order.RhymeOrderStore
+import dev.nymph.lyrics.app.rhyme.rhythm.DataStoreRhythmFitStore
+import dev.nymph.lyrics.app.rhyme.rhythm.RhythmFitStore
 import dev.nymph.lyrics.app.canvas.list.DataStoreListSortStore
 import dev.nymph.lyrics.app.canvas.list.ListSortStore
 import dev.nymph.lyrics.app.tags.FilterTextStore
@@ -150,6 +155,15 @@ class AppContainer(
 
     /** "Rhyme" / "Rhyme, then meaning" for every rhyme list, per device (DataStore `rhyme_order`). */
     val rhymeOrders: RhymeOrderStore = DataStoreRhymeOrderStore(appContext.rhymeOrderDataStore)
+
+    /** The rhyme sheet's "Fit rhythm" switch, per device (DataStore `rhyme_order`, key `rhyme_rhythm_fit`). */
+    val rhythmFit: RhythmFitStore = DataStoreRhythmFitStore(appContext.rhymeOrderDataStore)
+
+    /** Score drafts and exports: server-only, and only once the snippet's changes have synced. */
+    val scoreTools: ScoreToolsRepository = GatedScoreToolsRepository(HttpScoreToolsRepository(api), sync.gate, sync.local)
+
+    /** Exported score files waiting to be shared or saved (cleared per export). */
+    val scoreExportsDir: File = File(appContext.cacheDir, "score-exports")
     /** The list-mode sort, per device (DataStore `list_view`). */
     val listSorts: ListSortStore = DataStoreListSortStore(appContext.listViewDataStore)
 

@@ -48,6 +48,8 @@ data class RhymeQueryParams(
     val includeRare: Boolean = false,
     /** "Rhyme" or "Rhyme, then meaning" (the device's choice); sent as `order` when meaning. */
     val order: RhymeOrder = RhymeOrder.RHYME,
+    /** "Fit rhythm" (the device's choice); sent as `rhythm_fit` only with a snippet anchor. */
+    val rhythmFit: Boolean = false,
 )
 
 /** What the canvas and the sheet contribute to a query. */
@@ -157,6 +159,7 @@ fun planRhymeQuery(
         dialect = null,
         tagFilter = tagFilterText,
         order = params.order.requestValue,
+        rhythmFit = true.takeIf { params.rhythmFit && anchorSnips.isNotEmpty() },
     )
     return RhymeQueryPlan.Query(request, slot, excluded, ranges)
 }
