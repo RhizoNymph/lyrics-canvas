@@ -7,6 +7,7 @@ from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.api.canvases import _snippet_response
 from app.api.placement_errors import placement_errors, placement_http_error
+from app.api.score_errors import score_http_error, snippet_write_errors
 from app.api.sync_errors import base_version_query, conflict_responses, id_conflict_http_error, version_conflict_http_error
 from app.api.tag_errors import owner_id
 from app.models.user import User
@@ -15,9 +16,11 @@ from app.schemas.snippet import BatchPositionResult, BatchPositionUpdate, Snippe
 from app.schemas.sync_errors import IdConflictResponse, SnippetVersionConflictResponse
 from app.services import snippet_service
 from app.services.placements.errors import GroupNotFoundError, PlacementError, PlacementNotFoundError
+from app.services.score import ScoreError
+from app.services.score_save import KeepScore, new_content, score_edit
 from app.services.nlp.syllabifier import syllabify_text
 from app.services.phonetics_service import compute_snippet_phonetics
-from app.services.snippet_content import compute_size, derive_new_content
+from app.services.snippet_content import compute_size, content_for, new_grid
 from app.services.sync import client_ids, versions
 from app.services.sync.client_ids import SnippetCreateContent
 from app.services.sync.errors import IdConflictError, VersionConflictError
@@ -39,7 +42,7 @@ def _group_uuid(group_id: str | None) -> uuid.UUID | None:
 
 @router.post(
     "/api/canvases/{canvas_id}/snippets", response_model=SnippetResponse, status_code=201,
-    responses={**placement_errors(404, 422), **conflict_responses(IdConflictResponse)},
+    responses={**snippet_write_errors(), **conflict_responses(IdConflictResponse)},
 )
 async def create_snippet(
     canvas_id: str,
@@ -50,7 +53,8 @@ async def create_snippet(
     """With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id
     used by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without
     ``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is
-    422 ``invalid_list_rank``."""
+    422 ``invalid_list_rank``. A ``score`` is validated against the new grid (422 ``invalid_score``)
+    and its gaps become rests in the grid and ``_`` in the stored text."""
     # Python-mode dump keeps snippet_type/grid_mode as enums; the ORM object is
     # returned un-expired after commit, so a json-mode dump would leak plain
     # strings into the response serializer.
@@ -58,17 +62,27 @@ async def create_snippet(
     client_id = data.pop("id", None)
     if data.get("list_rank") is None:
         data.pop("list_rank", None)  # the service puts the placement at the top of the canvas
-    raw_text = data.pop("raw_text", "")
+    sent_text = data.pop("raw_text", "")
     # A client-supplied grid (block merging) is stored as-is so its rests and stress survive;
-    # otherwise the text is syllabified. Either way phonetics follow the stored grid.
+    # otherwise the text is syllabified. The score's rest link may then rewrite both; phonetics and
+    # size follow the final text and grid.
     data.pop("grid_data", None)
-    content = derive_new_content(
-        raw_text, req.grid_data.model_dump(exclude_unset=True) if req.grid_data is not None else None
-    )
+    data.pop("score", None)
+    data.pop("score_view", None)
+    grid = new_grid(sent_text, req.grid_data.model_dump(exclude_unset=True) if req.grid_data is not None else None)
+    try:
+        scored = new_content(raw_text=sent_text, grid=grid, raw_score=req.score, view=req.score_view)
+    except ScoreError as exc:
+        raise score_http_error(exc) from exc
+    content = content_for(scored.raw_text, scored.grid or {"lines": []})
+    raw_text = content.raw_text
     data["group_id"] = _group_uuid(data.pop("group_id", None))
     data["width"] = content.width
     data["height"] = content.height
-    fields = dict(raw_text=raw_text, grid_data=content.grid_data, phonetics=content.phonetics, **data)
+    fields = dict(
+        raw_text=raw_text, grid_data=content.grid_data, phonetics=content.phonetics,
+        score=scored.score, score_view=scored.score_view, **data,
+    )
     try:
         match client_id:
             case None:
@@ -81,6 +95,8 @@ async def create_snippet(
                     beats_per_line=req.beats_per_line,
                     derived_from=data["derived_from"],
                     grid_data=content.grid_data if req.grid_data is not None else None,
+                    score=scored.score,
+                    score_view=scored.score_view,
                 )
                 snippet = await client_ids.create_snippet(db, canvas_id, str(user.id), client_id, sent, **fields)
     except PlacementError as exc:
@@ -94,7 +110,7 @@ async def create_snippet(
 
 @router.put(
     "/api/snippets/{snippet_id}", response_model=SnippetResponse,
-    responses={**placement_errors(404, 422), **conflict_responses(SnippetVersionConflictResponse)},
+    responses={**snippet_write_errors(), **conflict_responses(SnippetVersionConflictResponse)},
 )
 async def update_snippet(
     snippet_id: str,
@@ -106,10 +122,18 @@ async def update_snippet(
     """Content fields update the shared snippet; layout fields (position, size, z_index,
     group_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422
     ``invalid_list_rank``). ``base_version`` is checked only when a content
-    field is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas."""
-    data = req.model_dump(exclude_none=True, exclude={"base_version"})
+    field is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.
+
+    ``score`` omitted keeps the stored score, carried over a text or grid change (a rest-only grid
+    edit moves the notes, any other change reconciles them); ``score: null`` removes it; a score
+    object replaces it and is validated against the resulting grid (422 ``invalid_score``). The
+    score's gaps are then written into the grid as rests and into the text as ``_``. ``score_view``
+    is stored false without a score."""
+    data = req.model_dump(exclude_none=True, exclude={"base_version", "score", "score_view"})
+    edit = score_edit(req.model_fields_set, req.score)
+    touches_score = not isinstance(edit, KeepScore) or req.score_view is not None
     try:
-        if req.base_version is not None and versions.has_content(data):
+        if req.base_version is not None and (versions.has_content(data) or touches_score):
             await versions.check_placed_snippet(db, uuid.UUID(snippet_id), canvas_id, owner_id(user), req.base_version)
     except VersionConflictError as exc:
         raise version_conflict_http_error(exc, _snippet_response) from exc
@@ -136,10 +160,14 @@ async def update_snippet(
         data["height"] = height
     try:
         snippet = await snippet_service.update_snippet(
-            db, snippet_id, str(user.id), canvas_id=canvas_id, content_edits=content_edits, **data
+            db, snippet_id, str(user.id), canvas_id=canvas_id, content_edits=content_edits,
+            **({} if not touches_score else {"score_edit": edit, "score_view": req.score_view}),
+            **data,
         )
     except PlacementError as exc:
         raise placement_http_error(exc) from exc
+    except ScoreError as exc:
+        raise score_http_error(exc) from exc
     return _snippet_response(snippet)
 
 

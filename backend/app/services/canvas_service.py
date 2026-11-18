@@ -183,6 +183,9 @@ def fork_copy(placed: PlacedSnippet, new_owner_id: uuid.UUID, canvas_id: uuid.UU
         beats_per_line=placed.beats_per_line,
         grid_data=placed.grid_data,
         raw_text=placed.raw_text,
+        # the score is valid for the copied grid, so it is copied with it (and the view choice)
+        score=placed.score,
+        score_view=placed.score_view,
         phonetics=placed.phonetics,
         derived_from=placed.derived_from,
         # a fork copies the words, it does not edit them

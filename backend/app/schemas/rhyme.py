@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.services.rhyme_order import Band, OrderName
+from app.services.rhythm_fit.types import RhythmUnavailableReason
 
 SourceName = Literal["notes", "dictionary"]
 ProvenanceName = Literal["note", "dictionary", "datamuse", "generated"]
@@ -95,6 +96,10 @@ class RhymeSuggestRequest(BaseModel):
     # "rhyme": today's order; "meaning": score bands, by meaning similarity to the anchors within a
     # band (docs/features/rhyme_view.md#rhyme-then-meaning)
     order: OrderName = "rhyme"
+    # "Fit rhythm" (docs/features/rhyme_rhythm_fit.md): when the first anchor is a snippet line or range
+    # whose syllables are all placed in the snippet's score, keep only candidates with the slot's syllable
+    # count and order by band, rhythm fit, then similarity or rhyme score
+    rhythm_fit: bool = False
 
 
 class RhymeSyllable(BaseModel):
@@ -159,9 +164,17 @@ class RhymeCandidateModel(RhymeUnitModel):
     similarity: float | None  # cosine to the meaning target (4 decimals); None unless meaning order was applied
 
 
+class RhymeSuggestCandidateModel(RhymeCandidateModel):
+    """A rhyme-suggest candidate (pattern candidates have no rhythm fit)."""
+
+    rhythm_fit: float | None = None  # 0..1, 4 decimals; None unless rhythm_applied
+
+
 class RhymeSuggestResponse(BaseModel):
     anchors: list[RhymeUnitModel]
-    candidates: list[RhymeCandidateModel]
+    candidates: list[RhymeSuggestCandidateModel]
     total: int
     elapsed_ms: float
     order_applied: OrderName  # "rhyme" when meaning was asked but the model is unavailable
+    rhythm_applied: bool = False  # rhythm_fit was asked and the anchor slot has a rhythm
+    rhythm_unavailable_reason: RhythmUnavailableReason | None = None  # set iff rhythm_fit asked and not applied

@@ -4,8 +4,10 @@ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model
 
 from app.models.snippet import SnippetType, GridMode
 from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
+from app.schemas.score import ScoreInput
 from app.schemas.tag import SnippetTagResponse
 from app.schemas.versioning import BaseVersion, ClientId
+from app.services.score.wire import ScoreModel
 
 
 class FaithfulModel(BaseModel):
@@ -57,6 +59,11 @@ class SnippetCreate(BaseModel):
     raw_text: str = ""
     # When given, stored as-is (no re-syllabification); rests and stress are preserved.
     grid_data: GridDataModel | None = None
+    # Score format v1, validated against the new grid (422 invalid_score); its gaps are written
+    # into the grid as rests and into raw_text as ``_`` (docs/features/score_backend.md).
+    score: ScoreInput = None
+    # True = show the staff; stored false when there is no score.
+    score_view: bool = False
     position_x: float = 0.0
     position_y: float = 0.0
     width: float = 300.0
@@ -73,6 +80,11 @@ class SnippetUpdate(BaseModel):
     beats_per_line: int | None = None
     grid_data: GridDataModel | None = None
     raw_text: str | None = None
+    # Omitted = keep the stored score (carried over a text or grid change); null = remove it; an
+    # object = replace it (validated against the resulting grid, 422 invalid_score).
+    score: ScoreInput = None
+    # Omitted or null = keep; forced false when the snippet ends up without a score.
+    score_view: bool | None = None
     position_x: float | None = None
     position_y: float | None = None
     width: float | None = None
@@ -126,6 +138,10 @@ class SnippetResponse(BaseModel):
     beats_per_line: int | None = None
     grid_data: GridDataModel | None = None
     raw_text: str
+    # Score format v1 (spec/score_format.md); null = no score. Always valid for grid_data.
+    score: ScoreModel | None = None
+    # True = the snippet shows its staff; always false when score is null.
+    score_view: bool = False
     position_x: float
     position_y: float
     width: float
@@ -138,9 +154,9 @@ class SnippetResponse(BaseModel):
     derived_from: DerivedFromModel | None = None
     created_at: str
     updated_at: str
-    # Last content edit (text, type, grid); moves, resizes and tags do not change it.
+    # Last content edit (text, type, grid, score, score view); moves, resizes and tags do not change it.
     content_updated_at: str
-    # Content version: +1 per change of text, type, grid mode, beats, grid or tags (not layout).
+    # Content version: +1 per change of text, type, grid mode, beats, grid, score, score view or tags (not layout).
     version: int
     canvases: list[SnippetCanvasRef] = []
 
