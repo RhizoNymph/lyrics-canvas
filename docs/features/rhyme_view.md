@@ -322,7 +322,8 @@ raw text with the existing overrides as the base; a text change recomputes from 
   "weights": {"vowel": 1.0, "coda": 0.6, "onset": 0.25},          // or null
   "dialect": {"rules": [{"kind": "final_merge", "source": ["IH","NG"], "target": ["IH","N"]}]},  // or null
   "tag_filter": "type:hook & !draft",  // or null: notes source only uses matching snippets (docs/features/tag_expressions.md)
-  "order": "rhyme"              // or "meaning": "Rhyme, then meaning" (see below)
+  "order": "rhyme",             // or "meaning": "Rhyme, then meaning" (see below)
+  "rhythm_fit": false           // "Fit rhythm" from the anchor snippet's score (rhyme_rhythm_fit.md)
 }
 // response
 {
@@ -330,7 +331,9 @@ raw text with the existing overrides as the base; a text change recomputes from 
   "candidates": [Candidate],
   "total": 312,
   "elapsed_ms": 41.2,
-  "order_applied": "rhyme"      // "meaning" only when meaning order was asked and applied
+  "order_applied": "rhyme",     // "meaning" only when meaning order was asked and applied
+  "rhythm_applied": false,      // rhythm_fit asked and the first anchor's slot syllables are all placed
+  "rhythm_unavailable_reason": null  // "no_score" | "slot_unplaced" | null
 }
 ```
 
@@ -351,6 +354,7 @@ interface RhymeCandidate extends RhymeUnit {
   source: 'notes' | 'dictionary';
   band: 'perfect' | 'strong' | 'near' | 'loose';             // from score, always set
   similarity: number | null;                                 // meaning order only (4 decimals)
+  rhythm_fit: number | null;                                 // rhyme-suggest only: 0..1 when rhythm_applied
 }
 ```
 
@@ -380,6 +384,11 @@ Semantics:
 - Budget: dictionary query ≤ 200 ms warm, measured by a test.
 - `order` (default `"rhyme"`, today's order) and `"meaning"`: see the next section. Every candidate
   carries its `band`; `similarity` is null unless `order_applied` is `"meaning"`.
+- `rhythm_fit` (default false): when the first anchor is a snippet line or range whose syllables are
+  all placed in the snippet's score, only candidates with the slot's syllable count are returned
+  (filtered before paging and `total`), each with `rhythm_fit` in [0, 1], ordered band -> rhythm fit
+  -> similarity or rhyme order; otherwise `rhythm_applied: false` with a reason and today's result.
+  See [rhyme_rhythm_fit.md](./rhyme_rhythm_fit.md).
 
 ## Rhyme, then meaning
 
@@ -556,7 +565,8 @@ Materializing (the brief's "promote") is the existing `POST /api/canvases/{id}/s
 |---|---|
 | `backend/app/services/phonetics/` | Engine package: `types`, `errors`, `distance`, `syllables`, `dialect`, `score`, `index`, `pronounce`, `resources`, `units`, `sources/{base,dictionary,notes}` (see [docs/backend/nlp-phonetics.md](../backend/nlp-phonetics.md)) |
 | `backend/app/schemas/phonetics.py` | `SnippetPhonetics`, `LinePhonetics`, `WordPhonetics`, `SyllableModel`, `PronunciationOverride`, `DerivedFromModel` |
-| `backend/app/schemas/rhyme.py` | `RhymeSuggestRequest` / `RhymeSuggestResponse` and the unit, candidate, slot, weights and dialect models |
+| `backend/app/schemas/rhyme.py` | `RhymeSuggestRequest` / `RhymeSuggestResponse` and the unit, candidate (`RhymeSuggestCandidateModel` adds `rhythm_fit`), slot, weights and dialect models |
+| `backend/app/services/rhythm_fit/` | "Fit rhythm": slot rhythm from the anchor's score, fit score, rhythm order ([rhyme_rhythm_fit.md](./rhyme_rhythm_fit.md)) |
 | `backend/app/services/phonetics_service.py` | `compute_snippet_phonetics(_with_report)`, `reconcile`, `note_unit(s_from_phonetics)`, model conversions |
 | `backend/app/services/rhyme_suggest_service.py` | `suggest`, `SnippetRepository` protocol + `DbSnippetRepository`, anchor resolution, `rank`, `fits_slot`, `dedupe_note_suffixes`, `meaning_target`, response models |
 | `backend/app/services/rhyme_order.py`, `backend/app/services/meaning/` | "Rhyme, then meaning": bands, ordering, embedding similarity (see [Rhyme, then meaning](#rhyme-then-meaning)) |
