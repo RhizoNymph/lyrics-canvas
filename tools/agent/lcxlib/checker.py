@@ -12,9 +12,13 @@ from typing import Any
 
 from lcxlib.errors import ApiError, Issue, IssueCode
 from lcxlib.client import Api
+from lcxlib.cadence import cadence
 from lcxlib.plan import (
     LAYOUT_FIELDS, AddBankWord, CreateCanvas, CreateTag, EditText, Move, Op, Plan, RemoveFrom, RenameCanvas,
-    ReorderList, SetLayout, ShowOn, TagSnippet, TagWord,
+    ReorderList, SetLayout, SetScore, ShowOn, TagSnippet, TagWord,
+)
+from lcxlib.score_ref import (
+    ScoreInvalid, ScoreTextMismatch, apply_rest_link, changed_line_texts, check_score, score_to_json, splice_line_texts,
 )
 from lcxlib.rank import RankError, n_keys_between, validate_rank
 from lcxlib.world import World, first_line, list_order
@@ -98,7 +102,7 @@ class Checker:
         self.word_tags = {wid: {t["name"].lower() for t in w["tags"]} for wid, w in world.words.items()}
         self.bank = {w["text"].lower(): self.word_tags[wid] for wid, w in world.words.items()}  # lower text -> tags
         self.refs: dict[str, str] = {}  # $ref -> canvas key (the ref itself, or an existing id it reuses)
-        self.edited: set[str] = set()
+        self.edited: dict[str, str] = {}  # snippet id -> the op that changes its content (one per snippet)
         self.steps: list[Step] = []
         self.issues: list[Issue] = []
 
@@ -175,6 +179,8 @@ class Checker:
                 return self.add_bank_word(i, op)
             case EditText():
                 return self.edit_text(i, op)
+            case SetScore():
+                return self.set_score(i, op)
 
     # -- ops ---------------------------------------------------------------------------------
     def create_tag(self, i: int, op: CreateTag) -> Step:
@@ -422,19 +428,21 @@ class Checker:
     def edit_text(self, i: int, op: EditText) -> Step:
         s = self.snippet(op.snippet_id)
         sid = op.snippet_id
-        if sid in self.edited:
-            raise _Skip(IssueCode.INVALID_FIELD, f"snippet {sid[:8]} is edited by an earlier edit_text op; one per snippet")
+        self._one_content_edit(sid, "edit_text")
         if s["version"] != op.base_version:
             raise _Skip(IssueCode.VERSION_CONFLICT,
                         f"snippet {sid[:8]} is at version {s['version']}, the plan is based on {op.base_version}; re-read it and rebuild the edit")
         on = self.canvases_of(sid)
         if not on:
             raise _Skip(IssueCode.NOT_ON_CANVAS, f"snippet {sid[:8]} is on no canvas at this point of the plan")
-        self.edited.add(sid)
+        self.edited[sid] = "edit_text"
         summary = f"edit text of snippet {self.sl(sid)} (version {op.base_version})"
         if s["raw_text"] == op.raw_text:
             return Step(i, "edit_text", summary, noop="the text is already this")
         details = [*(f"- {ln}" for ln in s["raw_text"].splitlines()), *(f"+ {ln}" for ln in op.raw_text.splitlines())]
+        if s.get("score") is not None:
+            details.append("it has a score: the server keeps the notes of unchanged words (changed words become "
+                           "unplaced) and may re-add the `_` rests the score needs; re-read it after applying")
         key, text = on[0], op.raw_text
 
         def run(api: Api, ctx: ApplyContext) -> object:
@@ -444,6 +452,67 @@ class Checker:
             return {"version": r["version"]}
 
         return Step(i, "edit_text", summary, details, run=run)
+
+
+    def _one_content_edit(self, sid: str, op: str) -> None:
+        if sid in self.edited:
+            raise _Skip(IssueCode.INVALID_FIELD,
+                        f"snippet {sid[:8]} is changed by an earlier {self.edited[sid]} op; one edit_text or set_score per "
+                        "snippet per plan (apply, re-read, then plan the next change)")
+
+    def set_score(self, i: int, op: SetScore) -> Step:
+        s = self.snippet(op.snippet_id)
+        sid = op.snippet_id
+        self._one_content_edit(sid, "set_score")
+        on = self.canvases_of(sid)
+        if not on:
+            raise _Skip(IssueCode.NOT_ON_CANVAS, f"snippet {sid[:8]} is on no canvas at this point of the plan")
+        grid, text = s.get("grid_data"), s["raw_text"]
+        new_score, new_grid, new_text = None, grid, text
+        if op.score is not None:
+            try:
+                typed = check_score(op.score, grid)
+            except ScoreInvalid as exc:
+                where = "".join(f", {k} {v}" for k, v in (("line", exc.line), ("note", exc.note)) if v is not None)
+                raise _Skip(IssueCode.INVALID_SCORE, f"score of snippet {sid[:8]}: {exc.reason.value}{where}: {exc.message}") from exc
+            new_score = score_to_json(typed)
+            linked = apply_rest_link(typed, grid)
+            if grid is not None and linked is not None:
+                try:
+                    new_text = splice_line_texts(text, changed_line_texts(grid, linked))
+                except ScoreTextMismatch:
+                    new_text = text  # the server keeps the text when it does not match the grid
+                new_grid = linked
+        old_view = bool(s.get("score_view"))
+        view = (old_view if op.score_view is None else op.score_view) and new_score is not None
+        self.edited[sid] = "set_score"
+        summary = (f"remove the score of snippet {self.sl(sid)}" if new_score is None
+                   else f"set the score of snippet {self.sl(sid)}")
+        if new_score == s.get("score") and view == old_view:
+            return Step(i, "set_score", summary, noop="the score and view already match"
+                        if new_score is not None else "it has no score")
+        details: list[str] = []
+        before, after = cadence(s.get("score"), grid), cadence(new_score, new_grid)
+        if before != after:
+            details += [f"- {ln}" for ln in before or ["(no score)"]]
+            details += [f"+ {ln}" for ln in after or ["(no score)"]]
+        if view != old_view:
+            details.append(f"view: {'staff' if old_view else 'grid'} -> {'staff' if view else 'grid'}")
+        if new_text != text:
+            details += ["text (the score's gaps become `_` rests):",
+                        *(f"  - {ln}" for ln in text.splitlines()), *(f"  + {ln}" for ln in new_text.splitlines())]
+        key = on[0]
+        body: dict[str, object] = {"score": op.score}
+        if op.score_view is not None:
+            body["score_view"] = op.score_view
+
+        def run(api: Api, ctx: ApplyContext) -> object:
+            r = api.request("PUT", f"/api/snippets/{sid}", query={"canvas_id": ctx.canvas(key)},
+                            body={**body, "base_version": ctx.versions[sid]})
+            ctx.versions[sid] = r["version"]
+            return {"version": r["version"], "score_view": r.get("score_view")}
+
+        return Step(i, "set_score", summary, details, run=run)
 
 
 @dataclass

@@ -3209,6 +3209,319 @@
         "title": "RhymeUnitModel",
         "type": "object"
       },
+      "ScoreErrorBody": {
+        "description": "``stored_score_invalid`` (500): the stored score no longer fits its grid.",
+        "properties": {
+          "error": {
+            "const": "stored_score_invalid",
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "ScoreErrorBody",
+        "type": "object"
+      },
+      "ScoreErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ScoreErrorBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ScoreErrorResponse",
+        "type": "object"
+      },
+      "ScoreInvalidBody": {
+        "properties": {
+          "error": {
+            "const": "invalid_score",
+            "title": "Error",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "0-based score line, when the failure is in a line",
+            "title": "Line"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "0-based note of that line, when the failure is in a note",
+            "title": "Note"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ScoreReason"
+          }
+        },
+        "required": [
+          "error",
+          "reason"
+        ],
+        "title": "ScoreInvalidBody",
+        "type": "object"
+      },
+      "ScoreInvalidResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ScoreInvalidBody"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ScoreInvalidResponse",
+        "type": "object"
+      },
+      "ScoreLineModel": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreNoteModel"
+            },
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notes"
+        ],
+        "title": "ScoreLineModel",
+        "type": "object"
+      },
+      "ScoreMeterModel": {
+        "additionalProperties": false,
+        "properties": {
+          "bar": {
+            "maximum": 2048.0,
+            "minimum": 0.0,
+            "title": "Bar",
+            "type": "integer"
+          },
+          "den": {
+            "enum": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "title": "Den",
+            "type": "integer"
+          },
+          "num": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Num",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bar",
+          "num",
+          "den"
+        ],
+        "title": "ScoreMeterModel",
+        "type": "object"
+      },
+      "ScoreModel": {
+        "additionalProperties": false,
+        "description": "Score format v1 (spec/score_format.md).",
+        "properties": {
+          "lines": {
+            "description": "one entry per grid line",
+            "items": {
+              "$ref": "#/components/schemas/ScoreLineModel"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "meters": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreMeterModel"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Meters",
+            "type": "array"
+          },
+          "pickup": {
+            "description": "ticks before bar 0",
+            "minimum": 0.0,
+            "title": "Pickup",
+            "type": "integer"
+          },
+          "ppq": {
+            "const": 48,
+            "title": "Ppq",
+            "type": "integer"
+          },
+          "snap": {
+            "enum": [
+              "1/8",
+              "1/16",
+              "1/32",
+              "1/8t",
+              "1/16t"
+            ],
+            "title": "Snap",
+            "type": "string"
+          },
+          "tempos": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreTempoModel"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Tempos",
+            "type": "array"
+          },
+          "v": {
+            "const": 1,
+            "title": "V",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "v",
+          "ppq",
+          "pickup",
+          "meters",
+          "tempos",
+          "snap",
+          "lines"
+        ],
+        "title": "ScoreModel",
+        "type": "object"
+      },
+      "ScoreNoteModel": {
+        "additionalProperties": true,
+        "description": "One placed syllable. Unknown keys (a future pitch) are kept and serialized.",
+        "properties": {
+          "a": {
+            "description": "accent: 0 none, 1 accent, 2 strong",
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "A",
+            "type": "integer"
+          },
+          "d": {
+            "description": "duration in ticks",
+            "minimum": 1.0,
+            "title": "D",
+            "type": "integer"
+          },
+          "s": {
+            "description": "syllable ordinal in the grid line (rest cells not counted)",
+            "minimum": 0.0,
+            "title": "S",
+            "type": "integer"
+          },
+          "t": {
+            "description": "start tick from tick 0 (ppq 48)",
+            "minimum": 0.0,
+            "title": "T",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "s",
+          "t",
+          "d",
+          "a"
+        ],
+        "title": "ScoreNoteModel",
+        "type": "object"
+      },
+      "ScoreReason": {
+        "description": "Every ``reason`` of ``invalid_score``, in the order validate checks them.",
+        "enum": [
+          "malformed",
+          "unsupported_version",
+          "bad_ppq",
+          "meters_empty",
+          "too_many_meters",
+          "meters_first_not_zero",
+          "meters_not_increasing",
+          "bar_out_of_range",
+          "meter_invalid",
+          "tempos_empty",
+          "too_many_tempos",
+          "tempos_first_not_zero",
+          "tempos_not_increasing",
+          "tempo_invalid",
+          "bad_pickup",
+          "snap_invalid",
+          "line_count_mismatch",
+          "syllable_out_of_range",
+          "syllables_not_increasing",
+          "start_negative",
+          "duration_invalid",
+          "accent_invalid",
+          "exceeds_max_ticks",
+          "notes_overlap"
+        ],
+        "title": "ScoreReason",
+        "type": "string"
+      },
+      "ScoreTempoModel": {
+        "additionalProperties": false,
+        "properties": {
+          "bar": {
+            "maximum": 2048.0,
+            "minimum": 0.0,
+            "title": "Bar",
+            "type": "integer"
+          },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "quarter notes per minute, at most 2 decimals",
+            "ge": 20,
+            "le": 400,
+            "title": "Bpm"
+          }
+        },
+        "required": [
+          "bar",
+          "bpm"
+        ],
+        "title": "ScoreTempoModel",
+        "type": "object"
+      },
       "ScoreWeightsModel": {
         "properties": {
           "coda": {
@@ -3588,6 +3901,23 @@
             "title": "Raw Text",
             "type": "string"
           },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "score format v1 (spec/score_format.md), or null to remove the score",
+            "title": "Score"
+          },
+          "score_view": {
+            "default": false,
+            "title": "Score View",
+            "type": "boolean"
+          },
           "snippet_type": {
             "$ref": "#/components/schemas/SnippetType",
             "default": "freestyle"
@@ -3734,6 +4064,21 @@
             "title": "Raw Text",
             "type": "string"
           },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_view": {
+            "default": false,
+            "title": "Score View",
+            "type": "boolean"
+          },
           "snippet_type": {
             "$ref": "#/components/schemas/SnippetType"
           },
@@ -3771,6 +4116,8 @@
           "beats_per_line",
           "grid_data",
           "raw_text",
+          "score",
+          "score_view",
           "position_x",
           "position_y",
           "width",
@@ -3936,6 +4283,29 @@
               }
             ],
             "title": "Raw Text"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "score format v1 (spec/score_format.md), or null to remove the score",
+            "title": "Score"
+          },
+          "score_view": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score View"
           },
           "snippet_type": {
             "anyOf": [
@@ -4392,6 +4762,21 @@
             "title": "Raw Text",
             "type": "string"
           },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_view": {
+            "default": false,
+            "title": "Score View",
+            "type": "boolean"
+          },
           "snippet_type": {
             "$ref": "#/components/schemas/SnippetType"
           },
@@ -4418,6 +4803,8 @@
           "beats_per_line",
           "grid_data",
           "raw_text",
+          "score",
+          "score_view",
           "phonetics",
           "derived_from",
           "created_at",
@@ -6024,7 +6411,7 @@
     },
     "/api/canvases/{canvas_id}/snippets": {
       "post": {
-        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without\n``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is\n422 ``invalid_list_rank``.",
+        "description": "With ``id`` (client-chosen), retrying the identical create returns the same snippet; an id\nused by a different snippet (or one not on this canvas) is 409 ``id_conflict``. Without\n``list_rank`` the placement goes to the top of the canvas's custom list order; an invalid one is\n422 ``invalid_list_rank``. A ``score`` is validated against the new grid (422 ``invalid_score``)\nand its gaps become rests in the grid and ``_`` in the stored text.",
         "operationId": "create_snippet_api_canvases__canvas_id__snippets_post",
         "parameters": [
           {
@@ -6082,11 +6469,29 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlacementErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScoreInvalidResponse"
+                    }
+                  ],
+                  "title": "Response 422 Create Snippet Api Canvases  Canvas Id  Snippets Post"
                 }
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "security": [
@@ -7323,7 +7728,7 @@
         ]
       },
       "put": {
-        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422\n``invalid_list_rank``). ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.",
+        "description": "Content fields update the shared snippet; layout fields (position, size, z_index,\ngroup_id, list_rank) update the placement on ``canvas_id`` (an invalid ``list_rank`` is 422\n``invalid_list_rank``). ``base_version`` is checked only when a content\nfield is set; a mismatch is 409 ``version_conflict`` with the snippet on this canvas.\n\n``score`` omitted keeps the stored score, carried over a text or grid change (a rest-only grid\nedit moves the notes, any other change reconciles them); ``score: null`` removes it; a score\nobject replaces it and is validated against the resulting grid (422 ``invalid_score``). The\nscore's gaps are then written into the grid as rests and into the text as ``_``. ``score_view``\nis stored false without a score.",
         "operationId": "update_snippet_api_snippets__snippet_id__put",
         "parameters": [
           {
@@ -7393,11 +7798,29 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlacementErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScoreInvalidResponse"
+                    }
+                  ],
+                  "title": "Response 422 Update Snippet Api Snippets  Snippet Id  Put"
                 }
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "security": [

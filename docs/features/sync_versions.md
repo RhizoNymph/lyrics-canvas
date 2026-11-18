@@ -48,7 +48,7 @@ services reload the row after commit and return the new value.
 
 | Entity | Bumps on (only when the stored value actually changes) | Never bumps on |
 |---|---|---|
-| Snippet | `raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`, `grid_data` (PUT, once per PUT however many fields), a voice-take append, a tag link or unlink that changes its tags | position, size, z, group (PUT layout, batch-position), placements (transfer, remove from one of several canvases), phonetics recomputed alone (a PUT resending the stored grid, the phonetics backfill), deleting or renaming a tag |
+| Snippet | `raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`, `grid_data`, `score`, `score_view` (PUT, once per PUT however many fields; score and view count when the stored value changes, [score_backend.md](./score_backend.md)), a voice-take append, a tag link or unlink that changes its tags | position, size, z, group (PUT layout, batch-position), placements (transfer, remove from one of several canvases), phonetics recomputed alone (a PUT resending the stored grid, the phonetics backfill), deleting or renaming a tag |
 | Canvas | `title` | viewport, `is_public`, share token |
 | Tag | `name`, `color` | links to snippets or words |
 | Word | `text`, a tag link or unlink that changes its tags (bulk tags, or `tag_ids` on an add that links a tag to a word already in the bank) | deleting or renaming a tag |
@@ -84,7 +84,7 @@ An entity that does not exist (or is another user's) is left to the route's usua
 
 | Mutation | Where | Checked against | Checked when | `current` |
 |---|---|---|---|---|
-| `PUT /api/snippets/{id}?canvas_id=` | body `base_version` | the snippet | the body sets a content field (`raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`, `grid_data`); a layout-only PUT ignores it | `SnippetResponse` on `canvas_id` |
+| `PUT /api/snippets/{id}?canvas_id=` | body `base_version` | the snippet | the body sets a content field (`raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`, `grid_data`, `score` including an explicit null, `score_view`); a layout-only PUT ignores it | `SnippetResponse` on `canvas_id` |
 | `DELETE /api/snippets/{id}` (everywhere) | `?base_version=` | the snippet | always | `SnippetResponse` on its oldest placement's canvas |
 | `DELETE /api/canvases/{cid}/snippets/{sid}` (remove from canvas) | `?base_version=` | the snippet | only when this is its last placement (the removal deletes it for good) | `SnippetResponse` on `cid` |
 | `POST /api/snippets/{id}/tags?tag_id=` | body `{"base_version"}` (optional body) | the **snippet** | always | `SnippetResponse` on its oldest placement's canvas |
@@ -134,7 +134,7 @@ The offline client picks UUIDs for what it creates, so a create can be retried:
 | Create | Compared |
 |---|---|
 | canvas | the normalized title |
-| snippet | `raw_text`, `snippet_type`, `grid_mode`, `beats_per_line`, `derived_from`, `grid_data` when the client sent one, and a placement on the requested canvas. Layout is last-write-wins and not compared |
+| snippet | `raw_text` (as stored, after the score's rest link), `snippet_type`, `grid_mode`, `beats_per_line`, `derived_from`, `grid_data` when the client sent one, `score` and `score_view` (as stored), and a placement on the requested canvas. Layout is last-write-wins and not compared |
 | tag | the normalized name and color |
 | word | owner and exact text; the retried word comes back in `created` |
 | merge | the merged snippet is the caller's and placed on `cid`, and none of the requested `snippet_ids` is still placed on `cid`. The retry's `deleted_ids` are the requested ids in request order (the first response's merge order is not stored) |
@@ -158,7 +158,7 @@ recognized after the 404 and returned.
   "canvases":   [CanvasResponse, …],
   "placements": [{"snippet_id", "canvas_id", "placement_id", "position_x", "position_y",
                   "width", "height", "z_index", "group_id", "list_rank"}, …],
-  "snippets":   [{"id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text",
+  "snippets":   [{"id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text", "score", "score_view",
                   "phonetics", "derived_from", "created_at", "updated_at", "content_updated_at",
                   "version", "tag_ids": [tag id, …]}, …],
   "tags":        [TagResponse, …],

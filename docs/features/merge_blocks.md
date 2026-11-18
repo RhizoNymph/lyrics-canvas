@@ -101,6 +101,8 @@ snippet with `deleted_ids` = the requested ids in request order. See
 - Cell objects are copied, never shared with the originals.
 - Phonetics = `compute_snippet_phonetics(raw_text, grid_data, None)` (grid stress wins via overrides,
   exactly as on create); `width`/`height` = `_compute_size(grid_data)`; `derived_from` is not set;
+  the merged snippet has no score (`score` null, `score_view` false; merging scores is out of scope,
+  [score_backend.md](./score_backend.md));
   `z_index` is the column default.
 
 ## Best-effort rules

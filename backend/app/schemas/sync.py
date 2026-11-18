@@ -10,6 +10,7 @@ from app.schemas.phonetics import DerivedFromModel, SnippetPhonetics
 from app.schemas.snippet import GridDataModel
 from app.schemas.tag import TagPresetResponse, TagResponse
 from app.schemas.word_bank import BankWordResponse
+from app.services.score.wire import ScoreModel
 
 # Responses always carry every field, so defaulted fields are required in the output schema.
 _RESPONSE_CONFIG = {"json_schema_serialization_defaults_required": True}
@@ -43,6 +44,8 @@ class SyncSnippet(BaseModel):
     beats_per_line: int | None = None
     grid_data: GridDataModel | None = None
     raw_text: str
+    score: ScoreModel | None = None  # score format v1, valid for grid_data; null = no score
+    score_view: bool = False  # always false when score is null
     phonetics: SnippetPhonetics | None = None
     derived_from: DerivedFromModel | None = None
     created_at: str

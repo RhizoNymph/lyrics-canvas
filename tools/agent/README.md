@@ -44,5 +44,9 @@ The plan format is documented in the skill and in the feature doc.
 cd tools/agent && python -m pytest -q tests
 ```
 
+`lcxlib/score_ref/` is a generated copy of the backend's score reference (stdlib only); after changing
+`backend/app/services/score/` run `python tools/agent/scripts/vendor_score_ref.py` (a test fails while
+the copy is stale).
+
 The tests run `lcx` against an in-memory fake of the API (`tests/fake_server.py`, stdlib
 `http.server` in a thread); no database or network is used.
