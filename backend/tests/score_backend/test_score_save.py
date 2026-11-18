@@ -11,7 +11,6 @@ from app.services.nlp.syllabifier import syllabify_text
 from app.services.score import (
     ScoreInvalid,
     ScoreReason,
-    ScoreTextMismatch,
     apply_rest_link,
     check_score,
     draft_from_grid,
@@ -399,11 +398,14 @@ def test_stored_score_is_not_needed_when_removing_or_replacing():
 # ---- text mismatch ----
 
 
-def test_grid_line_without_text_line_is_a_text_mismatch():
+def test_grid_line_without_text_line_keeps_the_sent_text_and_links_the_grid(caplog):
     g = grid("I go now\nhello world")
     raw = score_with(g, [], [(1, 0, 24), (2, 96, 24)])  # a rest between "lo" and "world"
-    with pytest.raises(ScoreTextMismatch):
-        saved_content(ScoredContent("I go now", g, None, False), raw_text="I go now", grid=g, edit=SetScore(raw), view=None)
+    with caplog.at_level("WARNING", logger="app.services.score_save"):
+        out = saved_content(ScoredContent("I go now", g, None, False), raw_text="I go now", grid=g, edit=SetScore(raw), view=None)
+    assert out.raw_text == "I go now"
+    assert rests(out.grid, 1) == [False, False, True, False]
+    assert "score.text_mismatch" in caplog.text and "action=keep_text" in caplog.text
 
 
 # ---- inputs are not mutated ----

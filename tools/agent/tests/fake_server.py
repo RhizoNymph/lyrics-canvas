@@ -76,9 +76,11 @@ class FakeBackend:
         return tid
 
     def add_snippet(self, sid: str, text: str, canvases: list[str], *, version: int = 1, tags: list[str] = (),
-                    ranks: list[str] | None = None, snippet_type: str = "verse") -> str:
+                    ranks: list[str] | None = None, snippet_type: str = "verse", grid: dict | None = None,
+                    score: dict | None = None, score_view: bool = False) -> str:
         self.snippets[sid] = {"id": sid, "snippet_type": snippet_type, "grid_mode": "auto", "beats_per_line": None,
-                              "grid_data": None, "raw_text": text, "phonetics": None, "derived_from": None,
+                              "grid_data": grid, "raw_text": text, "score": score, "score_view": score_view and score is not None,
+                              "phonetics": None, "derived_from": None,
                               "created_at": NOW, "updated_at": NOW, "content_updated_at": NOW, "version": version,
                               "tag_ids": list(tags)}
         for n, cid in enumerate(canvases):
@@ -124,6 +126,35 @@ class FakeBackend:
         out["tags"] = [self._tag_ref(t) for t in s["tag_ids"]]
         out["canvases"] = [{"id": c["id"], "title": c["title"]} for c in on]
         return out
+
+    def _put_score(self, s: dict[str, Any], body: dict[str, Any]) -> None:
+        """The server's score save flow for a score sent without text or grid (score_backend.md):
+        validate against the stored grid, store canonical JSON, rest-link the grid and text."""
+        from lcxlib.score_ref import (
+            ScoreInvalid, ScoreTextMismatch, apply_rest_link, changed_line_texts, check_score, score_to_json, splice_line_texts,
+        )
+
+        score = s["score"]
+        if "score" in body:
+            if body["score"] is None:
+                score = None
+            else:
+                try:
+                    typed = check_score(body["score"], s["grid_data"])
+                except ScoreInvalid as exc:
+                    raise ApiFailure(422, exc.as_dict()) from exc
+                score = score_to_json(typed)
+                linked = apply_rest_link(typed, s["grid_data"])
+                if s["grid_data"] is not None:
+                    try:
+                        s["raw_text"] = splice_line_texts(s["raw_text"], changed_line_texts(s["grid_data"], linked))
+                    except ScoreTextMismatch:
+                        pass  # the server keeps the text
+                    s["grid_data"] = linked
+        view = s["score_view"] if body.get("score_view") is None else body["score_view"]
+        view = bool(view) and score is not None
+        if (score, view) != (s["score"], s["score_view"]):
+            s["score"], s["score_view"], s["version"] = score, view, s["version"] + 1
 
     def _top_rank(self, cid: str) -> str:
         ranks = [p["list_rank"] for p in self.placements if p["canvas_id"] == cid]
@@ -249,11 +280,14 @@ class FakeBackend:
                 p = self._placement(sid, cid)
                 if p is None:
                     raise ApiFailure(404, {"error": "placement_not_found", "message": sid})
-                if "raw_text" in body:
+                if {"raw_text", "score", "score_view"} & set(body):
                     if body.get("base_version") is not None and body["base_version"] != s["version"]:
                         raise ApiFailure(409, {"error": "version_conflict", "message": "stale",
                                                "current": self._snippet_response(sid, cid)})
+                if "raw_text" in body:
                     s["raw_text"], s["version"] = body["raw_text"], s["version"] + 1
+                if "score" in body or "score_view" in body:
+                    self._put_score(s, body)
                 for k in ("position_x", "position_y", "width", "height", "z_index", "list_rank"):
                     if k in body:
                         p[k] = body[k]

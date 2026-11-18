@@ -125,9 +125,19 @@ def apply_update(
     score or view changes; returns whether it did. Derived values alone (phonetics, a resent grid)
     bump neither."""
     snippet = placed.snippet
-    content_changed = content_edits_differ(snippet, content_edits) or (
-        scored is not None and (scored.score != snippet.score or scored.score_view != snippet.score_view)
-    )
+    if scored is None:
+        content_changed = content_edits_differ(snippet, content_edits)
+    else:
+        # After the save flow, compare what will be stored: the sent text and grid as the flow left
+        # them (a client resending its already linked grid, text and score bumps nothing).
+        final = {**content_edits}
+        if "raw_text" in final:
+            final["raw_text"] = scored.raw_text
+        if "grid_data" in final:
+            final["grid_data"] = scored.grid
+        content_changed = content_edits_differ(snippet, final) or (
+            scored.score != snippet.score or scored.score_view != snippet.score_view
+        )
     for key, value in changes.items():
         if value is None:
             continue

@@ -10,8 +10,10 @@ it. Authentication is a personal API token (`lct_...`, see the API tokens featur
 - Configuration from the environment or `~/.config/lyrics-canvas/agent.env`; the token is never
   printed, logged or shown in `repr`.
 - Read commands that print the API's JSON: `whoami`, `canvases`, `canvas <id|title>` (compact, list
-  order), `tags`, `presets`, `bank`, `search <q>`, `dump` (`GET /api/sync/snapshot`).
-- A typed plan format (version 1, twelve ops), a strict parser, a checker that resolves names and
+  order, with each snippet's compact `cadence` and `score_view`), `tags`, `presets`, `bank`,
+  `search <q>`, `dump` (`GET /api/sync/snapshot` plus a `cadence` per snippet), `score <snippet>`.
+- A typed plan format (version 1, thirteen ops, `set_score` checked locally with the vendored score
+  reference, see [score_backend.md](./score_backend.md#agent-cli)), a strict parser, a checker that resolves names and
   simulates the plan over the account to produce a human-readable diff and typed problems, and an
   applier that re-checks, runs the steps in order and stops at the first error.
 - A Python port of fractional-indexing 3.2.0 for `reorder_list` ranks and `set_layout.list_rank`
@@ -43,12 +45,15 @@ it. Authentication is a personal API token (`lct_...`, see the API tokens featur
 | `tools/agent/lcxlib/world.py` | The snapshot as lookup tables; list order | `World.from_snapshot`, `list_order`, `first_line` |
 | `tools/agent/lcxlib/checker.py` | Resolution + simulation -> `Step`s (summary, details, no-op reason, runner) and `Issue`s; text diff | `Checker`, `Step`, `ApplyContext`, `CheckResult`, `check_plan`, `render_check` |
 | `tools/agent/lcxlib/apply.py` | Ordered execution, stop on first error | `apply_steps`, `ApplyResult`, `render_apply` |
+| `tools/agent/lcxlib/cadence.py` | Compact score rendering for reads and diffs | `cadence`, `header`, `line_cadence` |
+| `tools/agent/lcxlib/score_ref/` | Generated verbatim copy of the backend score reference (validate, timing, rest link, text splice, rest_marks) | `check_score`, `validate`, `apply_rest_link`, `splice_line_texts`, `changed_line_texts`, `bar_at_tick`, `beat_unit`, `score_to_json` |
+| `tools/agent/scripts/vendor_score_ref.py` | Regenerates `score_ref/` from `backend/app/services/` | `render`, `MODULES` |
 | `tools/agent/skill/lyrics-canvas/SKILL.md` | The skill: rules, setup, reading, plan format, check-show-approve-apply, recipes | - |
 | `tools/agent/skill/lyrics-canvas/lcx` | Relative symlink to `../../lcx.py`, so the installed skill carries the CLI | - |
 | `tools/agent/README.md` | Install and use | - |
 | `tools/agent/tests/fake_server.py` | In-memory fake of the routes lcx uses (`ThreadingHTTPServer` in a thread), request log, one-shot failures | `FakeBackend`, `FakeServer`, `TOKEN`, `uid` |
 | `tools/agent/tests/conftest.py` | Seeded account, `lc` fixture, `Env.run(...)`, `Env.plan_file(...)` | - |
-| `tools/agent/tests/test_*.py` | rank port (+ `spec/list_rank_vectors.json` when present), config and reads, parser, check, apply | - |
+| `tools/agent/tests/test_*.py` | rank port (+ `spec/list_rank_vectors.json` when present), config and reads, parser, check, apply; `test_score.py`: vendored copy current + score vectors, cadence, score reads, `set_score` | - |
 
 ## Configuration
 
@@ -71,10 +76,11 @@ lcx <cmd> -> cli.main -> load_config -> Api -> GET route -> JSON -> stdout (inde
 |---|---|
 | `whoami` | `GET /api/auth/me` |
 | `canvases` | `GET /api/canvases` |
-| `canvas X` | `GET /api/canvases` (resolve id or exact title; 0 or 2+ matches -> exit 2) then `GET /api/canvases/{id}`; compact: `{id, title, version, updated_at, snippets: [{id, placement_id, type, text, tags: [names], version, content_updated_at, list_rank, layout{...}, canvases}]}` in list order; `--full` = raw |
+| `canvas X` | `GET /api/canvases` (resolve id or exact title; 0 or 2+ matches -> exit 2) then `GET /api/canvases/{id}`; compact: `{id, title, version, updated_at, snippets: [{id, placement_id, type, text, tags: [names], version, cadence, score_view, content_updated_at, list_rank, layout{...}, canvases}]}` in list order; `--full` = raw |
 | `tags` / `presets` / `bank` | `GET /api/tags` / `GET /api/tag-presets` / `GET /api/word-bank` |
 | `search q` | `GET /api/search?q=&limit=` (default 50) |
-| `dump` | `GET /api/sync/snapshot` |
+| `dump` | `GET /api/sync/snapshot`, each snippet gains `cadence` (compact score, null without one) |
+| `score ID` | `GET /api/sync/snapshot`; `{id, version, text, score_view, score, cadence, lines: [{text, syllables}]}`; unknown id -> exit 2 |
 
 List order everywhere is the contract's custom order: `list_rank` ascending (byte order), then
 `placement_id`.
@@ -95,7 +101,8 @@ top-level fields rejected. Each op is looked up in `_OP_FIELDS` (dataclass, fiel
 unknown op names (`unknown_op`), unknown or missing fields and wrong types (`invalid_field`; bools are
 not numbers) are all collected and reported together with their 1-based op index. Extra rules:
 `set_layout` needs at least one layout field, `edit_text.base_version >= 1`, `create_canvas.ref`
-matches `$[A-Za-z0-9_-]{1,64}`.
+matches `$[A-Za-z0-9_-]{1,64}`; `set_score.score` must be present (an object or null) and
+`score_view` a bool.
 
 **Checking** (`checker.py`): `Checker` walks the ops in order over a mutable copy of the account:
 canvas titles by key (ids and `$refs`), each canvas's list order, snippet tags and word tags by lower
@@ -122,7 +129,8 @@ summary, detail lines, an optional no-op reason, and a runner closure) or an `Is
 | `create_canvas` | ref unused (`duplicate_ref`); title 1-255; exactly one existing canvas with that title -> no-op and the ref binds to it; two or more -> `ambiguous_canvas` | `POST /api/canvases {title}`; binds `$ref` to the new id |
 | `rename_canvas` | title 1-255; same -> no-op | `PUT /api/canvases/{cid} {title}` |
 | `add_bank_word` | text NFC + whitespace-collapsed, 1-64 chars; tags resolved; already in the bank (lower text) with all those tags -> no-op; in the bank without them -> "only links the tags" | `POST /api/word-bank {words:[text], tag_ids}` |
-| `edit_text` | one per snippet per plan; `base_version` must equal the snapshot version (`version_conflict`); on some canvas at that point; same text -> no-op; details `-`/`+` lines | `PUT /api/snippets/{id}?canvas_id= {raw_text, base_version}` where base_version is the latest version this apply has seen (own tag changes bump it); 409 stops the apply |
+| `edit_text` | one `edit_text` or `set_score` per snippet per plan; `base_version` must equal the snapshot version (`version_conflict`); on some canvas at that point; same text -> no-op; details `-`/`+` lines (plus a note when the snippet has a score: the server reconciles it) | `PUT /api/snippets/{id}?canvas_id= {raw_text, base_version}` where base_version is the latest version this apply has seen (own tag changes bump it); 409 stops the apply |
+| `set_score` | one `edit_text` or `set_score` per snippet per plan; on some canvas; `score` (object or null, required) validated with the vendored `check_score` against the snapshot grid (`invalid_score` with reason, line, note); canonical score, rest-linked grid and spliced text computed locally; same score and view -> no-op; details: cadence `-` / `+`, `view: grid -> staff`, text change | `PUT /api/snippets/{id}?canvas_id= {score, score_view?, base_version}` (latest version seen) |
 
 **Diff text** (`render_check`): `Plan: <description>`, a count line (`N ops: C changes, D already
 done[, P problems]`), then one line per step: `  3. * <summary>` with indented details, or
@@ -192,5 +200,10 @@ from the repo root; the skill directory's `lcx` symlink resolves to the CLI.
   contract's example.
 - **One `edit_text` per snippet per plan**; its `base_version` is checked against the snapshot and
   the apply sends the latest version it observed, so the plan's own tag changes don't conflict with it.
+- **`set_score`** (musical mode, [score_backend.md](./score_backend.md#agent-cli)): no
+  `base_version` field (contract shape), the apply sends the latest version seen; it shares the
+  one-content-edit-per-snippet rule with `edit_text` since a score cannot be checked against a text
+  edit's grid locally. The score reference is vendored (generated copy + currency test), not imported
+  (the backend package needs pydantic) nor hand-ported.
 - `LYRICS_CA_FILE` (optional) for an https URL signed by the homelab CA; `LCX_ENV_FILE` to point at
   another env file (used by the tests).

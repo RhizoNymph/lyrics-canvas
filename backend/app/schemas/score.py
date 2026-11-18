@@ -34,10 +34,9 @@ class ScoreInvalidResponse(BaseModel):
 
 
 class ScoreErrorBody(BaseModel):
-    """``score_text_mismatch`` (422): a rest-linked grid line has no text line (the sent grid and
-    text disagree); ``stored_score_invalid`` (500): the stored score no longer fits its grid."""
+    """``stored_score_invalid`` (500): the stored score no longer fits its grid."""
 
-    error: Literal["score_text_mismatch", "stored_score_invalid"]
+    error: Literal["stored_score_invalid"]
     message: str
 
 
