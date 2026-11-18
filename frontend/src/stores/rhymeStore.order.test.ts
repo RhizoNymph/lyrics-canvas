@@ -35,6 +35,8 @@ function snippet(id: string, raw_text: string): Snippet {
     height: 100,
     z_index: 0,
     list_rank: 'a0',
+    score: null,
+    score_view: false,
     group_id: null,
     tags: [],
     created_at: '',

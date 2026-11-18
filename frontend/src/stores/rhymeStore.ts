@@ -13,6 +13,9 @@ import { format, parse, renameInText } from '@/lib/tagExpr';
 import { RHYME_ORDERING, orderField, resultOrdering } from '@/lib/rhyme/order';
 import type { ResultOrdering, RhymeOrder } from '@/lib/rhyme/order';
 import { currentRhymeOrder } from './rhymeOrderStore';
+import { RHYTHM_OFF, rhythmEligible, rhythmFitField, rhythmFitting } from '@/lib/rhyme/rhythmFit';
+import type { RhythmFitting } from '@/lib/rhyme/rhythmFit';
+import { currentRhythmFit } from './rhymeRhythmFitStore';
 import type {
   AnchorRange,
   RhymeK,
@@ -56,6 +59,8 @@ export interface RhymeState {
   dismissed: Set<string>;
   /** Order of the loaded candidates; "More" pages keep it so appends continue the same bands. */
   ordering: ResultOrdering;
+  /** Rhythm fit of the loaded candidates (asked, applied, why not); "More" pages keep asking the same. */
+  rhythm: RhythmFitting;
   /** Materializations made per anchor snippet id this session (drives the row step-down). */
   materializeCounts: Map<string, number>;
   /** Canvas element size, for the viewport-centre fallback when materializing without a single anchor. */
@@ -101,6 +106,7 @@ function cleared() {
     offset: 0,
     dismissed: new Set<string>(),
     ordering: RHYME_ORDERING,
+    rhythm: RHYTHM_OFF,
     materializeCounts: new Map<string, number>(),
     loading: false,
     error: null,
@@ -180,7 +186,8 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
   const buildRequest = (
     offset: number,
     order: RhymeOrder,
-  ): { request: RhymeSuggestRequest; slot: Slot | null } | RhymeError | null => {
+    rhythmOn: boolean,
+  ): { request: RhymeSuggestRequest; slot: Slot | null; rhythmRequested: boolean } | RhymeError | null => {
     const state = get();
     const canvas = useCanvasStore.getState();
     if (!state.active || !canvas.canvasId) return null;
@@ -213,8 +220,10 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
         dialect: null,
         ...(tagFilter.expr !== null ? { tag_filter: format(tagFilter.expr) } : {}),
         ...orderField(order),
+        ...rhythmFitField(rhythmOn, anchors),
       },
       slot,
+      rhythmRequested: rhythmOn && rhythmEligible(anchors),
     };
   };
 
@@ -275,15 +284,15 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
 
     runQuery: async () => {
       const order = currentRhymeOrder();
-      const built = buildRequest(0, order);
+      const built = buildRequest(0, order, currentRhythmFit());
       const seq = ++querySeq;
       if (built instanceof RhymeError) {
-        set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, loading: false, error: built });
+        set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, rhythm: RHYTHM_OFF, loading: false, error: built });
         return;
       }
       if (!built) {
         if (get().active) {
-          set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, loading: false, error: null });
+          set({ anchors: [], candidates: [], total: 0, offset: 0, ordering: RHYME_ORDERING, rhythm: RHYTHM_OFF, loading: false, error: null });
         }
         return;
       }
@@ -298,6 +307,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
           total: res.data.total,
           offset: 0,
           ordering: resultOrdering(order, res.data.order_applied),
+          rhythm: rhythmFitting(built.rhythmRequested, res.data),
           loading: false,
           error: null,
         });
@@ -311,7 +321,7 @@ export const useRhymeStore = create<RhymeState>((set, get) => {
       const state = get();
       const nextOffset = state.offset + RHYME_PAGE_SIZE;
       if (state.loading || nextOffset >= state.total) return;
-      const built = buildRequest(nextOffset, state.ordering.requested);
+      const built = buildRequest(nextOffset, state.ordering.requested, state.rhythm.requested);
       if (!built || built instanceof RhymeError) return;
       const seq = ++querySeq;
       set({ loading: true, error: null });

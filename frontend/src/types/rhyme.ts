@@ -68,7 +68,15 @@ export interface RhymeCandidate extends RhymeUnit {
   band?: RhymeBand;
   /** Cosine similarity to the anchor (4 decimals) when meaning order was applied; null otherwise. */
   similarity?: number | null;
+  /**
+   * Rhythm fit 0..1 (agreement of the candidate's stress with the slot's strong positions on the anchor
+   * snippet's staff) when rhythm fit was applied; null otherwise. Optional like `band`.
+   */
+  rhythm_fit?: number | null;
 }
+
+/** Why a requested rhythm fit was not applied: the anchor snippet has no score, or a slot syllable is unplaced. */
+export type RhythmUnavailableReason = 'no_score' | 'slot_unplaced';
 
 /**
  * A snippet line (`line_index: null` = last non-empty line), optionally narrowed to the words
@@ -152,6 +160,11 @@ export interface RhymeSuggestRequest {
   tag_filter?: string;
   /** "meaning" = rhyme bands, then similarity to the anchors. Omitted for the server default "rhyme". */
   order?: 'meaning';
+  /**
+   * Rank by fit to the anchor snippet's score rhythm (contract §6). Sent only as `true`, only with a
+   * snippet anchor; omitted = the server default false.
+   */
+  rhythm_fit?: true;
 }
 
 export interface RhymeSuggestResponse {
@@ -161,6 +174,10 @@ export interface RhymeSuggestResponse {
   elapsed_ms: number;
   /** The order the server used; "rhyme" when meaning was asked but the model is unavailable. */
   order_applied?: RhymeOrder;
+  /** True when rhythm fit was asked for and applied. Optional for wire fixtures written before it existed. */
+  rhythm_applied?: boolean;
+  /** Set when rhythm fit was asked for but not applied; null otherwise. */
+  rhythm_unavailable_reason?: RhythmUnavailableReason | null;
 }
 
 // ---- Errors ----

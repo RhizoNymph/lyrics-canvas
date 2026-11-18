@@ -58,6 +58,11 @@ ripple right, removals clamp). A text edit keeps the notes of the words that sur
 LCS over normalized keys), and a draft can be laid out from the grid. The algorithms are defined in
 `spec/score_format.md`, implemented in Python (`backend/app/services/score/`), and pinned by
 `spec/score_vectors.json` for the web and Android ports; TS and Kotlin wire types exist. See
+[score_format.md](./features/score_format.md). On web, "Make score…" drafts a score from the grid (note
+length, meter, tempo; computed locally) or from a voice take (server alignment, estimated tempo, unplaced /
+unmatched counts), snippets with a score export MIDI or MusicXML from the editor header and the context menu,
+and the rhyme sidebar's per-viewer "Fit rhythm" switch ranks candidates by fit to the anchor snippet's
+rhythm (`♩NN%`, reason shown when unavailable); see [web_score_tools.md](./features/web_score_tools.md).
 [score_format.md](./features/score_format.md). Rhyme suggest's "Fit rhythm" (`rhythm_fit`) reads the
 anchor snippet's score: the slot syllables' onset metric weights and accents become per-syllable
 targets, only candidates with the slot's syllable count are kept, and each gets a deterministic
@@ -248,6 +253,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Rhyme Rhythm Fit](./features/rhyme_rhythm_fit.md) | Rhyme-suggest `rhythm_fit`: slot rhythm from the anchor snippet's score (metric weight + accent per slot syllable), syllable-count filter, rhythm-fit score, band -> fit -> similarity / rhyme order, `rhythm_applied` / `rhythm_unavailable_reason` |
 | [Score Backend](./features/score_backend.md) | Musical mode phase 2 server: migration 012 (`score`, `score_view`), snippet create / PUT / response / snapshot fields, the save flow (validate, rest-only edit -> notes move, other edits -> reconcile, rest link + text splice), typed `invalid_score` errors, versions (compared after the flow), merge / fork, voice append; `lcx` cadence reads and `set_score` |
 | [Score Format](./features/score_format.md) | Musical mode phase 1: score format v1, validate (24 reasons), bars / beat unit / metric weight / tick-to-ms, rest link both ways, reconcile, draft from grid, text splice; Python reference, generated vectors, TS and Kotlin wire types |
+| [Web Score Tools](./features/web_score_tools.md) | Web score draft dialog (grid / recording), typed draft and export API (`ScoreApiError`), MIDI / MusicXML export menu, context-menu "Make score…", rhyme sidebar "Fit rhythm" switch with percent and unavailable reason |
 | [Score Drafts and Export](./features/score_draft_export.md) | `POST /api/snippets/{id}/score/draft` (from the grid or a voice take: word alignment, vowel-weighted syllable times, numpy tempo estimate, 1/16 / 1/16t quantization with a tempo follower, pickup choice) and `GET /api/snippets/{id}/score/export` (hand-written MIDI and MusicXML), typed errors |
 | [Rest Marks](./features/rest_marks.md) | `_` as a rest in snippet text: tokenize, word indexes, display text, canonical text, shared vectors, every backend consumer |
 | [Search Across Canvases](./features/global_search.md) | `GET /api/search` (canvases by title, snippets by display text, excerpts, typed `invalid_search_query`) and the per-canvas search rule |
@@ -395,6 +401,22 @@ Features Index:
       - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/score/
     depends_on: [rest_marks, grid_rearrange]
     doc: docs/features/score_format.md
+  web_score_tools:
+    description: Web score tools of musical mode (contract §5-§7). api/score.ts - POST /api/snippets/{id}/score/draft (grid {note, meter, bpm} or recording {recording_id, meter, bpm|null}; response {score, bpm_estimated, unplaced, unmatched_words}) and GET /api/snippets/{id}/score/export?format=midi|musicxml (blob, Content-Disposition name, fallback snippet-<id8>.ext), rejecting only with ScoreApiError (snippet_not_found, score_not_found, recording_not_found, recording_has_no_timings, draft_empty, invalid_score with reason/line/note, invalid_request, not_found, server_unavailable, network, aborted, http). ScoreDraftDialog (snippet, onDraft(score), onClose, initialSource, draftGrid) - pure form (meter 1..32 over 1..32 dens, bpm 20..400 with <= 2 decimals, required for grid, empty = estimate for recording) and reducer (takes newest first, without timings disabled, stale answers dropped); grid drafts local through localGridDrafter (the editor port's draftFromGrid) when given, else the server; summary of estimated tempo and counts; "Use score" hands the draft over without saving. ScoreDraftHost (scoreDraftStore) behind the context menu "Make score…" saves {score, score_view true} through canvasStore.updateSnippet. Export dropdown in the inline editor header and two context-menu items for snippets with a score, saved via saveBlobAs, outcome in the bottom notice. Rhyme sidebar "Fit rhythm" - per-viewer switch (localStorage lyrics-canvas.rhymeRhythmFit), visible only with a snippet anchor, sends rhythm_fit true only then, keeps {requested, applied, unavailable} per result set (pages reuse it), bands rows whenever applied, ♩NN% per row, note for no_score / slot_unplaced.
+    entry_points:
+      - frontend/src/api/score.ts (createScoreApi; client.ts scoreApi)
+      - frontend/src/types/scoreTools.ts
+      - frontend/src/lib/scoreTools/
+      - frontend/src/components/score/
+      - frontend/src/stores/scoreDraftStore.ts
+      - frontend/src/components/canvas/SnippetContextMenu.tsx (Make score…, Export items)
+      - frontend/src/components/canvas/InlineGridEditor.tsx (ScoreExportMenu)
+      - frontend/src/components/pages/CanvasPage.tsx (ScoreDraftHost)
+      - frontend/src/lib/rhyme/rhythmFit.ts
+      - frontend/src/stores/rhymeRhythmFitStore.ts
+      - frontend/src/components/rhyme/rhythm/
+    depends_on: [score_format, web_score_editor, voice_capture, web_voice_capture, rhyme_view, web_rhyme_meaning_order]
+    doc: docs/features/web_score_tools.md
   rhyme_rhythm_fit:
     description: 'Rhyme-suggest "Fit rhythm". Request rhythm_fit bool (default false); response rhythm_applied bool and rhythm_unavailable_reason "no_score" | "slot_unplaced" | null; RhymeSuggestCandidateModel.rhythm_fit number | null (pattern candidates unchanged). The first anchor gives the slot - text anchor or a snippet without a (valid) score -> no_score; the anchor line / word range syllable cells must all have notes else slot_unplaced; then per syllable SlotBeat(onset, metric_weight(onset), accent). Applied - candidates with exactly the slot syllable count (rest marks are not syllables) are kept before the note-suffix dedupe, paging and total; fit = mean of 1 - |prominence - target| where prominence is 1 / 0.5 / 0 for stress 1 / 2 / 0 and target is the slot level max(weight, {0:0,1:2,2:3}[accent]) min-max normalized within the slot (level / 3 when the levels are equal), exact rationals rounded to 4 decimals; order band -> fit desc -> similarity (meaning) -> rhyme order (stable sort over apply_order). Not applied -> rhythm_fit null everywhere and the plain result.'
     entry_points:
@@ -980,7 +1002,7 @@ Features Index:
     depends_on: [sync_versions, snippet_placements, tag_expressions, word_bank, global_search]
     doc: docs/features/agent_skill.md
   web_rhyme_meaning_order:
-    description: Web client of the rhyme order toggle. One per-viewer choice (rhymeOrderStore, localStorage lyrics-canvas.rhymeOrder, default rhyme) shown as a "Rhyme" / "Rhyme, then meaning" radio group in the rhyme sidebar controls, above the pattern slot columns and in the word bank "Rhymes with" view; a change refetches each list from its first page. Meaning sends order "meaning" on POST /api/nlp/rhyme-suggest, /api/nlp/rhyme-pattern/suggest and /api/word-bank/rhymes (rhyme sends nothing). Each list keeps the order it asked for with the response's order_applied (ResultOrdering); later pages reuse the asked order. order_applied meaning -> band headers (Perfect / Strong / Near / Loose, from each row's band, fallback from score with the 0.95/0.85/0.75 edges in lib/rhyme/order.ts) where the band changes, appended pages continue the band; meaning asked but rhyme applied -> "Meaning order unavailable", no headers. Rows show the similarity as a quiet ≈NN%. Line matches in pattern mode are never banded.
+    description: Web client of the rhyme order toggle (the sidebar list also bands rows when rhythm fit was applied, see web_score_tools). One per-viewer choice (rhymeOrderStore, localStorage lyrics-canvas.rhymeOrder, default rhyme) shown as a "Rhyme" / "Rhyme, then meaning" radio group in the rhyme sidebar controls, above the pattern slot columns and in the word bank "Rhymes with" view; a change refetches each list from its first page. Meaning sends order "meaning" on POST /api/nlp/rhyme-suggest, /api/nlp/rhyme-pattern/suggest and /api/word-bank/rhymes (rhyme sends nothing). Each list keeps the order it asked for with the response's order_applied (ResultOrdering); later pages reuse the asked order. order_applied meaning -> band headers (Perfect / Strong / Near / Loose, from each row's band, fallback from score with the 0.95/0.85/0.75 edges in lib/rhyme/order.ts) where the band changes, appended pages continue the band; meaning asked but rhyme applied -> "Meaning order unavailable", no headers. Rows show the similarity as a quiet ≈NN%. Line matches in pattern mode are never banded.
     entry_points:
       - frontend/src/lib/rhyme/order.ts
       - frontend/src/stores/rhymeOrderStore.ts
