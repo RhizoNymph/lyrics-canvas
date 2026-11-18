@@ -20,6 +20,7 @@ from app.api.nlp import router as nlp_router
 from app.api.export import router as export_router
 from app.api.search import router as search_router
 from app.api.voice import router as voice_router
+from app.api.score_tools import router as score_tools_router
 from app.api.sync import router as sync_router
 from app.api.tokens import router as tokens_router
 from app.api.embeddings import related_words
@@ -73,6 +74,7 @@ app.include_router(voice_router)
 app.include_router(word_bank_router)
 app.include_router(sync_router)
 app.include_router(tokens_router)
+app.include_router(score_tools_router)
 
 
 @app.get("/api/health")

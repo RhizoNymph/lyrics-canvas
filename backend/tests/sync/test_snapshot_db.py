@@ -19,6 +19,7 @@ PLACEMENT_KEYS = {"snippet_id", "canvas_id", "placement_id", "position_x", "posi
 SNIPPET_KEYS = {
     "id", "snippet_type", "grid_mode", "beats_per_line", "grid_data", "raw_text", "phonetics", "derived_from",
     "created_at", "updated_at", "content_updated_at", "version", "tag_ids",
+    "score", "score_view",  # musical mode (docs/features/score_backend.md)
 }
 PER_CANVAS = {"placement_id", "canvas_id", "position_x", "position_y", "width", "height", "z_index", "group_id", "list_rank", "canvases", "tags"}
 

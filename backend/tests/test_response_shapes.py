@@ -54,6 +54,9 @@ def legacy_snippet(s) -> dict:
         "beats_per_line": s.beats_per_line,
         "grid_data": s.grid_data,
         "raw_text": s.raw_text,
+        # musical mode (docs/features/score_backend.md): the stored score JSON and the view flag
+        "score": getattr(s, "score", None),
+        "score_view": getattr(s, "score_view", False),
         "position_x": s.position_x,
         "position_y": s.position_y,
         "width": s.width,

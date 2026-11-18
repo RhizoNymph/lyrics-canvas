@@ -37,7 +37,9 @@ def test_rhyme_suggest_ok(client: TestClient):
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert set(body) == {"anchors", "candidates", "total", "elapsed_ms", "order_applied"}
+    assert set(body) == {
+        "anchors", "candidates", "total", "elapsed_ms", "order_applied", "rhythm_applied", "rhythm_unavailable_reason"
+    }
     assert len(body["candidates"]) == 5
     assert body["total"] >= 5
     cand = body["candidates"][0]

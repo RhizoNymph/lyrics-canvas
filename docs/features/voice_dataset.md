@@ -22,6 +22,9 @@ screen, stats only).
 - Migration 007: `words`, `line_spans`, `language`, `initial_prompt`, `verified_text`, `verified_at`
   on `snippet_recordings`, all nullable.
 - Line assembly exposing the word span of every line it produces (taps, auto and single modes).
+  The stored `words` / `line_spans` are also what a score draft from a recording reads
+  (`POST /api/snippets/{id}/score/draft`, [score_draft_export.md](./score_draft_export.md)); a row
+  without them is `recording_has_no_timings` there.
 - `RecordingResponse` gains `lines`, `has_timings`, `words`, `line_spans`, `language`,
   `initial_prompt`, `verified_text`, `verified_at` (list endpoint and voice-take response alike).
 - `PUT` / `DELETE /api/recordings/{id}/verification`, `GET /api/recordings/stats`,

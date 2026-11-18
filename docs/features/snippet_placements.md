@@ -294,7 +294,8 @@ group.
 `POST /api/canvases/{id}/fork` (public canvases): a new canvas owned by the forking user titled
 `"<title> (fork)"` (the original cut so the result fits 255 code points). Each snippet placed on the
 source becomes a **new** snippet owned by the forker with its content copied (`snippet_type,
-grid_mode, beats_per_line, grid_data, raw_text, phonetics, derived_from, content_updated_at`) and one
+grid_mode, beats_per_line, grid_data, raw_text, score, score_view, phonetics, derived_from,
+content_updated_at`; the score fits the copied grid, [score_backend.md](./score_backend.md)) and one
 placement on the new canvas at the same position, size, z and list rank. Tag links, recordings and groups are
 not copied (as before; phonetics and `derived_from` are now copied too).
 
