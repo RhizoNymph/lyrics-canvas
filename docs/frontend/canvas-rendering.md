@@ -153,6 +153,11 @@ Scale range: 0.3x - 4.0x per snippet.
 5. **Tag pills**: Colored rounded-rect pills in the header (right-aligned), one per assigned tag
 6. **Grid rows**: Alternating backgrounds (0x242448 at 50%) — via `gridDraw.drawBeatGrid`
 7. **Grid lines**: Horizontal + vertical (0x4a4a6a at 50%) — via `gridDraw.drawBeatGrid`
+
+   With `score_view` and a score (`showsStaff`), 6-7 are replaced by the compact staff
+   (`staffDraw.drawCompactStaff` over `compactStaffShapes`: staff lines, bar lines, beat marks, note bars
+   and heads at 0.5 px per tick wrapped to the card width), and the cell / count texts by its syllables
+   and accent marks (`createStaffTextStyles`).
 8. **Resize handle**: Triangle with diagonal lines
 
 ### Text Layers
@@ -246,11 +251,24 @@ overlay described here; `{ kind: 'inline' }` renders in normal flow at scale 1 i
 editor is keyed by snippet id. For the canvas placement, the editor width is `max((maxCells * CELL_WIDTH + 2 * PADDING + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s,
 snippet.width * s)`, with the geometry from `gridConstants.ts` and `ROW_CONTROLS_WIDTH` from `GridRow.tsx`.
 
+### Musical Mode (score)
+
+- Header: with a score, a `Grid` / `Staff` toggle (`score_view`); without one, `Make score…` opens
+  `ScoreDraftDialog` (grid drafts local over the live rows' grid). The staff view replaces the grid body
+  with `StaffEditor` (the grid body stays mounted, hidden); the canvas placement is at least
+  `(768 + 2 * PADDING + 16) * s` wide then.
+- The editor keeps a `ScoreTrack`: grid edits move the staff (rest-only edits shift notes, others
+  reconcile from the base) and staff edits write rest cells into the rows (`replaceGridData`).
+- Saves add `score` + `score_view` (or `score: null` after Remove score); a score that does not fit keeps
+  the editor open with a notice. Ctrl/Cmd+Z, Shift+Z and Y (outside text inputs) undo / redo the editor's
+  own history of rows, score and view, and do not reach the canvas undo.
+- See [web_score_editor.md](../features/web_score_editor.md).
+
 ### Store Dependencies
 
 | Store | State/Actions Used |
 |-------|-------------------|
-| canvasStore | `snippets`, `updateSnippet`, `snippetScales` |
+| canvasStore | `snippets`, `updateSnippet` (runs the score save flow), `snippetScales` |
 | uiStore | `closeEditor` |
 
 Click and double-click events call `stopPropagation()` to prevent canvas interactions.

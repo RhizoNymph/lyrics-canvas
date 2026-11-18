@@ -63,6 +63,14 @@ length, meter, tempo; computed locally) or from a voice take (server alignment, 
 unmatched counts), snippets with a score export MIDI or MusicXML from the editor header and the context menu,
 and the rhyme sidebar's per-viewer "Fit rhythm" switch ranks candidates by fit to the anchor snippet's
 rhythm (`♩NN%`, reason shown when unavailable); see [web_score_tools.md](./features/web_score_tools.md).
+The web editor has a Grid / Staff toggle (`score_view`): the staff wraps bars into rows with beat ticks,
+notes (head, length bar, `>` / `>>` accents, syllable), grid line boundaries and a tray of unplaced
+syllables per line; syllables are dragged from the tray, notes moved and resized (snapped), nudged and
+accented by keyboard, meters and tempos changed at any bar, a pickup set, and the score played with Web
+Audio (beat clicks, a tone per note, playhead). Grid rest edits move the staff and staff gaps become grid
+rests live, through the TS port of the algorithms (`frontend/src/lib/score/`, all vectors); the store
+applies the server's save flow locally and optimistically. Cards and list rows show a compact staff when
+the view is the staff. See [web_score_editor.md](./features/web_score_editor.md).
 [score_format.md](./features/score_format.md). Rhyme suggest's "Fit rhythm" (`rhythm_fit`) reads the
 anchor snippet's score: the slot syllables' onset metric weights and accents become per-syllable
 targets, only candidates with the slot's syllable count are kept, and each gets a deterministic
@@ -253,6 +261,7 @@ the user's approval before applying. See [agent_skill.md](./features/agent_skill
 | [Rhyme Rhythm Fit](./features/rhyme_rhythm_fit.md) | Rhyme-suggest `rhythm_fit`: slot rhythm from the anchor snippet's score (metric weight + accent per slot syllable), syllable-count filter, rhythm-fit score, band -> fit -> similarity / rhyme order, `rhythm_applied` / `rhythm_unavailable_reason` |
 | [Score Backend](./features/score_backend.md) | Musical mode phase 2 server: migration 012 (`score`, `score_view`), snippet create / PUT / response / snapshot fields, the save flow (validate, rest-only edit -> notes move, other edits -> reconcile, rest link + text splice), typed `invalid_score` errors, versions (compared after the flow), merge / fork, voice append; `lcx` cadence reads and `set_score` |
 | [Score Format](./features/score_format.md) | Musical mode phase 1: score format v1, validate (24 reasons), bars / beat unit / metric weight / tick-to-ms, rest link both ways, reconcile, draft from grid, text splice; Python reference, generated vectors, TS and Kotlin wire types |
+| [Web Score Editor](./features/web_score_editor.md) | Web musical mode: TS port of the score algorithms (vectors), snippet `score` / `score_view`, optimistic save flow, Grid / Staff toggle, staff editor (tray, drag, resize, keys, meter / tempo / pickup / snap), Web Audio playback, compact staff on cards and list rows, editor-local undo |
 | [Web Score Tools](./features/web_score_tools.md) | Web score draft dialog (grid / recording), typed draft and export API (`ScoreApiError`), MIDI / MusicXML export menu, context-menu "Make score…", rhyme sidebar "Fit rhythm" switch with percent and unavailable reason |
 | [Score Drafts and Export](./features/score_draft_export.md) | `POST /api/snippets/{id}/score/draft` (from the grid or a voice take: word alignment, vowel-weighted syllable times, numpy tempo estimate, 1/16 / 1/16t quantization with a tempo follower, pickup choice) and `GET /api/snippets/{id}/score/export` (hand-written MIDI and MusicXML), typed errors |
 | [Rest Marks](./features/rest_marks.md) | `_` as a rest in snippet text: tokenize, word indexes, display text, canonical text, shared vectors, every backend consumer |
@@ -401,6 +410,25 @@ Features Index:
       - android/core/model/src/main/kotlin/dev/nymph/lyrics/model/score/
     depends_on: [rest_marks, grid_rearrange]
     doc: docs/features/score_format.md
+  web_score_editor:
+    description: Web musical mode editor (contract §7). frontend/src/lib/score/ ports every spec algorithm over raw JSON (checkScore/validateScore with the 24 reasons in order, timing, metricWeight, tickToMs, applyRestLink, isRestOnlyEdit, applyGridRestEdit, normalizeWord/wordKey/lineKey/lcsPairs, reconcile, draftFromGrid, changedLineTexts/spliceLineTexts) and passes every case of spec/score_vectors.json read in place. Snippet extends SnippetScoreFields (score, score_view); SnippetUpdateBody sends score (object or null = Remove score) and score_view. canvasStore.updateSnippet runs planContentSave (null removes and forces score_view off; a sent score is validated and rest-linked; a grid change without a score is rest-only -> applyGridRestEdit, else reconcile; then the rest link and the raw_text splice), applies it optimistically with one undo entry, sends the final score/grid/text, restores on failure, throws ScoreSaveError before any request when the score does not fit. Editor - a ScoreTrack follows grid edits (rest-only moves notes and rebases, other changes reconcile from the base; overflow refused), staff edits (lib/score/edit.ts - place/move/resize clamped into the note window, accent cycle, unplace, meter/tempo at a bar, pickup, snap) commit with the rest link written into the rows (replaceGridData); Grid / Staff toggle; Make score opens ScoreDraftDialog with localGridDrafter(rows.gridData); Remove score confirmed; Ctrl/Cmd+Z / Shift+Z / Y undo the editor's own rows+score+view history; export flushes pending edits. StaffEditor - rows of bars (768 px, 1 px/tick), memoized SVG rows (staff, bar labels with meter/tempo, beat ticks, heads + length bars, > / >> accents, syllables, line marks, playhead), tray (drag and drop or click to arm), pointer drag move/resize with snap, keys (arrows nudge, shift a beat, alt length, a accent, delete to tray, tab, space play), BarChangeEditor, pickup and snap pickers. usePlayback - Web Audio lookahead scheduler (beat clicks, downbeats accented, 440 Hz tone per note, gain by accent), playhead via msToTick. Compact staff (compactStaffShapes) drawn by SnippetCard (Pixi, staffDraw.ts) and ListRow (CompactStaff) when score_view.
+    entry_points:
+      - frontend/src/lib/score/
+      - frontend/src/stores/canvasStore.ts (updateSnippet)
+      - frontend/src/components/canvas/InlineGridEditor.tsx
+      - frontend/src/components/canvas/editorState.ts (replaceGridData)
+      - frontend/src/components/score/StaffEditor.tsx
+      - frontend/src/components/score/StaffRowView.tsx
+      - frontend/src/components/score/ScoreTray.tsx
+      - frontend/src/components/score/BarChangeEditor.tsx
+      - frontend/src/components/score/usePlayback.ts
+      - frontend/src/components/score/compactStaff.ts
+      - frontend/src/components/score/CompactStaff.tsx
+      - frontend/src/components/canvas/staffDraw.ts
+      - frontend/src/components/canvas/SnippetCard.tsx
+      - frontend/src/components/list/ListRow.tsx
+    depends_on: [score_format, rest_marks, grid_rearrange, web_rests_and_search, list_mode, web_snippet_placements]
+    doc: docs/features/web_score_editor.md
   web_score_tools:
     description: Web score tools of musical mode (contract §5-§7). api/score.ts - POST /api/snippets/{id}/score/draft (grid {note, meter, bpm} or recording {recording_id, meter, bpm|null}; response {score, bpm_estimated, unplaced, unmatched_words}) and GET /api/snippets/{id}/score/export?format=midi|musicxml (blob, Content-Disposition name, fallback snippet-<id8>.ext), rejecting only with ScoreApiError (snippet_not_found, score_not_found, recording_not_found, recording_has_no_timings, draft_empty, invalid_score with reason/line/note, invalid_request, not_found, server_unavailable, network, aborted, http). ScoreDraftDialog (snippet, onDraft(score), onClose, initialSource, draftGrid) - pure form (meter 1..32 over 1..32 dens, bpm 20..400 with <= 2 decimals, required for grid, empty = estimate for recording) and reducer (takes newest first, without timings disabled, stale answers dropped); grid drafts local through localGridDrafter (the editor port's draftFromGrid) when given, else the server; summary of estimated tempo and counts; "Use score" hands the draft over without saving. ScoreDraftHost (scoreDraftStore) behind the context menu "Make score…" saves {score, score_view true} through canvasStore.updateSnippet. Export dropdown in the inline editor header and two context-menu items for snippets with a score, saved via saveBlobAs, outcome in the bottom notice. Rhyme sidebar "Fit rhythm" - per-viewer switch (localStorage lyrics-canvas.rhymeRhythmFit), visible only with a snippet anchor, sends rhythm_fit true only then, keeps {requested, applied, unavailable} per result set (pages reuse it), bands rows whenever applied, ♩NN% per row, note for no_score / slot_unplaced.
     entry_points:

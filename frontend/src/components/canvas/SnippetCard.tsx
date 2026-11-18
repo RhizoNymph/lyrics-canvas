@@ -18,6 +18,8 @@ import {
   createGridTextStyles,
   styleForKind,
 } from './gridDraw';
+import { drawCompactStaff, createStaffTextStyles } from './staffDraw';
+import { compactStaffShapes, showsStaff } from '@/components/score/compactStaff';
 
 interface Props {
   snippet: Snippet;
@@ -44,6 +46,15 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
   const s = zoom * snippetScale;
   const w = snippet.width * s;
   const h = snippet.height * s;
+
+  // Musical mode: the compact staff replaces the grid when the snippet's view is the staff.
+  const staff = useMemo(
+    () =>
+      showsStaff(snippet)
+        ? compactStaffShapes(snippet.score, snippet.grid_data, snippet.width - PADDING * 2, { s, left: PADDING * s, top: (HEADER_HEIGHT + PADDING) * s })
+        : null,
+    [snippet.score, snippet.score_view, snippet.grid_data, snippet.width, s],
+  );
 
   const drawCard = useCallback(
     (g: PixiGraphics) => {
@@ -92,14 +103,17 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
         tagX -= tagPillGap;
       }
 
-      // Beat grid (via gridDraw)
-      const gridLines = snippet.grid_data?.lines || [];
-      drawBeatGrid(g, gridLines, {
-        s,
-        left: PADDING * s,
-        top: (HEADER_HEIGHT + PADDING) * s,
-        maxRight: w - PADDING * s,
-      });
+      // Beat grid (via gridDraw), or the compact staff (staffDraw)
+      if (staff) {
+        drawCompactStaff(g, staff);
+      } else {
+        drawBeatGrid(g, snippet.grid_data?.lines || [], {
+          s,
+          left: PADDING * s,
+          top: (HEADER_HEIGHT + PADDING) * s,
+          maxRight: w - PADDING * s,
+        });
+      }
 
       // Resize handle (bottom-right diagonal)
       const handleSize = RESIZE_HANDLE_SIZE * zoom; // handle scales with canvas zoom only
@@ -119,7 +133,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
       g.moveTo(w - 8 * zoom, h);
       g.lineTo(w, h - 8 * zoom);
     },
-    [w, h, s, zoom, color, isSelected, snippet.grid_data, snippet.tags]
+    [w, h, s, zoom, color, isSelected, snippet.grid_data, snippet.tags, staff]
   );
 
   // Drag: global DOM listeners
@@ -277,6 +291,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
   }, [s, w, snippet.tags]);
 
   const gridStyles = useMemo(() => createGridTextStyles(s), [s]);
+  const staffStyles = useMemo(() => createStaffTextStyles(s), [s]);
 
   const rawTextStyle = useMemo(() => new TextStyle({
     fontSize: 13 * s,
@@ -286,7 +301,7 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
     wordWrapWidth: (snippet.width - PADDING * 2) * s,
   }), [s, snippet.width]);
 
-  const gridLines = snippet.grid_data?.lines || [];
+  const gridLines = staff ? [] : snippet.grid_data?.lines || [];
   const gridTop = (HEADER_HEIGHT + PADDING) * s;
   const cellH = CELL_HEIGHT * s;
   const cellFrame = { s, left: PADDING * s, top: gridTop };
@@ -349,8 +364,12 @@ export default function SnippetCard({ snippet, screenX, screenY, zoom }: Props) 
           y={gridTop + row * cellH + 5 * s}
         />
       ))}
+      {/* Compact staff: syllables and accent marks */}
+      {staff?.texts.map((t, i) => (
+        <Text key={`staff-${i}`} text={t.text} style={t.accent ? staffStyles.accent : t.bold ? staffStyles.bold : staffStyles.text} x={t.x} y={t.y} />
+      ))}
       {/* Fallback: show raw text if no grid data */}
-      {gridLines.length === 0 && displayText(snippet.raw_text) && (
+      {!staff && gridLines.length === 0 && displayText(snippet.raw_text) && (
         <Text
           text={displayText(snippet.raw_text).slice(0, 200)}
           style={rawTextStyle}

@@ -108,7 +108,7 @@ CandidateRow: RhythmBadge(candidate.rhythm_fit) "♩NN%" before the similarity a
 | `frontend/src/components/score/saveDraftedScore.ts` | `saveDraftedScore(id, score, update)` → `SaveDraftResult` (never rejects) |
 | `frontend/src/stores/scoreDraftStore.ts` | `useScoreDraftStore` (`target`, `open(id)`, `close()`) |
 | `frontend/src/components/score/exportScore.ts` | `exportScoreFile(id, format, deps?)` → `ExportOutcome` (never rejects), `exportScoreWithNotice` |
-| `frontend/src/components/score/ScoreExportMenu.tsx` | `scoreExportEntries(snippet)`, `ScoreExportMenuView`, default `ScoreExportMenu` (editor header) |
+| `frontend/src/components/score/ScoreExportMenu.tsx` | `scoreExportEntries(snippet)`, `ScoreExportMenuView`, default `ScoreExportMenu` (editor header); optional `beforeExport()` runs first (the open editor saves its pending edits, see web_score_editor.md) |
 | `frontend/src/components/canvas/InlineGridEditor.tsx` | Mounts `ScoreExportMenu` in the header |
 | `frontend/src/components/canvas/SnippetContextMenu.tsx` | "Make score…" (no score) and the two export items (score) |
 | `frontend/src/components/pages/CanvasPage.tsx` | Mounts `ScoreDraftHost` |

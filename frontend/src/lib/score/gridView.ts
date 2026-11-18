@@ -144,3 +144,8 @@ function wordSpelling(cells: readonly CellJson[], index: number): string {
     .map(syllableText)
     .join('');
 }
+
+/** Per line, the text of each syllable by ordinal (what the staff writes under a note). */
+export function syllableTexts(grid: GridJson | undefined): string[][] {
+  return gridLines(grid).map((line) => lineCells(line).filter((cell) => !isRest(cell)).map(syllableText));
+}

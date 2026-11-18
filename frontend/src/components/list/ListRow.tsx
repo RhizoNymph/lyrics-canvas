@@ -9,6 +9,8 @@ import type { Snippet } from '@/types';
 import InlineGridEditor from '@/components/canvas/InlineGridEditor';
 import CanvasBadge from '@/components/placements/CanvasBadge';
 import GridPreview from './GridPreview';
+import CompactStaff from '@/components/score/CompactStaff';
+import { showsStaff } from '@/components/score/compactStaff';
 
 interface Props {
   snippet: Snippet;
@@ -140,7 +142,9 @@ export default function ListRow({ snippet, selected, editing, onClick, onContext
         ))}
       </div>
       <div style={{ padding: 14 }}>
-        {lines.length > 0 ? (
+        {showsStaff(snippet) ? (
+          <CompactStaff score={snippet.score} grid={snippet.grid_data} />
+        ) : lines.length > 0 ? (
           <GridPreview lines={lines} />
         ) : (
           <div style={{ fontFamily: 'monospace', fontSize: 13, color: '#a0a0c0', whiteSpace: 'pre-wrap' }}>

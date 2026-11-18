@@ -4,7 +4,9 @@ import { nlpApi } from '@/api/client';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useUIStore } from '@/stores/uiStore';
 import { SNIPPET_TYPE_COLORS } from '@/types';
-import type { SnippetType, GridData } from '@/types';
+import type { SnippetType, GridData, Snippet } from '@/types';
+import type { SnippetUpdateBody } from '@/api/placements';
+import type { Score } from '@/types/score';
 import { CELL_WIDTH, CELL_HEIGHT, PADDING, HEADER_HEIGHT, COUNT_COLUMN_WIDTH } from './gridConstants';
 import GridRow, { ROW_CONTROLS_WIDTH } from './GridRow';
 import {
@@ -25,6 +27,7 @@ import {
   needsSyllabify,
   rawTextForSave,
   nudgeSelection,
+  replaceGridData,
 } from './editorState';
 import type { CellSelection, EditorRowsState } from './editorState';
 import { rowKeyAction } from './editorKeys';
@@ -32,6 +35,13 @@ import { registerEditorBridge } from './editorBridge';
 import RecordButton from '@/components/voice/RecordButton';
 import RecordingsSection from '@/components/voice/RecordingsSection';
 import ScoreExportMenu from '@/components/score/ScoreExportMenu';
+import ScoreDraftDialog from '@/components/score/ScoreDraftDialog';
+import StaffEditor from '@/components/score/StaffEditor';
+import { usePlayback } from '@/components/score/usePlayback';
+import { EDITOR_STAFF } from '@/components/score/staffGeometry';
+import { localGridDrafter } from '@/lib/scoreTools/drafter';
+import { NO_SCORE, ScoreInvalid, ScoreSaveError, commitTrack, emptyHistory, followGrid, reconcile, record, redo, undo } from '@/lib/score';
+import type { History, ScoreTrack } from '@/lib/score';
 import EditorBankMenu from '@/components/wordBank/EditorBankMenu';
 import { isAddSelectionShortcut, selectedFieldText } from '@/lib/wordBank';
 import { useWordBankStore } from '@/stores/wordBankStore';
@@ -56,6 +66,27 @@ export type EditorPlacement =
 interface Props {
   snippetId: string;
   placement: EditorPlacement;
+}
+
+/** One entry of the editor's local undo history: rows, score and view together (the rest link ties them). */
+interface EditorSnapshot {
+  rows: EditorRowsState;
+  track: ScoreTrack;
+  scoreView: boolean;
+}
+
+/** The snippet's stored score carried onto the editor's rows (reconciled: unmatched rows lose their notes). */
+function initTrack(snippet: Snippet | undefined, grid: GridData | null): ScoreTrack {
+  const score = snippet?.score ?? null;
+  if (snippet === undefined || score === null) return NO_SCORE;
+  try {
+    const carried = reconcile(score, snippet.grid_data, grid);
+    return { score: carried, base: { score: carried, grid } };
+  } catch (error) {
+    if (!(error instanceof ScoreInvalid)) throw error;
+    console.warn('score editor: the stored score does not fit the stored grid; editing without it', { snippetId: snippet.id, reason: error.reason });
+    return NO_SCORE;
+  }
 }
 
 function isTextTarget(target: EventTarget | null): boolean {
@@ -93,6 +124,121 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
 
   const setActiveRow = useCallback((row: number) => setRows((prev) => setActiveRowState(prev, row)), []);
 
+  // ---- Musical mode: the score follows the grid (rest link), Grid / Staff view, local undo ----
+  const [track, setTrackState] = useState<ScoreTrack>(() => initTrack(snippet, rows.gridData));
+  const trackRef = useRef(track);
+  const setTrack = useCallback((next: ScoreTrack) => {
+    trackRef.current = next;
+    setTrackState(next);
+  }, []);
+  const [scoreView, setScoreViewState] = useState<boolean>(() => snippet?.score_view === true && track.score !== null);
+  const scoreViewRef = useRef(scoreView);
+  const setScoreView = useCallback((next: boolean) => {
+    scoreViewRef.current = next;
+    setScoreViewState(next);
+  }, []);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const history = useRef<History<EditorSnapshot>>(emptyHistory());
+  /** The grid the track was last computed for, and the last rows the score accepted. */
+  const trackedGrid = useRef<GridData | null>(rows.gridData);
+  const lastGoodRows = useRef(rows);
+  const playback = usePlayback(track.score);
+
+  useEffect(() => {
+    if (notice === null) return;
+    const id = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(id);
+  }, [notice]);
+
+  // Grid edits move the staff: rest-only edits shift notes, other changes reconcile (lib/score/track.ts).
+  useEffect(() => {
+    const prev = trackedGrid.current;
+    const next = rows.gridData;
+    if (prev === next) {
+      lastGoodRows.current = rows;
+      return;
+    }
+    const result = followGrid(trackRef.current, prev, next);
+    if (result.kind === 'refused') {
+      console.warn('score editor: grid edit refused by the score', { snippetId, reason: result.error.reason });
+      setNotice('That would push the score past its maximum length; undone.');
+      setRows(lastGoodRows.current);
+      return;
+    }
+    trackedGrid.current = result.kind === 'followed' ? result.grid : next;
+    if (result.kind === 'followed') {
+      setTrack(result.track);
+      if (result.grid !== next) setRows((p) => replaceGridData(p, result.grid));
+    }
+    lastGoodRows.current = rows;
+  }, [rows, snippetId, setTrack]);
+
+  const snapshot = (): EditorSnapshot => ({ rows: rowsRef.current, track: trackRef.current, scoreView: scoreViewRef.current });
+  /** Record the current state before a change the user may want to undo (not typing: inputs undo natively). */
+  const checkpoint = () => {
+    history.current = record(history.current, snapshot());
+  };
+  const restore = (snap: EditorSnapshot) => {
+    trackedGrid.current = snap.rows.gridData;
+    setRows(snap.rows);
+    setTrack(snap.track);
+    setScoreView(snap.scoreView);
+    setSelection(null);
+  };
+  const undoLocal = () => {
+    const step = undo(history.current, snapshot());
+    if (!step) return;
+    history.current = step.history;
+    restore(step.value);
+  };
+  const redoLocal = () => {
+    const step = redo(history.current, snapshot());
+    if (!step) return;
+    history.current = step.history;
+    restore(step.value);
+  };
+
+  /** Put a score in place (staff edit, draft): it becomes the base and the grid takes its rests. */
+  const commitScore = (score: Score | null): boolean => {
+    let committed: ReturnType<typeof commitTrack>;
+    try {
+      committed = commitTrack(score, rowsRef.current.gridData);
+    } catch (error) {
+      if (!(error instanceof ScoreInvalid)) throw error;
+      setNotice('That score does not fit the current lines; make it again.');
+      return false;
+    }
+    setTrack(committed.track);
+    trackedGrid.current = committed.grid;
+    setRows((p) => replaceGridData(p, committed.grid));
+    return true;
+  };
+  const onStaffCommit = (score: Score) => {
+    checkpoint();
+    commitScore(score);
+  };
+  const onDraft = (score: Score) => {
+    checkpoint();
+    if (commitScore(score)) setScoreView(true);
+    setDraftOpen(false);
+  };
+  const removeScore = () => {
+    checkpoint();
+    playback.stop();
+    setTrack(NO_SCORE);
+    setScoreView(false);
+  };
+  const toggleView = (staff: boolean) => {
+    if (staff === scoreViewRef.current || trackRef.current.score === null) return;
+    if (staff) {
+      commitScore(trackRef.current.score);
+      setSelection(null);
+      setActiveRow(-1);
+    } else playback.stop();
+    setScoreView(staff);
+  };
+
   // Focus the active row's input: the caret goes where a split/join/insert/delete asked
   // (`caret` is a fresh object per structural edit), otherwise to the end of the text.
   useEffect(() => {
@@ -126,42 +272,61 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     };
   }, [joinedText, snippetId]);
 
-  // Save & close
+  /** The content to save: text, grid and type, plus the score (explicit null after Remove score). */
+  const contentBody = useCallback((): SnippetUpdateBody => {
+    const current = rowsRef.current;
+    const body: SnippetUpdateBody = {
+      raw_text: rawTextForSave(current),
+      grid_data: current.gridData,
+      snippet_type: snippetTypeRef.current,
+    };
+    const score = trackRef.current.score;
+    if (score !== null) {
+      body.score = score;
+      body.score_view = scoreViewRef.current;
+    } else if (useCanvasStore.getState().snippets.get(snippetId)?.score != null) {
+      body.score = null;
+    }
+    return body;
+  }, [snippetId]);
+
+  // Save & close (a score the server would refuse keeps the editor open with a notice)
   const save = useCallback(async () => {
     if (isSaving.current) return;
     isSaving.current = true;
+    let close = true;
     try {
-      const current = rowsRef.current;
-      await updateSnippet(snippetId, {
-        raw_text: rawTextForSave(current),
-        grid_data: current.gridData,
-        snippet_type: snippetType,
-      });
+      await updateSnippet(snippetId, contentBody());
+    } catch (error) {
+      if (!(error instanceof ScoreSaveError)) throw error;
+      console.warn('score editor: save refused', { snippetId, reason: error.invalid.reason });
+      setNotice(`The score does not fit these lines (${error.invalid.reason}); fix it or remove the score.`);
+      close = false;
     } finally {
       isSaving.current = false;
-      closeEditor(snippetId);
+      if (close) closeEditor(snippetId);
     }
-  }, [snippetType, snippetId, updateSnippet, closeEditor]);
+  }, [snippetId, updateSnippet, closeEditor, contentBody]);
 
   // Voice capture: save pending edits without closing, and take the rows of a server-appended snippet.
   useEffect(
     () =>
       registerEditorBridge(snippetId, {
         flush: async () => {
-          const current = rowsRef.current;
-          await updateSnippet(snippetId, {
-            raw_text: rawTextForSave(current),
-            grid_data: current.gridData,
-            snippet_type: snippetTypeRef.current,
-          });
+          await updateSnippet(snippetId, contentBody());
         },
         reload: (next) => {
-          setRows(initEditorState(next.raw_text, next.grid_data));
+          const nextRows = initEditorState(next.raw_text, next.grid_data);
+          const nextTrack = initTrack(next, nextRows.gridData);
+          trackedGrid.current = nextRows.gridData;
+          setRows(nextRows);
+          setTrack(nextTrack);
+          setScoreView(next.score_view === true && nextTrack.score !== null);
           setSelection(null);
           setSnippetType(next.snippet_type);
         },
       }),
-    [snippetId, updateSnippet],
+    [snippetId, updateSnippet, contentBody, setTrack, setScoreView],
   );
 
   // Click-outside (the record buttons and the recording modal keep the editor open)
@@ -202,6 +367,7 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     if (!line) return;
     const len = end - start;
     const landing = Math.min(Math.max(to, 0), line.cells.length - len);
+    checkpoint();
     setRows((prev) => moveChunkInRow(prev, row, start, end, to));
     setSelection({ row, start: landing, end: landing + len });
   };
@@ -210,11 +376,13 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const nudgeChunk = (sel: CellSelection, direction: -1 | 1) => {
     const next = nudgeSelection(rowsRef.current, sel, direction);
     if (next.state === rowsRef.current) return;
+    checkpoint();
     setRows(next.state);
     setSelection(next.selection);
   };
 
   const insertRestBefore = (sel: CellSelection) => {
+    checkpoint();
     setRows((prev) => insertRestInRow(prev, sel.row, sel.start));
     setSelection({ row: sel.row, start: sel.start + 1, end: sel.end + 1 });
   };
@@ -222,6 +390,7 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const removeSelectedRests = (sel: CellSelection) => {
     const line = gridLineForRow(rowsRef.current, sel.row);
     if (!line || !line.cells.slice(sel.start, sel.end).every((c) => c.rest)) return;
+    checkpoint();
     setRows((prev) => removeCellsInRow(prev, sel.row, sel.start, sel.end));
     setSelection(null);
   };
@@ -229,6 +398,7 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const moveRow = (row: number, direction: -1 | 1) => {
     const to = row + direction;
     if (to < 0 || to >= rowsRef.current.lines.length) return;
+    checkpoint();
     setRows((prev) => reorderRows(prev, row, to));
     setSelection((sel) => (sel && sel.row === row ? { ...sel, row: to } : sel && sel.row === to ? { ...sel, row } : sel));
   };
@@ -255,6 +425,7 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
     if (action.kind === 'none') return false;
     e.preventDefault();
     setSelection(null);
+    checkpoint();
     setRows((prev) => {
       switch (action.kind) {
         case 'split': {
@@ -332,6 +503,15 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
 
   const onEditorKeyDown = (e: ReactKeyboardEvent) => {
     if (isTextTarget(e.target)) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) {
+      // The editor's own history (grid, staff and score together); the canvas undo waits until it closes.
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'y' || e.shiftKey) redoLocal();
+      else undoLocal();
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       if (selection) setSelection(null);
@@ -396,9 +576,11 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
   const cellCountPerRow = rowLines.map((line, row) => (line ? line.cells.length : 0) + (row === activeRow ? 1 : 0));
   const maxCells = Math.max(...cellCountPerRow, 4);
   const contentWidth = (maxCells * CELL_WIDTH + PADDING * 2 + COUNT_COLUMN_WIDTH + ROW_CONTROLS_WIDTH) * s;
+  const staffShown = scoreView && track.score !== null;
+  const staffWidth = (EDITOR_STAFF.rowWidth + PADDING * 2 + 16) * s;
   const sizing: CSSProperties =
     placement.kind === 'canvas'
-      ? { width: Math.max(contentWidth, snippet.width * s), overflow: 'hidden' }
+      ? { width: Math.max(staffShown ? staffWidth : contentWidth, snippet.width * s), overflow: 'hidden' }
       : { overflowX: 'auto' };
 
   return (
@@ -448,11 +630,57 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
           <option value="hook">HOOK</option>
           <option value="freestyle">FREESTYLE</option>
         </select>
+        {/* Musical mode: Grid / Staff view of the score, or Make score */}
+        <span role="group" aria-label="View" style={{ marginLeft: 8 * s, display: 'inline-flex', gap: 2 * s }}>
+          {track.score !== null ? (
+            (['grid', 'staff'] as const).map((view) => {
+              const active = (view === 'staff') === staffShown;
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleView(view === 'staff')}
+                  style={{
+                    background: active ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    borderRadius: 4,
+                    padding: '1px 6px',
+                    fontSize: 10 * s,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {view === 'grid' ? 'Grid' : 'Staff'}
+                </button>
+              );
+            })
+          ) : (
+            <button
+              type="button"
+              data-keep-editor-open
+              onClick={() => setDraftOpen(true)}
+              title="Place the syllables on a rhythm staff"
+              style={{
+                background: 'rgba(0,0,0,0.3)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: 4,
+                padding: '1px 6px',
+                fontSize: 10 * s,
+                cursor: 'pointer',
+              }}
+            >
+              Make score…
+            </button>
+          )}
+        </span>
         <span style={{ flex: 1 }} />
         {/* Score export (MIDI / MusicXML of the saved score); hidden without a score */}
         <span style={{ marginRight: 4 }}>
           <ScoreExportMenu
-            snippet={snippet}
+            snippet={{ id: snippet.id, score: track.score }}
+            beforeExport={() => updateSnippet(snippetId, contentBody())}
             buttonStyle={{
               background: 'rgba(0,0,0,0.3)',
               color: '#fff',
@@ -512,8 +740,27 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
         </div>
       )}
 
+      {notice !== null && (
+        <div role="status" style={{ padding: `${3 * s}px ${PADDING * s}px`, fontSize: 10 * s, color: '#fca5a5', background: 'rgba(248,113,113,0.08)' }}>
+          {notice}
+        </div>
+      )}
+
+      {/* Staff body (musical mode) */}
+      {staffShown && track.score !== null && (
+        <div style={{ padding: `${PADDING * s}px` }}>
+          <StaffEditor score={track.score} grid={rows.gridData} scale={s} playback={playback} onCommit={onStaffCommit} onRemoveScore={removeScore} />
+        </div>
+      )}
+
       {/* Grid body (inline: wide enough for the longest row, scrolls sideways inside the row) */}
-      <div style={{ padding: `${PADDING * s}px`, ...(placement.kind === 'inline' ? { minWidth: contentWidth, boxSizing: 'border-box' } : {}) }}>
+      <div
+        style={{
+          padding: `${PADDING * s}px`,
+          ...(placement.kind === 'inline' ? { minWidth: contentWidth, boxSizing: 'border-box' } : {}),
+          ...(staffShown ? { display: 'none' } : {}),
+        }}
+      >
         {lines.map((lineText, row) => {
           const gridLine = rowLines[row];
           const isActive = row === activeRow;
@@ -631,6 +878,9 @@ export default function InlineGridEditor({ snippetId, placement }: Props) {
       </div>
 
       <RecordingsSection snippetId={snippetId} scale={s} />
+      {draftOpen && (
+        <ScoreDraftDialog snippet={snippet} onDraft={onDraft} onClose={() => setDraftOpen(false)} draftGrid={localGridDrafter(rows.gridData)} />
+      )}
       {bankMenu !== null && (
         <EditorBankMenu x={bankMenu.x} y={bankMenu.y} onAdd={() => addSelectionToBank(bankMenu.text)} onClose={closeBankMenu} />
       )}

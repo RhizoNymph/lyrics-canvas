@@ -5,6 +5,7 @@ import { SCORE_EXPORT_EXTENSIONS, SCORE_EXPORT_FORMATS, SCORE_EXPORT_LABELS } fr
 import type { ScoreExportFormat } from '@/types/scoreTools';
 import type { Score } from '@/types/score';
 import { exportScoreWithNotice } from './exportScore';
+import { usePlacementNoticeStore } from '@/stores/placementNoticeStore';
 
 export interface ScoreExportEntry {
   format: ScoreExportFormat;
@@ -106,9 +107,12 @@ export function ScoreExportMenuView({ open, busy, onToggle, onPick, buttonStyle 
 export default function ScoreExportMenu({
   snippet,
   buttonStyle,
+  beforeExport,
 }: {
   snippet: { readonly id: string; readonly score?: Score | null };
   buttonStyle?: CSSProperties;
+  /** Runs before the download (the open editor saves its pending edits so the export matches them). */
+  beforeExport?: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -135,7 +139,16 @@ export default function ScoreExportMenu({
   const onPick = (format: ScoreExportFormat) => {
     setOpen(false);
     setBusy(true);
-    void exportScoreWithNotice(snippet.id, format).finally(() => setBusy(false));
+    const flushed = beforeExport ? beforeExport() : Promise.resolve();
+    void flushed
+      .then(
+        () => exportScoreWithNotice(snippet.id, format),
+        (error: unknown) => {
+          console.warn('score export: saving pending edits failed', { snippetId: snippet.id, error });
+          usePlacementNoticeStore.getState().show('Save the snippet before exporting: saving failed', 'error');
+        },
+      )
+      .finally(() => setBusy(false));
   };
 
   return (
