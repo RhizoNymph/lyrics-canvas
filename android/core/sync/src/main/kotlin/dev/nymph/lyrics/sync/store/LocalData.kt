@@ -19,6 +19,7 @@ import dev.nymph.lyrics.model.TagId
 import dev.nymph.lyrics.model.TagPreset
 import dev.nymph.lyrics.model.UserId
 import dev.nymph.lyrics.model.UserTag
+import dev.nymph.lyrics.model.score.Score
 import dev.nymph.lyrics.sync.outbox.Outbox
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -40,17 +41,24 @@ data class LocalSnippet(
     @SerialName("updated_at") val updatedAt: String,
     @SerialName("content_updated_at") val contentUpdatedAt: String,
     val version: Int,
+    /**
+     * The rhythm score (content, valid against [gridData]); null = none. A store written before
+     * scores existed reads null / false (the file store needs no migration: new fields default).
+     */
+    val score: Score? = null,
+    /** Staff (true) or grid view; false whenever [score] is null. */
+    @SerialName("score_view") val scoreView: Boolean = false,
 ) {
     companion object {
         fun of(s: SnapshotSnippet): LocalSnippet = LocalSnippet(
             s.id, s.snippetType, s.gridMode, s.beatsPerLine, s.gridData, s.rawText, s.tagIds, s.phonetics, s.derivedFrom,
-            s.createdAt, s.updatedAt, s.contentUpdatedAt, s.version,
+            s.createdAt, s.updatedAt, s.contentUpdatedAt, s.version, s.score, s.score != null && s.scoreView,
         )
 
         /** The shared part of a snippet response. */
         fun of(s: Snippet): LocalSnippet = LocalSnippet(
             s.id, s.snippetType, s.gridMode, s.beatsPerLine, s.gridData, s.rawText, s.tags.map { it.id }, s.phonetics, s.derivedFrom,
-            s.createdAt, s.updatedAt, s.contentUpdatedAt, s.version,
+            s.createdAt, s.updatedAt, s.contentUpdatedAt, s.version, s.score, s.score != null && s.scoreView,
         )
     }
 }

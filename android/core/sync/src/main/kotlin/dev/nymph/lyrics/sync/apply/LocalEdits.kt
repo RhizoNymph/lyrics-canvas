@@ -4,6 +4,12 @@ import dev.nymph.lyrics.logic.grid.localSyllabifyLine
 import dev.nymph.lyrics.logic.list.ListRank
 import dev.nymph.lyrics.logic.list.topRank
 import dev.nymph.lyrics.logic.list.topRanks
+import dev.nymph.lyrics.logic.score.ScoreEdit
+import dev.nymph.lyrics.logic.score.ScoreError
+import dev.nymph.lyrics.logic.score.ScoreResult
+import dev.nymph.lyrics.logic.score.applyScoreSave
+import dev.nymph.lyrics.logic.score.scoreViewAfter
+import dev.nymph.lyrics.logic.score.validateScore
 import dev.nymph.lyrics.model.BankWord
 import dev.nymph.lyrics.model.BankWordId
 import dev.nymph.lyrics.model.BatchPositionResponse
@@ -37,6 +43,7 @@ import dev.nymph.lyrics.model.WordBankAddResponse
 import dev.nymph.lyrics.model.WordBankErrorCode
 import dev.nymph.lyrics.model.error.ApiError
 import dev.nymph.lyrics.model.error.ApiResult
+import dev.nymph.lyrics.model.score.ScoreChange
 import dev.nymph.lyrics.sync.outbox.ContentPatch
 import dev.nymph.lyrics.sync.outbox.LayoutPatch
 import dev.nymph.lyrics.sync.outbox.SnippetVersion
@@ -55,6 +62,9 @@ const val DEFAULT_TAG_COLOR: String = "#6366f1"
 /** The server's default placement size. */
 const val DEFAULT_SNIPPET_WIDTH: Double = 300.0
 const val DEFAULT_SNIPPET_HEIGHT: Double = 200.0
+
+/** `detail.error` of the server's 422 for a score that breaks format v1 or its grid. */
+const val INVALID_SCORE: String = "invalid_score"
 
 /** A local edit's outcome: the store after it (unchanged on failure) and what the repository answers. */
 data class Edited<out T>(val data: LocalData, val result: ApiResult<T>)
@@ -110,6 +120,9 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
 
     // ---- Snippets ----
 
+    /** The server's 422 `invalid_score` (the reason is in the message). */
+    private fun invalidScore(error: ScoreError) = ApiError.Validation(422, error.message, INVALID_SCORE)
+
     /** The server syllabifies text sent without a grid; offline, the local estimate stands in until it syncs. */
     private fun estimatedGrid(text: String): GridData =
         GridData(text.split("\n").filter { it.isNotBlank() }.map { localSyllabifyLine(it.trim()) })
@@ -128,18 +141,22 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         val id = body.id ?: SnippetId(newId())
         val at = now()
         val text = body.rawText ?: ""
+        val grid = body.gridData ?: estimatedGrid(text)
+        body.score?.let { score -> validateScore(score, grid)?.let { return fail(d, invalidScore(it)) } }
         val content = LocalSnippet(
             id = id,
             snippetType = body.snippetType ?: SnippetType.FREESTYLE,
             gridMode = body.gridMode ?: GridMode.AUTO,
             beatsPerLine = body.beatsPerLine,
-            gridData = body.gridData ?: estimatedGrid(text),
+            gridData = grid,
             rawText = text,
             derivedFrom = body.derivedFrom,
             createdAt = at,
             updatedAt = at,
             contentUpdatedAt = at,
             version = 1,
+            score = body.score,
+            scoreView = scoreViewAfter(body.score, body.scoreView == true),
         )
         val placement = LocalPlacement(
             id, canvasId, PlacementId(newId()), body.positionX, body.positionY,
@@ -150,29 +167,49 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
         return ok(next, checkNotNull(Views.snippet(next, id, canvasId)))
     }
 
-    /** Content fields change the shared snippet ([SyncOp.EditSnippet]); layout fields this canvas's placement ([SyncOp.MoveSnippet]). */
+    /**
+     * Content fields change the shared snippet ([SyncOp.EditSnippet]); layout fields this canvas's placement ([SyncOp.MoveSnippet]).
+     *
+     * The score follows the server's save flow ([applyScoreSave]): a sent score is validated
+     * against the new grid (422 `invalid_score`), a rest-only grid edit moves the notes, any other
+     * grid change reconciles them, then the rest link rewrites the grid's rests and the text. When
+     * a grid is sent and the snippet has (or had) a score, the queued PUT carries the resulting
+     * score, grid and text, so the server stores exactly what the copy shows; text sent without a
+     * grid leaves the score to the server's reconcile (the local grid is only an estimate).
+     */
     fun updateSnippet(d: LocalData, canvasId: CanvasId, id: SnippetId, body: SnippetUpdateRequest): Edited<Snippet> {
         val content = d.snippet(id) ?: return fail(d, notFound(null, "Snippet"))
         val placement = d.placement(id, canvasId) ?: return fail(d, notFound(PlacementErrorCode.PLACEMENT_NOT_FOUND.wire, "Placement"))
         firstInvalidRank(listOf(body.listRank))?.let { return fail(d, invalidRank(it)) }
         var next = d
-        ContentPatch.of(body)?.let { patch ->
+        ContentPatch.of(body)?.let { requested ->
             val at = now()
             val grid = when {
-                patch.gridData != null -> patch.gridData
-                patch.rawText != null -> estimatedGrid(patch.rawText)
+                requested.gridData != null -> requested.gridData
+                requested.rawText != null -> estimatedGrid(requested.rawText)
                 else -> content.gridData
             }
+            val edit = when (val change = requested.score) {
+                null -> ScoreEdit.Keep
+                else -> change.score?.let { ScoreEdit.Set(it) } ?: ScoreEdit.Remove
+            }
+            val saved = when (val r = applyScoreSave(content.score, content.gridData, grid, requested.rawText ?: content.rawText, edit)) {
+                is ScoreResult.Ok -> r.value
+                is ScoreResult.Err -> return fail(d, invalidScore(r.error))
+            }
+            val view = scoreViewAfter(saved.score, requested.scoreView ?: content.scoreView)
             val edited = content.copy(
-                snippetType = patch.snippetType ?: content.snippetType,
-                gridMode = patch.gridMode ?: content.gridMode,
-                beatsPerLine = patch.beatsPerLine ?: content.beatsPerLine,
-                gridData = grid,
-                rawText = patch.rawText ?: content.rawText,
+                snippetType = requested.snippetType ?: content.snippetType,
+                gridMode = requested.gridMode ?: content.gridMode,
+                beatsPerLine = requested.beatsPerLine ?: content.beatsPerLine,
+                gridData = saved.grid,
+                rawText = saved.rawText,
                 updatedAt = at,
                 contentUpdatedAt = at,
+                score = saved.score,
+                scoreView = view,
             )
-            next = next.withSnippet(edited).enqueue(SyncOp.EditSnippet(id, canvasId, patch, content.version))
+            next = next.withSnippet(edited).enqueue(SyncOp.EditSnippet(id, canvasId, sentPatch(requested, content, edited), content.version))
         }
         LayoutPatch.of(body)?.let { layout ->
             val moved = placement.copy(
@@ -187,6 +224,27 @@ class LocalEdits(private val now: () -> String, private val newId: () -> String)
             next = next.withPlacement(moved).enqueue(SyncOp.MoveSnippet(id, canvasId, layout))
         }
         return ok(next, checkNotNull(Views.snippet(next, id, canvasId)))
+    }
+
+    /**
+     * What the PUT sends for [requested]: unchanged unless the score is involved. With a score
+     * before or after and a grid or score in the request, the stored result (linked grid, spliced
+     * text, the score itself) is sent, so the server's own save flow is a no-op on top of it.
+     */
+    private fun sentPatch(requested: ContentPatch, before: LocalSnippet, after: LocalSnippet): ContentPatch {
+        val involved = before.score != null || after.score != null
+        if (!involved || (requested.gridData == null && requested.score == null)) return requested
+        return checkNotNull(
+            ContentPatch.of(
+                snippetType = requested.snippetType,
+                gridMode = requested.gridMode,
+                beatsPerLine = requested.beatsPerLine,
+                gridData = if (requested.gridData != null || after.gridData != before.gridData) after.gridData else null,
+                rawText = if (requested.rawText != null || after.rawText != before.rawText) after.rawText else null,
+                score = ScoreChange(after.score),
+                scoreView = requested.scoreView?.let { after.scoreView },
+            ),
+        )
     }
 
     fun removeFromCanvas(d: LocalData, canvasId: CanvasId, id: SnippetId): Edited<RemovePlacementResponse> {

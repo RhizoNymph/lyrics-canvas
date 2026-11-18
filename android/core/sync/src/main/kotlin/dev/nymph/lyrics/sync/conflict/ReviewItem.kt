@@ -2,6 +2,7 @@ package dev.nymph.lyrics.sync.conflict
 
 import dev.nymph.lyrics.logic.rests.displayText
 import dev.nymph.lyrics.model.SnippetType
+import dev.nymph.lyrics.model.score.Score
 import dev.nymph.lyrics.sync.outbox.EntityRef
 import dev.nymph.lyrics.sync.outbox.OpId
 import dev.nymph.lyrics.sync.outbox.OpState
@@ -11,7 +12,8 @@ import java.util.Locale
 
 /** One side of a review (mine or the server's), as text the screen shows. */
 sealed interface ReviewSide {
-    data class OfSnippet(val text: String, val type: SnippetType, val tags: List<String>) : ReviewSide
+    /** [score] is the snippet's rhythm score (null = none); the review compares it as "Cadence changed". */
+    data class OfSnippet(val text: String, val type: SnippetType, val tags: List<String>, val score: Score? = null) : ReviewSide
 
     data class OfCanvas(val title: String) : ReviewSide
 
@@ -51,7 +53,18 @@ data class ReviewItem(
     val isMerge: Boolean = false,
     val changedOriginals: List<String> = emptyList(),
     val missingOriginals: Int = 0,
-)
+) {
+    /**
+     * Mine and the server's snippet differ in their score (added, removed or edited): the review
+     * says "Cadence changed", since a score has no text to show side by side.
+     */
+    val cadenceChanged: Boolean
+        get() {
+            val a = mine as? ReviewSide.OfSnippet ?: return false
+            val b = server as? ReviewSide.OfSnippet ?: return false
+            return a.score != b.score
+        }
+}
 
 /** Every parked change in outbox order. */
 fun reviewItems(d: LocalData): List<ReviewItem> = d.outbox.parked.mapNotNull { reviewItem(d, it.id) }
@@ -67,7 +80,7 @@ fun reviewItem(d: LocalData, opId: OpId): ReviewItem? {
         ReviewSide.Deleted
     } else {
         when (val e = conflict.entity) {
-            is EntityRef.Snippet -> d.snippet(e.id)?.let { ReviewSide.OfSnippet(displayText(it.rawText), it.snippetType, names(it.tagIds)) }
+            is EntityRef.Snippet -> d.snippet(e.id)?.let { ReviewSide.OfSnippet(displayText(it.rawText), it.snippetType, names(it.tagIds), it.score) }
             is EntityRef.Canvas -> d.canvas(e.id)?.let { ReviewSide.OfCanvas(it.title) }
             is EntityRef.Tag -> d.tag(e.id)?.let { ReviewSide.OfTag(it.name, it.color) }
             is EntityRef.Word -> d.word(e.id)?.let { ReviewSide.OfWord(it.text, names(it.tagIds)) }
@@ -75,7 +88,9 @@ fun reviewItem(d: LocalData, opId: OpId): ReviewItem? {
     }
     val server: ReviewSide? = when (conflict) {
         is Conflict.Changed -> when (val c = conflict.server) {
-            is ServerCopy.OfSnippet -> ReviewSide.OfSnippet(displayText(c.snippet.rawText), c.snippet.snippetType, c.snippet.tags.map { it.name }.sortedBy { it.lowercase(Locale.ROOT) })
+            is ServerCopy.OfSnippet -> ReviewSide.OfSnippet(
+                displayText(c.snippet.rawText), c.snippet.snippetType, c.snippet.tags.map { it.name }.sortedBy { it.lowercase(Locale.ROOT) }, c.snippet.score,
+            )
             is ServerCopy.OfCanvas -> ReviewSide.OfCanvas(c.canvas.title)
             is ServerCopy.OfTag -> ReviewSide.OfTag(c.tag.name, c.tag.color)
             is ServerCopy.OfWord -> ReviewSide.OfWord(c.word.text, c.word.tags.map { it.name }.sortedBy { it.lowercase(Locale.ROOT) })

@@ -2,7 +2,21 @@ package dev.nymph.lyrics.app.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.nymph.lyrics.app.editor.score.ScoreActions
+import dev.nymph.lyrics.app.editor.score.committing
+import dev.nymph.lyrics.app.editor.score.drafted
+import dev.nymph.lyrics.app.editor.score.selecting
+import dev.nymph.lyrics.app.editor.score.showingGrid
+import dev.nymph.lyrics.app.editor.score.showingStaff
+import dev.nymph.lyrics.app.editor.score.snapTicks
+import dev.nymph.lyrics.app.editor.score.staffEdited
+import dev.nymph.lyrics.app.editor.score.withDraft
+import dev.nymph.lyrics.app.editor.score.withoutScore
 import dev.nymph.lyrics.data.repository.NlpRepository
+import dev.nymph.lyrics.logic.score.edit.SyllableRef
+import dev.nymph.lyrics.logic.score.validateScore
+import dev.nymph.lyrics.model.score.Score
+import dev.nymph.lyrics.model.score.ScoreSnap
 import dev.nymph.lyrics.data.repository.SnippetRepository
 import dev.nymph.lyrics.logic.editor.EditorRowsState
 import dev.nymph.lyrics.logic.editor.deleteRow
@@ -19,6 +33,20 @@ import dev.nymph.lyrics.logic.editor.setActiveRow
 import dev.nymph.lyrics.logic.editor.splitRow
 import dev.nymph.lyrics.logic.editor.typeLine
 import dev.nymph.lyrics.logic.grid.moveTargetFromGap
+import dev.nymph.lyrics.logic.score.edit.cycleAccent as cycleAccentOf
+import dev.nymph.lyrics.logic.score.edit.moveNote as moveNoteOf
+import dev.nymph.lyrics.logic.score.edit.nudgeNote as nudgeNoteOf
+import dev.nymph.lyrics.logic.score.edit.placeSyllable as placeSyllableOf
+import dev.nymph.lyrics.logic.score.edit.removeMeter as removeMeterOf
+import dev.nymph.lyrics.logic.score.edit.removeTempo as removeTempoOf
+import dev.nymph.lyrics.logic.score.edit.resizeNote as resizeNoteOf
+import dev.nymph.lyrics.logic.score.edit.setMeter as setMeterOf
+import dev.nymph.lyrics.logic.score.edit.setPickup as setPickupOf
+import dev.nymph.lyrics.logic.score.edit.setSnap as setSnapOf
+import dev.nymph.lyrics.logic.score.edit.setTempo as setTempoOf
+import dev.nymph.lyrics.logic.score.edit.stepLength as stepLengthOf
+import dev.nymph.lyrics.logic.score.edit.unplace
+import dev.nymph.lyrics.logic.score.edit.StaffEdit
 import dev.nymph.lyrics.model.Snippet
 import dev.nymph.lyrics.model.SnippetType
 import dev.nymph.lyrics.model.SnippetUpdateRequest
@@ -39,12 +67,21 @@ import kotlinx.coroutines.launch
 /** Delay between the last text change and the API syllabify call (as the web editor). */
 const val SYLLABIFY_DEBOUNCE_MS: Long = 300
 
-/** The `PUT /api/snippets/{id}?canvas_id=` body for the current editor state (content fields only). */
-fun saveRequest(state: EditorUiState): SnippetUpdateRequest = SnippetUpdateRequest(
-    snippetType = state.snippetType,
-    gridData = state.rows.gridData,
-    rawText = rawTextForSave(state.rows),
-)
+/**
+ * The `PUT /api/snippets/{id}?canvas_id=` body for the current editor state (content fields only).
+ * With a score (now or when opened) it also carries the score for the rows' grid (or Remove score)
+ * and the view; the save flow then links the rests into grid and text.
+ */
+fun saveRequest(state: EditorUiState): SnippetUpdateRequest {
+    val fields = state.score.saveFields(state.rows.gridData)
+    return SnippetUpdateRequest(
+        snippetType = state.snippetType,
+        gridData = state.rows.gridData,
+        rawText = rawTextForSave(state.rows),
+        score = fields.score,
+        scoreView = fields.scoreView,
+    )
+}
 
 private fun joinedText(rows: EditorRowsState): String = rows.lines.joinToString("\n")
 
@@ -58,7 +95,7 @@ class GridEditorViewModel(
     private val snippet: Snippet,
     private val nlp: NlpRepository,
     private val snippets: SnippetRepository,
-) : ViewModel(), GridEditorActions {
+) : ViewModel(), GridEditorActions, ScoreActions {
     private val _state = MutableStateFlow(EditorUiState.initial(snippet))
     val state: StateFlow<EditorUiState> = _state.asStateFlow()
 
@@ -81,10 +118,18 @@ class GridEditorViewModel(
         }
     }
 
-    /** Apply [transform], then drop a selection that no longer fits its row's cells. */
+    /**
+     * Apply [transform], then drop a selection that no longer fits its row's cells. A grid change
+     * that only moved rests moves the score's notes with it ([ScoreLayer.afterGridEdit]).
+     */
     private inline fun update(transform: (EditorUiState) -> EditorUiState) {
         _state.update { current ->
-            val next = transform(current)
+            val transformed = transform(current)
+            val next = if (transformed.rows.gridData != current.rows.gridData && transformed.score === current.score) {
+                transformed.copy(score = current.score.afterGridEdit(current.rows.gridData, transformed.rows.gridData))
+            } else {
+                transformed
+            }
             val sel = next.selection ?: return@update next
             val line = next.rowLines.getOrNull(sel.row)
             if (line != null && sel.fitsIn(line.cells.size)) next else next.copy(selection = null)
@@ -208,6 +253,62 @@ class GridEditorViewModel(
         if (next === s.rows) return@update s
         s.copy(rows = next, selection = s.selection?.let { it.inRow(indexAfterReorder(it.row, from, to)) })
     }
+
+    // ---- Score layer (musical mode) ----
+
+    override fun showStaff() = update { it.showingStaff() }
+
+    override fun showGrid() = update { it.showingGrid() }
+
+    override fun draftFromGrid(num: Int, den: Int, bpm: Double, note: ScoreSnap) = update { s ->
+        val (next, problem) = s.drafted(num, den, bpm, note)
+        next.copy(draftProblem = problem)
+    }
+
+    override fun useDraft(score: Score) = update { s -> if (validateScore(score, s.rows.gridData) == null) s.withDraft(score) else s }
+
+    /** Dismiss a "Make score" problem message. */
+    fun acknowledgeDraftProblem() = update { it.copy(draftProblem = null) }
+
+    override fun removeScore() = update { it.withoutScore() }
+
+    override fun selectSyllable(ref: SyllableRef?) = update { it.selecting(ref) }
+
+    override fun placeSyllable(ref: SyllableRef, tick: Int) = update { s ->
+        s.staffEdited(selected = ref) { placeSyllableOf(it, s.rows.gridData, ref, tick, s.snapTicks) }
+    }
+
+    override fun moveNote(ref: SyllableRef, tick: Int) = update { s -> s.staffEdited(selected = ref) { moveNoteOf(it, ref, tick, s.snapTicks) } }
+
+    override fun resizeNote(ref: SyllableRef, endTick: Int) = update { s ->
+        s.staffEdited(selected = ref) { resizeNoteOf(it, ref, endTick, s.snapTicks) }
+    }
+
+    /** Apply [edit] to the selected note. */
+    private inline fun onSelected(crossinline edit: (Score, SyllableRef, Int) -> StaffEdit) = update { s ->
+        val ref = s.score.selected ?: return@update s
+        s.staffEdited { edit(it, ref, s.snapTicks) }
+    }
+
+    override fun nudgeNote(direction: Int) = onSelected { score, ref, snap -> nudgeNoteOf(score, ref, direction, snap) }
+
+    override fun stepLength(direction: Int) = onSelected { score, ref, snap -> stepLengthOf(score, ref, direction, snap) }
+
+    override fun cycleAccent() = onSelected { score, ref, _ -> cycleAccentOf(score, ref) }
+
+    override fun unplaceSelected() = onSelected { score, ref, _ -> unplace(score, ref) }
+
+    override fun setMeter(bar: Int, num: Int, den: Int) = update { s -> s.staffEdited { setMeterOf(it, bar, num, den) } }
+
+    override fun removeMeter(bar: Int) = update { s -> s.staffEdited { removeMeterOf(it, bar) } }
+
+    override fun setTempo(bar: Int, bpm: Double) = update { s -> s.staffEdited { setTempoOf(it, bar, bpm) } }
+
+    override fun removeTempo(bar: Int) = update { s -> s.staffEdited { removeTempoOf(it, bar) } }
+
+    override fun setPickup(ticks: Int) = update { s -> s.staffEdited { setPickupOf(it, ticks) } }
+
+    override fun setSnap(snap: ScoreSnap) = update { s -> s.staffScore?.let { s.committing(setSnapOf(it, snap)) } ?: s }
 
     // ---- Save ----
 

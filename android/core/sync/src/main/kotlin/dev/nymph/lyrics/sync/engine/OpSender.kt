@@ -101,6 +101,8 @@ class HttpOpSender(private val api: ApiClient) : OpSender {
                 beatsPerLine = op.patch.beatsPerLine,
                 gridData = op.patch.gridData,
                 rawText = op.patch.rawText,
+                score = op.patch.score,
+                scoreView = op.patch.scoreView,
                 baseVersion = op.baseVersion,
             ),
             op.canvasId.value,

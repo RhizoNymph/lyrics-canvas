@@ -2,6 +2,7 @@ package dev.nymph.lyrics.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import dev.nymph.lyrics.model.score.Score
 import kotlinx.serialization.json.JsonElement
 
 /**
@@ -52,6 +53,8 @@ data class SnapshotSnippet(
     @SerialName("content_updated_at") val contentUpdatedAt: String,
     val version: Int = 1,
     @SerialName("tag_ids") val tagIds: List<TagId> = emptyList(),
+    val score: Score? = null,
+    @SerialName("score_view") val scoreView: Boolean = false,
 )
 
 /** The structured error codes of optimistic concurrency and client-chosen ids (`detail.error`). */

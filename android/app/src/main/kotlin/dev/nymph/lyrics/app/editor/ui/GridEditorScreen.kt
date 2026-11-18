@@ -40,7 +40,14 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.nymph.lyrics.app.editor.EditorUiState
+import dev.nymph.lyrics.app.editor.score.DraftProblem
+import dev.nymph.lyrics.app.editor.score.ScoreActions
+import dev.nymph.lyrics.app.editor.score.ui.ScoreDraftSheetSlot
+import dev.nymph.lyrics.app.editor.score.ui.ScoreModeBar
+import dev.nymph.lyrics.app.editor.score.ui.StaffEditor
+import kotlinx.coroutines.launch
 import dev.nymph.lyrics.app.editor.GridEditorActions
 import dev.nymph.lyrics.app.editor.RowSpan
 import dev.nymph.lyrics.app.editor.SaveStatus
@@ -62,7 +69,25 @@ internal fun GridEditorScreen(
     /** Above the rows (the host's "Also on: …" line). */
     header: @Composable () -> Unit = {},
     bottomPanel: @Composable () -> Unit = {},
+    /** The score layer (musical mode); null hides Make score / Grid / Staff. */
+    scoreActions: ScoreActions? = null,
+    /** "Make score"'s draft from a recording (the score tools' sheet); null offers only the local draft. */
+    draftSheet: ScoreDraftSheetSlot? = null,
+    onDraftProblemShown: () -> Unit = {},
 ) {
+    val scope = rememberCoroutineScope()
+    val problem = state.draftProblem
+    LaunchedEffect(problem) {
+        if (problem != null) {
+            onDraftProblemShown()
+            snackbar.showSnackbar(
+                when (problem) {
+                    DraftProblem.NO_LYRICS -> "Add lyrics first: the score is made from the grid"
+                    DraftProblem.TOO_LONG -> "The grid is too long for a score"
+                },
+            )
+        }
+    }
     val save = state.save
     LaunchedEffect(save) {
         if (save is SaveStatus.Failed) {
@@ -72,6 +97,7 @@ internal fun GridEditorScreen(
     }
     BackHandler {
         when {
+            state.staffShown && state.score.selected != null -> scoreActions?.selectSyllable(null)
             state.selection != null -> actions.clearSelection()
             state.rows.activeRow >= 0 -> actions.deactivateRow()
             else -> actions.save()
@@ -99,9 +125,23 @@ internal fun GridEditorScreen(
                 .imePadding(),
         ) {
             header()
-            EditorRows(state, actions, Modifier.weight(1f))
-            bottomPanel()
-            HintBar(state)
+            if (scoreActions != null) ScoreModeBar(state.staffScore != null, state.staffShown, scoreActions, draftSheet)
+            val staff = state.staffScore
+            if (scoreActions != null && state.staffShown && staff != null) {
+                StaffEditor(
+                    score = staff,
+                    grid = state.rows.gridData,
+                    selected = state.score.selected,
+                    actions = scoreActions,
+                    onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+                    modifier = Modifier.weight(1f),
+                )
+                bottomPanel()
+            } else {
+                EditorRows(state, actions, Modifier.weight(1f))
+                bottomPanel()
+                HintBar(state)
+            }
         }
     }
 }

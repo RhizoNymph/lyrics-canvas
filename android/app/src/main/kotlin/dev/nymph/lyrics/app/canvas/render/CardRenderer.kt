@@ -36,6 +36,7 @@ class CardTextStyles(density: Density) {
     val rest = cellBase.copy(color = Palette.RestText)
     val count = with(density) { TextStyle(color = Palette.CountText, fontSize = units(CardMetrics.COUNT_FONT), fontFamily = FontFamily.Monospace) }
     val fallback = cellBase.copy(color = Palette.FallbackText)
+    val staffSyllable = with(density) { TextStyle(color = Palette.CellText, fontSize = units(CardMetrics.TAG_FONT)) }
     val notSynced = with(density) { TextStyle(color = Palette.Error, fontSize = units(CardMetrics.TAG_FONT), fontWeight = FontWeight.Bold) }
 
     fun forKind(kind: CellTextKind): TextStyle = when (kind) {
@@ -137,7 +138,31 @@ fun DrawScope.drawCard(
             }
         }
 
+        layout.staff?.let { staff ->
+            for (row in staff.rows) {
+                val y = row.y.toFloat()
+                drawLine(Palette.GridLine, Offset(row.left.toFloat(), y), Offset(row.right.toFloat(), y), strokeWidth = dp * 1.5f)
+                for (x in row.barXs + listOf(row.left, row.right)) {
+                    drawLine(Palette.CountText, Offset(x.toFloat(), y - 5f), Offset(x.toFloat(), y + 5f), strokeWidth = dp)
+                }
+                for (note in row.notes) {
+                    val color = if (note.accent > 0) Palette.StressedText else Palette.Primary
+                    drawRoundRect(color.copy(alpha = 0.8f), topLeft = Offset(note.x.toFloat(), y - 2.5f), size = Size(note.width.toFloat(), 5f), cornerRadius = CornerRadius(2f))
+                }
+            }
+        }
+
         if (!textVisible(zoom)) return@withTransform
+
+        layout.staff?.let { staff ->
+            for (row in staff.rows) {
+                for (note in row.notes) {
+                    if (note.label.isEmpty()) continue
+                    drawText(measurer, note.label, Offset(note.x.toFloat(), row.y.toFloat() + 3f), styles.staffSyllable, maxLines = 1, softWrap = false)
+                    if (note.accent > 0) drawText(measurer, if (note.accent >= 2) ">>" else ">", Offset(note.x.toFloat(), row.y.toFloat() - 13f), styles.staffSyllable, maxLines = 1)
+                }
+            }
+        }
 
         drawText(measurer, layout.headerLabel, Offset(layout.headerLabelX.toFloat(), layout.headerLabelY.toFloat()), styles.header, maxLines = 1)
         layout.linkBadge?.let { badge ->

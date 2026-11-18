@@ -159,6 +159,7 @@ private fun Sides(item: ReviewItem) {
     val mine = item.mine
     val server = item.server
     val diff = if (mine is ReviewSide.OfSnippet && server is ReviewSide.OfSnippet) lineDiff(mine.text, server.text) else null
+    if (item.cadenceChanged) Text(CADENCE_CHANGED, style = MaterialTheme.typography.labelLarge, color = Palette.Primary)
     Side("Mine (on this phone)", mine, diff?.mineOnly.orEmpty())
     Side("Server's", server, diff?.serverOnly.orEmpty())
 }

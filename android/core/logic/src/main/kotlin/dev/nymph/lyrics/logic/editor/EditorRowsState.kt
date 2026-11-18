@@ -224,6 +224,29 @@ fun removeCellsInRow(state: EditorRowsState, row: Int, start: Int, end: Int): Ed
         out
     }
 
+/**
+ * Take the lines of [grid] that differ from the rows' grid lines (a rest-linked grid from the score
+ * layer: same lines, only rest cells changed). Each changed row gets the new line, its text rebuilt
+ * from it, and becomes arranged; equal rows are untouched. A grid with a different number of lines
+ * does not belong to these rows and is ignored.
+ */
+fun withLinkedGrid(state: EditorRowsState, grid: GridData?): EditorRowsState {
+    val incoming = grid?.lines ?: emptyList()
+    val current = state.gridData?.lines ?: emptyList()
+    if (incoming.size != current.size || incoming == current) return state
+    val rows = toRows(state)
+    var gi = 0
+    for (i in rows.indices) {
+        val row = rows[i]
+        if (row.grid == null) continue
+        val next = incoming[gi++]
+        if (next == row.grid) continue
+        val rebuilt = withRebuiltText(next)
+        rows[i] = Row(rebuilt.rawText, rebuilt, true)
+    }
+    return fromRows(rows, state.activeRow, state.caret)
+}
+
 /** Move row [from] to index [to], carrying its grid line and arranged flag; the active row follows its line. */
 fun reorderRows(state: EditorRowsState, from: Int, to: Int): EditorRowsState {
     val n = state.lines.size
