@@ -57,9 +57,14 @@ def content_for(
     return SnippetContent(raw_text=raw_text, grid_data=grid_data, phonetics=phonetics, width=width, height=height)
 
 
-def derive_new_content(raw_text: str, grid_data: dict | None = None) -> SnippetContent:
-    """A new snippet's content: a client-supplied grid is stored as-is (so merged rests and stress
-    survive), otherwise the text is syllabified."""
+def new_grid(raw_text: str, grid_data: dict | None = None) -> dict:
+    """A new snippet's grid: a client-supplied grid as-is (so merged rests and stress survive),
+    otherwise the text syllabified."""
     if grid_data is None:
-        grid_data = syllabify_text(raw_text) if raw_text else {"lines": []}
-    return content_for(raw_text, grid_data)
+        return syllabify_text(raw_text) if raw_text else {"lines": []}
+    return grid_data
+
+
+def derive_new_content(raw_text: str, grid_data: dict | None = None) -> SnippetContent:
+    """A new snippet's content (no score): ``new_grid`` plus phonetics and size."""
+    return content_for(raw_text, new_grid(raw_text, grid_data))

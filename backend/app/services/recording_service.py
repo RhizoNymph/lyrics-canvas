@@ -32,6 +32,8 @@ from app.schemas.phonetics import SnippetPhonetics
 from app.services.placements.queries import placed_by_placement_id, placed_snippet
 from app.services.placements.ranks import top_rank
 from app.services.placements.view import PlacedSnippet
+from app.services.score import ScoreError
+from app.services.score_save import KeepScore, ScoredContent, saved_content
 from app.services.snippet_content import content_for, derive_new_content
 from app.services.sync.bump import bump
 from app.services.voice.append import append_lines
@@ -229,11 +231,21 @@ async def append_with_recording(
         raise SnippetNotFoundError("snippet not found")
     snippet = placed.snippet
     appended = append_lines(snippet.raw_text or "", snippet.grid_data, lines)
+    # The score follows the grid change like any edit (reconcile: the new lines are unplaced);
+    # phonetics and size follow the final text and grid (docs/features/score_backend.md).
+    stored = ScoredContent(snippet.raw_text or "", snippet.grid_data, snippet.score, snippet.score_view)
+    try:
+        scored = saved_content(stored, raw_text=appended.raw_text, grid=appended.grid_data, edit=KeepScore(), view=None)
+    except ScoreError as exc:
+        logger.error("voice_take.append.score_failed snippet_id=%s error=%s", snippet_id, exc)
+        raise VoicePersistError("could not carry the snippet's score over the appended lines; nothing changed") from exc
     overrides = SnippetPhonetics.model_validate(snippet.phonetics).overrides if snippet.phonetics else None
-    content = content_for(appended.raw_text, appended.grid_data, overrides)
+    content = content_for(scored.raw_text, scored.grid or appended.grid_data, overrides)
     snippet.raw_text = content.raw_text
     snippet.grid_data = content.grid_data
     snippet.phonetics = content.phonetics
+    snippet.score = scored.score
+    snippet.score_view = scored.score_view
     placed.placement.width = content.width
     placed.placement.height = content.height
     # SQL now(): the transaction clock, equal to the updated_at written by the same UPDATE.
