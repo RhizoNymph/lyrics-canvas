@@ -23,6 +23,7 @@ from app.schemas.rhyme import (
     RhymeGridLineModel,
     RhymeCandidateModel,
     RhymeSuggestRequest,
+    RhymeSuggestCandidateModel,
     RhymeSuggestResponse,
     RhymeSyllable,
     RhymeUnitModel,
@@ -47,7 +48,15 @@ from app.services.phonetics.types import Unit
 from app.services.phonetics.units import unit_from_text
 from app.services.phonetics_service import compute_snippet_phonetics, note_unit
 from app.services.rest_marks import display_text, word_tokens
-from app.services.rhyme_order import band_of
+from app.services.rhyme_order import Ordered, band_of
+from app.services.rhythm_fit import (
+    RhythmUnavailable,
+    SlotRhythm,
+    candidate_stresses,
+    order_by_rhythm,
+    rhythm_fit,
+    stored_slot_rhythm,
+)
 from app.services.tag_expr import Expr, SnippetFacts, matches, parse
 
 logger = logging.getLogger(__name__)
@@ -79,6 +88,7 @@ class SnippetRecord:
     tag_ids: tuple[str, ...]
     snippet_type: SnippetType = SnippetType.freestyle
     tag_names: tuple[str, ...] = ()
+    score: dict | None = None  # the snippet's stored score JSON (null = no score)
 
 
 class SnippetRepository(Protocol):
@@ -106,6 +116,7 @@ def _record(snippet: Snippet) -> SnippetRecord:
         tag_ids=tuple(str(t.id) for t in (snippet.tags or [])),
         snippet_type=snippet.snippet_type,
         tag_names=tuple(t.name for t in (snippet.tags or [])),
+        score=snippet.score,
     )
 
 
@@ -287,11 +298,11 @@ def unit_model(unit: Unit, grid_data: Mapping[str, object] | None = None) -> Rhy
     )
 
 
-def candidate_model(
-    c: Candidate, slot: Slot | None, grid_data: Mapping[str, object] | None, similarity: float | None = None
-) -> RhymeCandidateModel:
+def _candidate_fields(
+    c: Candidate, slot: Slot | None, grid_data: Mapping[str, object] | None, similarity: float | None
+) -> dict[str, object]:
     base = unit_model(c.unit, grid_data)
-    return RhymeCandidateModel(
+    return dict(
         **base.model_dump(),
         score=c.score.score,
         match_depth=c.score.match_depth,
@@ -307,6 +318,22 @@ def candidate_model(
         band=band_of(c.score.score),
         similarity=similarity,
     )
+
+
+def candidate_model(
+    c: Candidate, slot: Slot | None, grid_data: Mapping[str, object] | None, similarity: float | None = None
+) -> RhymeCandidateModel:
+    return RhymeCandidateModel(**_candidate_fields(c, slot, grid_data, similarity))
+
+
+def suggest_candidate_model(
+    c: Candidate,
+    slot: Slot | None,
+    grid_data: Mapping[str, object] | None,
+    similarity: float | None = None,
+    rhythm: float | None = None,
+) -> RhymeSuggestCandidateModel:
+    return RhymeSuggestCandidateModel(**_candidate_fields(c, slot, grid_data, similarity), rhythm_fit=rhythm)
 
 
 # --- anchor resolution ---
@@ -402,6 +429,50 @@ async def meaning_target(
     return parts
 
 
+@dataclass(frozen=True, slots=True)
+class RhythmOff:
+    """``rhythm_fit`` was not asked for: today's path, untouched."""
+
+
+RhythmPlan = RhythmOff | SlotRhythm | RhythmUnavailable
+
+
+def rhythm_plan(requested: bool, first: ResolvedAnchor) -> RhythmPlan:
+    """The slot rhythm of the request's first anchor, or why it has none.
+
+    A text anchor has no score (``no_score``); a snippet anchor's slot is its line, or its word range,
+    read from the snippet's stored score (``app.services.rhythm_fit.slot``).
+    """
+    if not requested:
+        return RhythmOff()
+    record, unit = first.record, first.unit
+    if record is None or unit.line_index is None:
+        return RhythmUnavailable("no_score")
+    return stored_slot_rhythm(
+        record.score, record.grid_data, unit.line_index, unit.word_offset or 0, unit.word_end, snippet_id=record.id
+    )
+
+
+def fits_rhythm_count(c: Candidate, slot: SlotRhythm) -> bool:
+    """True when the candidate has exactly the slot's syllable count (rest marks are not syllables)."""
+    return len(candidate_stresses(c.unit.stress)) == slot.syllable_count
+
+
+def candidate_rhythm_fit(c: Candidate, slot: SlotRhythm) -> float:
+    return rhythm_fit(slot, candidate_stresses(c.unit.stress))
+
+
+def _rhythm_label(plan: RhythmPlan) -> str:
+    match plan:
+        case RhythmOff():
+            return "off"
+        case SlotRhythm():
+            return "applied"
+        case RhythmUnavailable(reason=reason):
+            return reason
+    raise AssertionError(plan)
+
+
 DictionaryFactory = Callable[[DialectMap, ScoreWeights | None, bool], CandidateSource]
 
 
@@ -433,6 +504,7 @@ async def suggest(
 
     resolved = [await resolve_anchor(a, user_id, repo, dialect) for a in req.anchors]
     anchors = [r.unit for r in resolved]
+    rhythm = rhythm_plan(req.rhythm_fit, resolved[0])
     tags = await context_tags(req.context, user_id, repo)
     anchor_texts = {a.text.lower() for a in anchors}
     anchor_lines = frozenset((r.record.id, r.unit.line_index) for r in resolved if r.record is not None and r.unit.line_index is not None)
@@ -456,32 +528,45 @@ async def suggest(
 
     candidates = await asyncio.to_thread(run_sources)
     candidates = [c for c in candidates if c.unit.text.lower() not in anchor_texts]
+    if isinstance(rhythm, SlotRhythm):
+        # before the per-line suffix dedupe, so a note line contributes its suffix of the right length
+        slot_rhythm = rhythm
+        candidates = [c for c in candidates if fits_rhythm_count(c, slot_rhythm)]
     candidates = dedupe_note_suffixes(candidates, req.slot)
     ranked = rank(candidates, tags)
     target = await meaning_target(req.anchors, resolved, embeddings or NoStoredEmbeddings()) if req.order == "meaning" else []
     ordered = await apply_order(
         req.order, ranked, score=lambda c: c.score.score, text=lambda c: c.unit.text, target=target, meaning=meaning
     )
-    page = ordered.items[req.offset : req.offset + req.limit]
+    items: list[Ordered[Candidate]] = ordered.items
+    fits: dict[int, float] = {}  # id(candidate) -> rhythm fit; empty unless rhythm applies
+    if isinstance(rhythm, SlotRhythm):
+        slot_rhythm = rhythm
+        fits = {id(c): candidate_rhythm_fit(c, slot_rhythm) for c in ranked}
+        items = order_by_rhythm(items, score=lambda c: c.score.score, fit=lambda c: fits[id(c)])
+    page = items[req.offset : req.offset + req.limit]
 
     response = RhymeSuggestResponse(
         anchors=[unit_model(r.unit, r.record.grid_data if r.record else None) for r in resolved],
         candidates=[
-            candidate_model(
+            suggest_candidate_model(
                 o.item,
                 req.slot,
                 records_by_id[o.item.unit.snippet_id].grid_data if o.item.unit.snippet_id in records_by_id else None,
                 o.similarity,
+                fits.get(id(o.item)),
             )
             for o in page
         ],
         total=len(ranked),
         elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
         order_applied=ordered.applied,
+        rhythm_applied=isinstance(rhythm, SlotRhythm),
+        rhythm_unavailable_reason=rhythm.reason if isinstance(rhythm, RhythmUnavailable) else None,
     )
     logger.info(
-        "rhyme_suggest.done anchors=%d sources=%s k=%d tag_filter=%s order=%s order_applied=%s total=%d returned=%d elapsed_ms=%.1f",
-        len(anchors), ",".join(req.sources), req.k, tag_filter is not None, req.order, ordered.applied, response.total,
-        len(response.candidates), response.elapsed_ms,
+        "rhyme_suggest.done anchors=%d sources=%s k=%d tag_filter=%s order=%s order_applied=%s rhythm=%s total=%d returned=%d elapsed_ms=%.1f",
+        len(anchors), ",".join(req.sources), req.k, tag_filter is not None, req.order, ordered.applied,
+        _rhythm_label(rhythm), response.total, len(response.candidates), response.elapsed_ms,
     )
     return response

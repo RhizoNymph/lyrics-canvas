@@ -33,6 +33,8 @@ RhymeSuggestRequest
                   whole line: id note:<sid>:<line>:0;  range: note:<sid>:<line>:<start>-<end>
                   with text = the range's words, phonetics of the slice only, word_end set;
                   no pronounceable word in the range -> RhymeQueryError -> 422
+  -> rhythm_plan(rhythm_fit, first anchor): off | SlotRhythm | no_score / slot_unplaced
+       (slot rhythm from the anchor snippet's score; docs/features/rhyme_rhythm_fit.md)
   -> context: tag ids of context snippet anchors (missing entries ignored)
   -> sources (run in a worker thread):
        notes:      NotesSource over every line and word-boundary suffix of the user's
@@ -40,11 +42,15 @@ RhymeSuggestRequest
        dictionary: DictionarySource(dialect, weights, include_rare)
        each: suggest(anchors, k, min_score, limit=5000, exclude=exclude_ids + anchor ids)
   -> drop candidates whose text equals an anchor's text
+  -> rhythm applied only: keep candidates with exactly the slot's syllable count
   -> dedupe_note_suffixes: one suffix per (snippet, line): best score, depth, fits slot, longest
   -> rank: score desc, match_depth desc, notes before dictionary, shared context tags desc, id
+  -> apply_order (rhyme | meaning)
+  -> rhythm applied only: rhythm_fit per candidate; order_by_rhythm (band, fit, similarity)
   -> page [offset, offset + limit); total = ranked length (capped by 5000 per source)
-  -> models: RhymeUnitModel (effective syllables, rhyme_key, grid_line) and RhymeCandidateModel
-            (score, match_depth, best_anchor_id, fits_slot, alignment, source)
+  -> models: RhymeUnitModel (effective syllables, rhyme_key, grid_line) and
+            RhymeSuggestCandidateModel (score, match_depth, best_anchor_id, fits_slot, alignment,
+            source, band, similarity, rhythm_fit); response rhythm_applied, rhythm_unavailable_reason
 ```
 
 `fits_slot(stress, slot)`: the stress string has the slot's length and no stressed (1 or 2)

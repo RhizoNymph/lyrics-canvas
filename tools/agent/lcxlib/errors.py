@@ -56,6 +56,7 @@ class IssueCode(enum.StrEnum):
     VERSION_CONFLICT = "version_conflict"
     DUPLICATE_SNIPPET = "duplicate_snippet"
     INVALID_RANK = "invalid_rank"
+    INVALID_SCORE = "invalid_score"
 
 
 @dataclass(frozen=True)

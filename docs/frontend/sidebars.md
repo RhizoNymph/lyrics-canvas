@@ -12,8 +12,9 @@ canvas only when a row is materialized. Full description in [rhyme-view.md](./rh
 
 ### State
 
-All state lives in `rhymeStore` (session, params, results, dismissed, exclusions, materialize counts,
-loading/error); Pattern mode's state lives in `rhymePatternStore`. The sidebar owns only the expanded row. `uiStore.rightPanel === 'rhymes'` controls
+All state lives in `rhymeStore` (session, params, results with their `ordering` and `rhythm`, dismissed,
+exclusions, materialize counts, loading/error); the per-viewer order and "Fit rhythm" switches live in
+`rhymeOrderStore` and `rhymeRhythmFitStore`; Pattern mode's state lives in `rhymePatternStore`. The sidebar owns only the expanded row. `uiStore.rightPanel === 'rhymes'` controls
 mounting (the word bank shares the slot; only one is open); `CanvasPage` renders the sidebar while it holds and the sidebar calls `rhymeStore.enter()` on mount and
 `exit()` (and `rhymePatternStore.exit()`) on unmount.
 
@@ -27,6 +28,11 @@ mounting (the word bank shares the slot; only one is open); `CanvasPage` renders
 - "+ bank" adds the candidate's text to the word bank (toast with the result); disabled with the reason as a
   tooltip when the text is not a valid bank entry (digits, more than 4 words, over 64 characters)
 - More loads the next 40
+- "Order" switches Rhyme / Rhyme, then meaning ([web_rhyme_meaning_order.md](../features/web_rhyme_meaning_order.md))
+- "Fit rhythm" (shown only while a selected snippet is an anchor; remembered per viewer) asks the server to
+  keep candidates with the slot's syllable count and rank them by fit to the snippet's score rhythm; rows
+  show `♩NN%`, band headers appear, and a note says why when it was unavailable (no score on the snippet,
+  or slot syllables not placed on the staff). See [web_score_tools.md](../features/web_score_tools.md#fit-rhythm)
 - "Only my lines matching" (`NotesTagFilter`): a tag expression (same input, autocomplete and presets as the
   canvas filter bar, plus "Use canvas filter") restricting the notes source; sent as `tag_filter`, never
   sent while invalid (the list shows "Not searched: ..." instead). See
@@ -40,7 +46,7 @@ mounting (the word bank shares the slot; only one is open); `CanvasPage` renders
 ### Layout
 
 Width: 380px fixed, full height of the canvas area. Header, query controls (search, chips, the pattern
-shortcut, k, min score, slot, sources, rare words, notes tag filter), status line with More, scrollable
+shortcut, k, min score, order, fit rhythm, slot, sources, rare words, notes tag filter), status line with More, scrollable
 result rows.
 
 ### Pattern mode

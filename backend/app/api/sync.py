@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.canvases import _canvas_response
+from app.api.canvases import _canvas_response, score_model
 from app.api.deps import get_current_user
 from app.api.tag_errors import owner_id
 from app.api.tag_presets import _preset_response
@@ -46,6 +46,8 @@ def _snippet(item: SnapshotSnippet) -> SyncSnippet:
         beats_per_line=s.beats_per_line,
         grid_data=GridDataModel.model_validate(s.grid_data) if s.grid_data is not None else None,
         raw_text=s.raw_text,
+        score=score_model(s.score),
+        score_view=s.score_view,
         phonetics=SnippetPhonetics.model_validate(s.phonetics) if s.phonetics is not None else None,
         derived_from=DerivedFromModel.model_validate(s.derived_from) if s.derived_from is not None else None,
         created_at=str(s.created_at),

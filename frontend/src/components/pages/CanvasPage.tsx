@@ -21,6 +21,7 @@ import { useRhymeQuery } from '@/hooks/useRhymeQuery';
 import { removalFailureNotice } from '@/lib/placements';
 import { usePlacementNoticeStore } from '@/stores/placementNoticeStore';
 import PlacementToast from '@/components/placements/PlacementToast';
+import ScoreDraftHost from '@/components/score/ScoreDraftHost';
 import CanvasesPopover from '@/components/placements/CanvasesPopover';
 import { useCanvasSearchStore } from '@/stores/canvasSearchStore';
 import { useSnippetFocus } from '@/hooks/useSnippetFocus';
@@ -138,6 +139,7 @@ export default function CanvasPage() {
       <VoiceCaptureModal />
       <WordBankToast />
       <PlacementToast />
+      <ScoreDraftHost />
       <CanvasesPopover />
     </div>
   );

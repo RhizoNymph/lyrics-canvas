@@ -303,3 +303,25 @@ export function rawTextForSave(state: EditorRowsState): string {
     .map((row) => (row.arranged && row.grid ? withRebuiltText(row.grid).raw_text : row.text))
     .join('\n');
 }
+
+/**
+ * Take a grid computed from the rows' grid (the score rest link): each non-blank row whose grid line
+ * changed takes the new line, its canonical text and `arranged`; other rows are untouched. The new grid
+ * must have one line per non-blank row (as `gridData` does); otherwise the state is returned unchanged.
+ */
+export function replaceGridData(state: EditorRowsState, grid: GridData | null): EditorRowsState {
+  const current = state.gridData?.lines ?? [];
+  const next = grid?.lines ?? [];
+  if (next.length !== current.length) return state;
+  if (next.every((line, i) => line === current[i])) return state;
+  const rows = toRows(state);
+  let gi = 0;
+  const updated = rows.map((row) => {
+    if (!row.grid) return row;
+    const line = next[gi];
+    const changed = line !== current[gi];
+    gi++;
+    return changed ? { text: line.raw_text, grid: line, arranged: true } : row;
+  });
+  return fromRows(updated, state.activeRow, state.caret);
+}
