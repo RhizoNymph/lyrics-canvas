@@ -31,6 +31,7 @@ import {
 } from '@/lib/placements';
 import type { HistorySnapshot, PlacementResult, RemovalSummary } from '@/lib/placements';
 import { patchRanks } from '@/lib/listMode/rankPatch';
+import { planContentSave, scoreContentOf } from '@/lib/score/saveFlow';
 import type { RankPatch } from '@/lib/listMode/rankPatch';
 
 export type { RemovalSummary } from '@/lib/placements';
@@ -303,12 +304,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateSnippet: async (id, data) => {
     const { canvasId } = get();
     if (!canvasId) return;
-    const updated = await placementApi.updateSnippet(id, canvasId, data);
+    const before = get().snippets.get(id);
+    // Musical mode: run the score save flow locally (throws ScoreSaveError before any request), apply it
+    // optimistically, and send the final content so the server stores exactly this state.
+    const plan = before ? planContentSave(scoreContentOf(before), data) : { body: data, local: {} };
+    const optimistic = before !== undefined && Object.keys(plan.local).length > 0;
+    const pastBefore = get().past;
+    if (optimistic) {
+      get().pushUndoState();
+      const next = new Map(get().snippets);
+      next.set(id, { ...before, ...plan.local });
+      set({ snippets: next });
+    }
+    let updated: Snippet;
+    try {
+      updated = await placementApi.updateSnippet(id, canvasId, plan.body);
+    } catch (error) {
+      if (optimistic && get().canvasId === canvasId && before && get().snippets.has(id)) {
+        const next = new Map(get().snippets);
+        next.set(id, before);
+        set({ snippets: next, past: pastBefore });
+      }
+      throw error;
+    }
     // The user may have opened another canvas meanwhile, or the snippet left this one.
     if (get().canvasId !== canvasId || !get().snippets.has(id)) return;
     const next = new Map(get().snippets);
     next.set(id, updated);
-    get().pushUndoState();
+    if (!optimistic) get().pushUndoState();
     set({ snippets: next });
   },
 

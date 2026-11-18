@@ -117,6 +117,14 @@ Response: GridData
 5. Extra empty cell on active row (+1 for next syllable)
 6. A one-line hint footer listing the shortcuts for the current mode
 
+### Score (musical mode)
+
+A snippet with a score can show it instead of the grid (Grid / Staff toggle in the editor, compact staff
+on cards and list rows). The grid stays the source of the syllables: the staff places them by ordinal
+(rests not counted), rest cells between two placed syllables follow the gap between their notes, and a
+grid edit that only changes rests moves the notes. See
+[web_score_editor.md](../features/web_score_editor.md).
+
 ## BeatGridEditor (standalone)
 
 **File:** `src/components/beatgrid/BeatGridEditor.tsx`

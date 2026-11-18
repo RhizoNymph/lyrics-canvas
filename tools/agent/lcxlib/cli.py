@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from typing import Any, TextIO
 
 from lcxlib.apply import apply_steps, render_apply
+from lcxlib.cadence import cadence
 from lcxlib.checker import check_plan, render_check
 from lcxlib.config import load_config
 from lcxlib.errors import ExitCode, LcxError, PlanError, UsageError
@@ -28,12 +29,33 @@ def _compact_canvas(detail: Mapping[str, Any]) -> dict[str, Any]:
         snippets.append({
             "id": s["id"], "placement_id": s["placement_id"], "type": s["snippet_type"], "text": s["raw_text"],
             "tags": [t["name"] for t in s["tags"]], "version": s["version"],
+            # the score compactly (None without one); `lcx score <id>` has the raw score JSON
+            "cadence": cadence(s.get("score"), s.get("grid_data")), "score_view": s.get("score_view", False),
             "content_updated_at": s["content_updated_at"], "list_rank": s.get("list_rank"),
             "layout": {k: s.get(k) for k in ("position_x", "position_y", "width", "height", "z_index", "group_id")},
             "canvases": [{"id": c["id"], "title": c["title"]} for c in s["canvases"]],
         })
     return {"id": detail["id"], "title": detail["title"], "version": detail["version"],
             "updated_at": detail["updated_at"], "snippets": snippets}
+
+
+def _with_cadence(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """The snapshot with a compact ``cadence`` next to every snippet's raw ``score``."""
+    snippets = [{**s, "cadence": cadence(s.get("score"), s.get("grid_data"))} for s in snapshot["snippets"]]
+    return {**snapshot, "snippets": snippets}
+
+
+def score_read(snapshot: Mapping[str, Any], snippet_id: str) -> dict[str, Any]:
+    """One snippet's score for editing: the raw score, its cadence, and the grid's syllables by line
+    (ordinals count syllables only, rests skipped: a note's ``s``)."""
+    s = next((x for x in snapshot["snippets"] if x["id"] == snippet_id), None)
+    if s is None:
+        raise UsageError(f"no snippet {snippet_id}")
+    lines = list((s.get("grid_data") or {}).get("lines") or [])
+    syllables = [[c.get("syllable") for c in line.get("cells") or [] if c.get("rest") is not True] for line in lines]
+    return {"id": s["id"], "version": s["version"], "text": s["raw_text"], "score_view": s.get("score_view", False),
+            "score": s.get("score"), "cadence": cadence(s.get("score"), s.get("grid_data")),
+            "lines": [{"text": line.get("raw_text", ""), "syllables": syl} for line, syl in zip(lines, syllables, strict=True)]}
 
 
 def resolve_canvas_id(api: Api, name: str) -> str:
@@ -68,7 +90,9 @@ def read_command(api: Api, args: argparse.Namespace) -> object:
         case "search":
             return api.get("/api/search", q=args.query, limit=args.limit)
         case "dump":
-            return api.get("/api/sync/snapshot")
+            return _with_cadence(api.get("/api/sync/snapshot"))
+        case "score":
+            return score_read(api.get("/api/sync/snapshot"), args.snippet_id)
     raise UsageError(f"unknown command {args.command}")
 
 
@@ -93,7 +117,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = read("search", "search canvas titles and snippet text across canvases")
     sp.add_argument("query")
     sp.add_argument("--limit", type=int, default=50)
-    read("dump", "the whole account (GET /api/sync/snapshot)")
+    read("dump", "the whole account (GET /api/sync/snapshot), each snippet with a compact cadence")
+    sp = read("score", "one snippet's score: raw JSON, cadence and the grid's syllables by line")
+    sp.add_argument("snippet_id")
 
     plan = sub.add_parser("plan", help="check or apply a change plan").add_subparsers(dest="plan_command", required=True)
     for name, help_text in (("check", "validate and show what would change; writes nothing"),

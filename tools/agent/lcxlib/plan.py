@@ -95,9 +95,19 @@ class EditText:
     base_version: int
 
 
+@dataclass(frozen=True)
+class SetScore:
+    """Replace (``score`` an object) or remove (``score`` null) a snippet's score; ``score_view``
+    None keeps the snippet's view. Checked locally against the snippet's grid."""
+
+    snippet_id: str
+    score: dict | None
+    score_view: bool | None = None
+
+
 Op = (
     CreateTag | TagSnippet | TagWord | Move | ShowOn | RemoveFrom | SetLayout | ReorderList | CreateCanvas
-    | RenameCanvas | AddBankWord | EditText
+    | RenameCanvas | AddBankWord | EditText | SetScore
 )
 
 
@@ -108,7 +118,7 @@ class Plan:
 
 
 # Field kinds for the parser: (python type check, description)
-_STR, _STRS, _NUM, _INT, _OPT_STR = "str", "list[str]", "number", "int", "str?"
+_STR, _STRS, _NUM, _INT, _OPT_STR, _OPT_OBJ, _BOOL = "str", "list[str]", "number", "int", "str?", "object|null", "bool"
 _OP_FIELDS: dict[str, tuple[type, dict[str, str], set[str]]] = {
     # op name: (dataclass, {field: kind}, required fields)
     "create_tag": (CreateTag, {"name": _STR, "color": _OPT_STR}, {"name"}),
@@ -128,6 +138,7 @@ _OP_FIELDS: dict[str, tuple[type, dict[str, str], set[str]]] = {
     "rename_canvas": (RenameCanvas, {"canvas": _STR, "title": _STR}, {"canvas", "title"}),
     "add_bank_word": (AddBankWord, {"text": _STR, "tags": _STRS}, {"text"}),
     "edit_text": (EditText, {"snippet_id": _STR, "raw_text": _STR, "base_version": _INT}, {"snippet_id", "raw_text", "base_version"}),
+    "set_score": (SetScore, {"snippet_id": _STR, "score": _OPT_OBJ, "score_view": _BOOL}, {"snippet_id", "score"}),
 }
 LAYOUT_FIELDS = ("position_x", "position_y", "width", "height", "z_index", "list_rank")
 _REF_RE = re.compile(r"^\$[A-Za-z0-9_-]{1,64}$")
@@ -145,6 +156,10 @@ def _field_ok(kind: str, value: object) -> bool:
             return isinstance(value, int | float) and not isinstance(value, bool)
         case "int":
             return isinstance(value, int) and not isinstance(value, bool)
+        case "object|null":
+            return value is None or isinstance(value, dict)
+        case "bool":
+            return isinstance(value, bool)
     return False
 
 

@@ -1,3 +1,4 @@
+import type { SnippetScoreFields } from './score';
 // ---- Beat Grid ----
 export interface GridCell {
   syllable?: string;
@@ -62,7 +63,7 @@ export interface CanvasRef {
  * `placement_id` and the layout fields (position, size, `z_index`, `group_id`) come from its placement on
  * `canvas_id`.
  */
-export interface Snippet {
+export interface Snippet extends SnippetScoreFields {
   id: string;
   /** The canvas this response is in the context of (the open canvas). */
   canvas_id: string;
