@@ -71,7 +71,7 @@ which is gitignored, passed as a second `-f`.
 `localhost:32000` registry addon, all workloads on node0/node1, the
 frontend on NodePort 32443 reached at `http://10.1.1.69:32443` (node0's IP;
 the node names are ssh aliases, not DNS names), the nightly backup CronJob
-writing to `/home/nymph/backups/lyrics-canvas` on node1 (see
+writing to the NAS share `/mnt/truenas/nymph_backup/lyrics-canvas` on node1 (see
 [Backups](#backups)), the alert rules enabled for the cluster's
 kube-prometheus-stack, and `/_status/alerts` reading its Alertmanager
 (`kps-alertmanager.monitoring.svc:9093`).

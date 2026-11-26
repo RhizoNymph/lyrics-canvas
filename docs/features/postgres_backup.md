@@ -13,8 +13,10 @@ a second machine (the homelab laptop).
   (chart-managed, or an existing claim).
 - Atomic file publication (hidden temp name, then rename) and retention of
   the newest `backup.retain` dumps.
-- Homelab wiring: dumps on node1 at `/home/nymph/backups/lyrics-canvas`,
-  owned by nymph (1000:1000).
+- Homelab wiring: dumps go to the TrueNAS NFS share `nymph_backup`
+  (`truenas.s8.gay:/mnt/ocean/nymph_backup`), automounted on node1 at
+  `/mnt/truenas/nymph_backup`, in `lyrics-canvas/`. The share maps every
+  client user to root, so files there are root-owned.
 - `deploy/homelab/backup/`: a pull script, systemd user service + timer
   templates and an installer that copies the dumps over ssh/rsync to the
   laptop (`~/Backups/lyrics-canvas`).
@@ -110,11 +112,11 @@ a second machine (the homelab laptop).
 | `deploy/helm/lyrics-canvas/templates/backup/_script.tpl` | `lyrics-canvas.backup.script`: the dump/verify/rename/prune shell script. |
 | `deploy/helm/lyrics-canvas/templates/backup/cronjob.yaml` | The CronJob. Fails rendering when postgres is disabled or a hostPath destination has no path. |
 | `deploy/helm/lyrics-canvas/templates/backup/pvc.yaml` | `<fullname>-backup` claim for `destination.type=persistentVolumeClaim` without `existingClaim`; `helm.sh/resource-policy: keep` so uninstall does not delete dumps. |
-| `deploy/helm/environments/homelab.yaml` (`backup:`) | Enabled, America/Los_Angeles, node1 hostPath `/home/nymph/backups/lyrics-canvas`, uid/gid 1000. |
+| `deploy/helm/environments/homelab.yaml` (`backup:`) | Enabled, America/Los_Angeles, node1 hostPath `/mnt/truenas/nymph_backup/lyrics-canvas` (NFS), uid/gid 1000. |
 | `deploy/helm/tests/test_chart.py` | `BackupDisabledTest`, `BackupHostPathTest`, `BackupPvcTest`, `BackupValidationTest`, `BackupScriptTest` (runs the rendered command with `pg_dump`/`pg_restore` test doubles against a temp dir), `HomelabBackupTest`. |
 | `deploy/helm/tests/values/backup-hostpath.yaml`, `backup-pvc.yaml` | Fixtures. |
 | `deploy/homelab/backup/pull.sh` | rsync pull + local retention. Env: `BACKUP_SOURCE`, `BACKUP_DEST`, `BACKUP_KEEP`. |
-| `deploy/homelab/backup/install.sh` | Options `--host` (`node1`), `--path` (`/home/nymph/backups/lyrics-canvas`), `--dest` (`~/Backups/lyrics-canvas`), `--keep` (`0`), `--on-calendar` (`*-*-* 04:30:00`), `--unit-dir` (`~/.config/systemd/user`), `--lib-dir` (`~/.local/libexec/lyrics-canvas`), `--no-enable`. Validates, copies `pull.sh` to `<lib-dir>/backup-pull.sh`, renders the templates, `daemon-reload`, `enable --now` the timer. |
+| `deploy/homelab/backup/install.sh` | Options `--host` (`node1`), `--path` (`/mnt/truenas/nymph_backup/lyrics-canvas`), `--dest` (`~/Backups/lyrics-canvas`), `--keep` (`0`), `--on-calendar` (`*-*-* 04:30:00`), `--unit-dir` (`~/.config/systemd/user`), `--lib-dir` (`~/.local/libexec/lyrics-canvas`), `--no-enable`. Validates, copies `pull.sh` to `<lib-dir>/backup-pull.sh`, renders the templates, `daemon-reload`, `enable --now` the timer. |
 | `deploy/homelab/backup/lyrics-canvas-backup-pull.service.in`, `.timer.in` | Unit templates with `@SOURCE@`, `@DEST@`, `@KEEP@`, `@PULL_SCRIPT@`, `@ON_CALENDAR@`. |
 | `deploy/homelab/backup/tests/test_backup_pull.py` | Pull against a local source dir (filtering, no-delete history, keep-N), installer rendering/validation, `systemd-analyze verify`, shellcheck when installed. |
 
@@ -139,6 +141,12 @@ a second machine (the homelab laptop).
 - Two runs in the same second would collide; the second fails rather than
   overwrite (`concurrencyPolicy: Forbid` prevents this for scheduled runs).
 - `timeZone` needs Kubernetes 1.27+; leave it empty on older clusters.
+- Homelab: the hostPath is inside an NFS automount (`x-systemd.automount`,
+  `hard`). Pointing it at a subdirectory, not the mount point, makes kubelet's
+  `type: Directory` check trigger the mount before the bind, so the pod sees
+  the share and not the empty autofs directory. With the NAS down the mount
+  times out (30 s) and the Job fails visibly; a NAS that hangs mid-dump
+  stalls `pg_dump` until `activeDeadlineSeconds`.
 - The laptop pull never deletes a dump because it disappeared upstream.
 - Values rendered into unit files may not contain `%`, `$`, `"`, `\` or
   newlines (the installer refuses them rather than escaping).
@@ -149,9 +157,10 @@ a second machine (the homelab laptop).
 
 ## Operating
 
-Deploy (homelab): pre-create the directory on node1 (owner 1000:1000, mode
-700), make sure node1 has the postgres image (see below), then upgrade the
-release with `homelab.yaml` as usual.
+Deploy (homelab): pre-create the directory on the share from node1
+(`ssh node1 mkdir -m 700 /mnt/truenas/nymph_backup/lyrics-canvas`; it comes
+out root-owned, which is fine), make sure node1 has the postgres image (see
+below), then upgrade the release with `homelab.yaml` as usual.
 
 ```bash
 # image: node1 has no pgvector image cached; either let the first Job pull it
@@ -161,7 +170,7 @@ ssh node1 'microk8s ctr image pull docker.io/pgvector/pgvector:pg16'
 # run a backup now instead of waiting for 03:15
 microk8s kubectl -n lyrics-canvas create job --from=cronjob/lyrics-lyrics-canvas-backup lyrics-backup-manual-$(date +%s)
 microk8s kubectl -n lyrics-canvas logs -f job/lyrics-backup-manual-<id>
-ssh node1 ls -l /home/nymph/backups/lyrics-canvas
+ssh node1 ls -l /mnt/truenas/nymph_backup/lyrics-canvas
 
 # laptop
 deploy/homelab/backup/install.sh            # defaults: node1, the path above, ~/Backups/lyrics-canvas
@@ -174,7 +183,8 @@ journalctl --user -u lyrics-canvas-backup-pull.service
 Dumps are custom-format archives; restore them with `pg_restore` inside the
 postgres pod, whose local socket needs no password. From the laptop the dump
 is streamed through ssh (`kubectl` lives on node0); from node1 replace the
-`< ~/Backups/...` path with the file in `/home/nymph/backups/lyrics-canvas`.
+`< ~/Backups/...` path with the file in `/mnt/truenas/nymph_backup/lyrics-canvas`
+(the laptop also mounts the share at the same path).
 
 ```bash
 NS=lyrics-canvas; PG=lyrics-lyrics-canvas-postgres-0
