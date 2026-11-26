@@ -105,9 +105,11 @@ ingress:
     # http://<node>/ on port 80 redirects to HTTPS.
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 
-# Nightly pg_dump to node1's disk (the NAS is out). The directory must exist on
-# node1, owned by nymph (1000:1000); dumps are created as that user so the
-# laptop pull (deploy/homelab/backup) can read them over ssh.
+# Nightly pg_dump to the TrueNAS share nymph_backup, which node1 automounts at
+# /mnt/truenas/nymph_backup (NFS). The share maps every client user to root,
+# so dumps land root-owned whatever runAsUser is, and nymph can still read and
+# write them. The directory must exist (type: Directory); the laptop pull
+# (deploy/homelab/backup) reads it from node1 over ssh.
 backup:
   enabled: true
   schedule: "15 3 * * *"
@@ -118,7 +120,7 @@ backup:
   destination:
     type: hostPath
     hostPath:
-      path: /home/nymph/backups/lyrics-canvas
+      path: /mnt/truenas/nymph_backup/lyrics-canvas
   nodeSelector:
     kubernetes.io/hostname: node1
 

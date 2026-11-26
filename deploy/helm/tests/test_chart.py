@@ -1551,7 +1551,7 @@ class HomelabBackupTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.docs = render(str(ENVIRONMENTS / "homelab.yaml"))
 
-    def test_backup_runs_on_node1_hostpath(self) -> None:
+    def test_backup_runs_on_node1_nas_hostpath(self) -> None:
         cron = self.docs[("CronJob", BACKUP)]
         self.assertEqual(cron["spec"]["concurrencyPolicy"], "Forbid")
         self.assertEqual(cron["spec"]["timeZone"], "America/Los_Angeles")
@@ -1560,7 +1560,7 @@ class HomelabBackupTest(unittest.TestCase):
         volumes = {v["name"]: v for v in pod["spec"]["volumes"]}
         self.assertEqual(
             volumes["backups"]["hostPath"],
-            {"path": "/home/nymph/backups/lyrics-canvas", "type": "Directory"},
+            {"path": "/mnt/truenas/nymph_backup/lyrics-canvas", "type": "Directory"},
         )
         psc = pod["spec"]["securityContext"]
         self.assertEqual((psc["runAsUser"], psc["runAsGroup"]), (1000, 1000))

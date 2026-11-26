@@ -719,7 +719,7 @@ Features Index:
     depends_on: []
     doc: docs/features/helm_deployment.md
   postgres_backup:
-    description: Optional nightly CronJob <fullname>-backup (backup.*, default disabled) that pg_dumps the bundled PostgreSQL in custom format to a pre-existing hostPath directory on a pinned node or a PVC, publishing lyrics_canvas-<UTC ts>.dump atomically (hidden temp name, pg_restore --list check, rename) and pruning to the newest backup.retain; password via secretKeyRef only; refuses to render for an external database. Homelab writes to node1:/home/nymph/backups/lyrics-canvas as 1000:1000, and a systemd user timer on the laptop rsyncs those dumps to ~/Backups/lyrics-canvas without --delete.
+    description: Optional nightly CronJob <fullname>-backup (backup.*, default disabled) that pg_dumps the bundled PostgreSQL in custom format to a pre-existing hostPath directory on a pinned node or a PVC, publishing lyrics_canvas-<UTC ts>.dump atomically (hidden temp name, pg_restore --list check, rename) and pruning to the newest backup.retain; password via secretKeyRef only; refuses to render for an external database. Homelab writes to the TrueNAS NFS share nymph_backup (node1:/mnt/truenas/nymph_backup/lyrics-canvas, every client user mapped to root, so files are root-owned), and a systemd user timer on the laptop rsyncs those dumps to ~/Backups/lyrics-canvas without --delete.
     entry_points:
       - deploy/helm/lyrics-canvas/templates/backup/cronjob.yaml
       - deploy/helm/lyrics-canvas/templates/backup/_script.tpl

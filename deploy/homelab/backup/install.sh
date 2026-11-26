@@ -2,7 +2,7 @@
 # Install the systemd user timer that pulls lyrics-canvas dumps to this machine.
 #
 #   deploy/homelab/backup/install.sh [--host node1] \
-#     [--path /home/nymph/backups/lyrics-canvas] [--dest ~/Backups/lyrics-canvas] \
+#     [--path /mnt/truenas/nymph_backup/lyrics-canvas] [--dest ~/Backups/lyrics-canvas] \
 #     [--keep 0] [--on-calendar '*-*-* 04:30:00'] [--no-enable]
 #
 # Copies pull.sh into --lib-dir, renders the .service/.timer templates into
@@ -14,7 +14,7 @@ here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 name=lyrics-canvas-backup-pull
 
 host=node1
-path=/home/nymph/backups/lyrics-canvas
+path=/mnt/truenas/nymph_backup/lyrics-canvas
 dest="$HOME/Backups/lyrics-canvas"
 keep=0
 on_calendar='*-*-* 04:30:00'

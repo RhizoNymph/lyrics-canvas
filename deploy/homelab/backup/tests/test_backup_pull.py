@@ -122,7 +122,7 @@ class InstallTest(TempDirTest):
         result = self.install()
         self.assertEqual(result.returncode, 0, result.stderr)
         service = self.unit(SERVICE)
-        self.assertIn('Environment="BACKUP_SOURCE=node1:/home/nymph/backups/lyrics-canvas"', service)
+        self.assertIn('Environment="BACKUP_SOURCE=node1:/mnt/truenas/nymph_backup/lyrics-canvas"', service)
         self.assertIn(f'Environment="BACKUP_DEST={self.tmp}/home/Backups/lyrics-canvas"', service)
         self.assertIn('Environment="BACKUP_KEEP=0"', service)
         self.assertIn(f'ExecStart="{self.tmp}/lib/backup-pull.sh"', service)
